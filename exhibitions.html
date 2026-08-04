@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.19 갤러리&라운지 - 전시 관리</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page-container">
+    <div class="page-header">
+      <button class="back-btn" onclick="goBack()">← 돌아가기</button>
+      <h1>전시 관리</h1>
+      <div class="header-spacer"></div>
+    </div>
+
+    <div class="exhibitions-header">
+      <div>
+        <p class="section-label">기존 전시</p>
+        <h2>전시 목록</h2>
+      </div>
+      <button class="add-exhibition-btn" onclick="openAddModal()">+ 전시 추가</button>
+    </div>
+
+    <div class="exhibitions-table-wrapper">
+      <table class="exhibitions-table">
+        <thead>
+          <tr>
+            <th>전시 제목</th>
+            <th>전시 기간</th>
+            <th>전시 유형</th>
+            <th>참여자</th>
+            <th>상태</th>
+          </tr>
+        </thead>
+        <tbody id="exhibitions-tbody">
+          <!-- Exhibition rows populated here -->
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; margin-top:14px;">
+      <button class="add-exhibition-btn" onclick="openAddModal()">+ 전시 추가</button>
+    </div>
+  </div>
+
+  <div id="add-modal" class="modal">
+    <div class="modal-content modal-large">
+      <h2>전시 추가</h2>
+      <div class="form-group">
+        <label for="exhibition-title">전시 제목</label>
+        <input type="text" id="exhibition-title" class="auth-input" placeholder="전시 이름을 입력하세요">
+      </div>
+
+      <div class="form-group date-group">
+        <div>
+          <label for="exhibition-start">시작일</label>
+          <input type="date" id="exhibition-start" class="auth-input">
+        </div>
+        <div>
+          <label for="exhibition-end">종료일</label>
+          <input type="date" id="exhibition-end" class="auth-input">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="exhibition-type">전시 유형</label>
+        <select id="exhibition-type" class="auth-input" onchange="handleExhibitionTypeChange()">
+          <option value="">선택하세요</option>
+          <option value="개인전">개인전</option>
+          <option value="2인전">2인전</option>
+          <option value="3인전">3인전</option>
+          <option value="단체전">단체전</option>
+        </select>
+      </div>
+
+      <div id="participant-fields" class="participant-fields"></div>
+
+      <div id="form-message" class="form-message"></div>
+
+      <div class="modal-buttons">
+        <button class="modal-btn modal-approve" onclick="addExhibition()">저장</button>
+        <button class="modal-btn modal-cancel" onclick="closeAddModal()">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="cloud-sync.js?v=20260805-2"></script>
+  <script src="auth.js?v=20260803-4"></script>
+  <script src="exhibitions.js?v=20260804-1"></script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.19 갤러리&라운지 - 전시 세부 관리</title>
+  <link rel="stylesheet" href="style.css?v=20260804-3">
+</head>
+<body>
+  <div class="page-container">
+    <div class="page-header">
+      <button class="back-btn" onclick="goBack()">← 돌아가기</button>
+      <div>
+        <p class="section-label">전시 세부 관리</p>
+        <h1 id="exhibition-title">전시 제목</h1>
+        <p id="exhibition-dates" class="subtitle-text"></p>
+      </div>
+      <div class="header-spacer"></div>
+    </div>
+
+    <div class="nav-tabs">
+      <button class="tab-button active" data-tab="exhibition-info" onclick="switchTab('exhibition-info')">전시 정보</button>
+      <button class="tab-button" data-tab="staff" onclick="switchTab('staff')">전시 관계자 관리</button>
+      <button class="tab-button" data-tab="inventory-list" onclick="switchTab('inventory-list')">작품 / 굿즈 목록</button>
+      <button class="tab-button" data-tab="inventory-sales" onclick="switchTab('inventory-sales')">작품 / 굿즈 판매</button>
+      <button class="tab-button" data-tab="exhibition-accounting" onclick="switchTab('exhibition-accounting')">전시 회계</button>
+      <button class="tab-button" data-tab="exhibition-files" onclick="switchTab('exhibition-files')">전시 파일</button>
+    </div>
+
+    <div id="tab-content" class="tab-content"></div>
+  </div>
+
+  <div id="invite-modal" class="modal">
+    <div class="modal-content modal-large">
+      <h2 id="invite-modal-title">초대</h2>
+      <p id="invite-modal-description">선택한 사용자에게 역할을 부여하세요.</p>
+      <div class="invite-search-wrapper">
+        <input id="invite-search" type="text" class="invite-search" placeholder="사용자 검색..." oninput="filterInviteUsers()">
+      </div>
+      <div id="invite-user-list" class="invite-user-list"></div>
+      <div class="modal-buttons">
+        <button class="modal-btn modal-approve" onclick="confirmInvite()">추가</button>
+        <button class="modal-btn modal-cancel" onclick="closeInviteModal()">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="delete-modal" class="modal">
+    <div class="modal-content modal-small">
+      <h2>항목 삭제</h2>
+      <p>이 작품을 정말 삭제하시겠습니까?</p>
+      <div class="modal-buttons">
+        <button class="modal-btn delete-btn" onclick="confirmDeleteWork()">삭제</button>
+        <button class="modal-btn modal-cancel" onclick="closeDeleteWorkModal()">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="sales-add-modal" class="modal">
+    <div class="modal-content modal-large sales-add-modal-content">
+      <h2>판매된 작품 추가</h2>
+      <p>작품 번호 또는 제목으로 검색 후 Enter/클릭으로 추가하세요.</p>
+      <div class="sales-add-search-wrapper">
+        <input id="sales-add-search-input" type="text" class="works-search" placeholder="번호 또는 제목 검색" oninput="handleSalesAddSearchInput(this.value)" onkeydown="handleSalesAddSearchKeydown(event)">
+      </div>
+
+      <div id="sales-add-search-results" class="sales-add-search-results" tabindex="0"></div>
+
+      <div class="sales-add-selected-header">
+        <strong>추가 예정 목록</strong>
+        <span id="sales-add-selected-count">0개 선택됨</span>
+      </div>
+      <div id="sales-add-selected-list" class="sales-add-selected-list" tabindex="0"></div>
+      <div id="sales-add-selected-ticker" class="sales-add-selected-ticker">선택 0건 · 합계 ₩0</div>
+
+      <div class="sales-add-common-buyer-toggle">
+        <label class="sales-add-common-buyer-checkbox" for="sales-add-apply-common-buyer">
+          <input id="sales-add-apply-common-buyer" type="checkbox" onchange="handleSalesAddCommonBuyerToggle(this.checked)">
+          <span>선택된 모든 작품에 동일한 구매자 적용</span>
+        </label>
+      </div>
+
+      <div id="sales-add-common-buyer-fields" class="sales-add-common-buyer-fields" hidden>
+        <label>
+          <span>구매자</span>
+          <input id="sales-add-common-buyer-name" type="text" placeholder="구매자 성함" oninput="handleSalesAddCommonBuyerFieldChange('buyerName', this.value)">
+        </label>
+        <label>
+          <span>연락처</span>
+          <input id="sales-add-common-buyer-phone" type="text" placeholder="010-0000-0000" oninput="handleSalesAddCommonBuyerFieldChange('buyerPhone', this.value)">
+        </label>
+        <label>
+          <span>결제방법</span>
+          <select id="sales-add-common-payment-method" onchange="handleSalesAddCommonBuyerFieldChange('paymentMethod', this.value)">
+            <option value="">선택</option>
+            <option value="카드결제">카드결제</option>
+            <option value="계좌이체">계좌이체</option>
+            <option value="온누리상품권">온누리상품권</option>
+            <option value="기타">기타</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="modal-buttons">
+        <button class="modal-btn modal-approve" onclick="confirmSalesAddModal()">확인</button>
+        <button class="modal-btn modal-cancel" onclick="closeSalesAddModal()">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="artist-sales-summary-modal" class="modal">
+    <div class="modal-content modal-large artist-sales-summary-modal-content">
+      <h2>작가별 판매 요약</h2>
+      <p>작가별 판매 수량과 총 판매 금액을 확인할 수 있습니다.</p>
+      <div id="artist-sales-summary-content"></div>
+      <div class="modal-buttons">
+        <button class="modal-btn modal-cancel" onclick="closeArtistSalesSummaryModal()">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="file-upload-modal" class="modal">
+    <div class="modal-content modal-large">
+      <h2 id="file-upload-modal-title">파일 업로드</h2>
+      <p id="file-upload-modal-description">업로드할 파일과 제목을 입력하세요.</p>
+      <div class="form-group">
+        <label for="file-upload-input">파일 선택</label>
+        <input id="file-upload-input" type="file" class="auth-input" multiple onchange="handleFileUploadInputChange(event)">
+      </div>
+      <p id="file-upload-selected-info" class="empty-state">선택된 파일이 없습니다.</p>
+      <div id="file-upload-preview-list" class="file-upload-preview-list"></div>
+      <div class="modal-buttons">
+        <button class="modal-btn modal-approve" onclick="confirmFileUploadModal()">업로드</button>
+        <button class="modal-btn modal-cancel" onclick="closeFileUploadModal()">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="cloud-sync.js?v=20260805-3"></script>
+  <script src="auth.js?v=20260805-1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-populate/browser/xlsx-populate.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="exhibition-detail.js?v=20260805-2"></script>
+</body>
+</html>

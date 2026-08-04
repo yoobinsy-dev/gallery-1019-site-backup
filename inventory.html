@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.19 갤러리&라운지 - 인벤토리</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page-container">
+    <div class="page-header">
+      <button class="back-btn" onclick="goBack()">← 돌아가기</button>
+      <h1>인벤토리</h1>
+      <div class="header-spacer"></div>
+    </div>
+
+    <div class="exhibitions-header">
+      <div>
+        <p class="section-label">접근 가능한 전시</p>
+        <h2>전시별 인벤토리 진입</h2>
+      </div>
+    </div>
+
+    <div class="exhibitions-table-wrapper">
+      <table class="exhibitions-table">
+        <thead>
+          <tr>
+            <th>전시 제목</th>
+            <th>전시 기간</th>
+            <th>전시 유형</th>
+            <th>상태</th>
+          </tr>
+        </thead>
+        <tbody id="inventory-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="cloud-sync.js?v=20260805-2"></script>
+  <script src="auth.js?v=20260803-4"></script>
+  <script src="inventory.js"></script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>10.19 갤러리&라운지 - USER 관리</title>
+
+  <link rel="stylesheet" href="style.css?v=20260803-5">
+</head>
+
+<body>
+
+  <div class="page-container">
+    <div class="page-header">
+      <button class="back-btn" onclick="goBack()">← 돌아가기</button>
+      <h1>USER 관리</h1>
+      <div class="header-spacer"></div>
+    </div>
+
+    <div class="users-toolbar">
+      <div class="users-toolbar-main">
+        <div class="users-filters">
+          <button class="filter-btn active" data-filter="all">모두</button>
+          <button class="filter-btn" data-filter="pending">승인 대기</button>
+          <button class="filter-btn" data-filter="approved">승인됨</button>
+        </div>
+        <div class="users-bulk-actions">
+          <button class="works-action-btn works-action-btn-secondary" id="users-select-all-btn" onclick="toggleSelectAllUsersFromButton()">전체 선택</button>
+          <button class="works-action-btn works-action-btn-danger" onclick="deleteAllUsers()">전체 삭제</button>
+          <button class="works-action-btn works-action-btn-danger" id="users-delete-selected-btn" onclick="deleteSelectedUsers()" style="display:none;">선택된 항목만 삭제</button>
+        </div>
+      </div>
+      <button class="auth-btn create-account-btn" onclick="openCreateUserModal()">+ 계정 생성</button>
+    </div>
+
+    <div class="users-table-wrapper">
+      <table class="users-table">
+        <thead>
+          <tr>
+            <th class="checkbox-col"><input type="checkbox" id="select-all-users" onclick="toggleSelectAllUsers(this)"></th>
+            <th class="status-col">상태</th>
+            <th>계정 타입</th>
+            <th>실명</th>
+            <th>사용자명</th>
+            <th>전화번호</th>
+            <th>이메일</th>
+            <th>작업</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody">
+          <!-- Users will be populated here -->
+        </tbody>
+      </table>
+    </div>
+
+    <div class="users-toolbar" style="margin-top:14px; margin-bottom:0;">
+      <div class="users-toolbar-main">
+        <div class="users-filters">
+          <button class="filter-btn active" data-filter="all">모두</button>
+          <button class="filter-btn" data-filter="pending">승인 대기</button>
+          <button class="filter-btn" data-filter="approved">승인됨</button>
+        </div>
+        <div class="users-bulk-actions">
+          <button class="works-action-btn works-action-btn-secondary" id="users-select-all-btn-bottom" onclick="toggleSelectAllUsersFromButton()">전체 선택</button>
+          <button class="works-action-btn works-action-btn-danger" onclick="deleteAllUsers()">전체 삭제</button>
+          <button class="works-action-btn works-action-btn-danger" id="users-delete-selected-btn-bottom" onclick="deleteSelectedUsers()" style="display:none;">선택된 항목만 삭제</button>
+        </div>
+      </div>
+      <button class="auth-btn create-account-btn" onclick="openCreateUserModal()">+ 계정 생성</button>
+    </div>
+  </div>
+
+  <!-- Modal for approving users -->
+  <div id="approve-modal" class="modal">
+    <div class="modal-content">
+      <h2>사용자 승인</h2>
+      <p id="modal-user-info"></p>
+      
+      <div class="form-group">
+        <label for="account-type">계정 타입을 선택하세요:</label>
+        <select id="account-type" class="auth-input">
+          <option value="">-- 선택 --</option>
+          <option value="어드민">어드민</option>
+          <option value="기획자/작가">기획자/작가</option>
+          <option value="스탭">스탭</option>
+        </select>
+      </div>
+
+      <div class="modal-buttons">
+        <button class="modal-btn modal-approve" onclick="confirmApproval()">승인</button>
+        <button class="modal-btn modal-cancel" onclick="closeApproveModal()">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="create-user-modal" class="modal">
+    <div class="modal-content">
+      <h2>새 계정 생성</h2>
+
+      <div class="form-group">
+        <label for="create-name">실명</label>
+        <input id="create-name" class="auth-input" type="text" placeholder="실명 입력">
+      </div>
+
+      <div class="form-group">
+        <label for="create-username">사용자명</label>
+        <input id="create-username" class="auth-input" type="text" placeholder="사용자명 입력">
+      </div>
+
+      <div class="form-group">
+        <label for="create-phone">전화번호</label>
+        <input id="create-phone" class="auth-input" type="text" placeholder="010-0000-0000">
+      </div>
+
+      <div class="form-group">
+        <label for="create-email">이메일</label>
+        <input id="create-email" class="auth-input" type="email" placeholder="example@email.com">
+      </div>
+
+      <div class="form-group">
+        <label for="create-password">비밀번호</label>
+        <input id="create-password" class="auth-input" type="password" placeholder="최소 6자">
+      </div>
+
+      <div class="form-group">
+        <label for="create-confirm">비밀번호 확인</label>
+        <input id="create-confirm" class="auth-input" type="password" placeholder="비밀번호 재입력">
+      </div>
+
+      <div class="form-group">
+        <label for="create-account-type">계정 타입</label>
+        <select id="create-account-type" class="auth-input">
+          <option value="">-- 선택 --</option>
+          <option value="어드민">어드민</option>
+          <option value="기획자/작가">기획자/작가</option>
+          <option value="스탭">스탭</option>
+        </select>
+      </div>
+
+      <div class="modal-buttons">
+        <button class="modal-btn modal-approve" onclick="createUserByAdmin()">생성</button>
+        <button class="modal-btn modal-cancel" onclick="closeCreateUserModal()">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="cloud-sync.js?v=20260805-2"></script>
+  <script src="auth.js?v=20260803-4"></script>
+  <script src="users.js?v=20260804-1"></script>
+</body>
+</html>
