@@ -8,6 +8,7 @@
   const REMOTE_DROP_MIN_PREVIOUS_TOTAL = 20;
   const REMOTE_DROP_MIN_ABSOLUTE = 15;
   const REMOTE_DROP_RATIO = 0.7;
+  const PREVIEW_DATA_URL_SAFE_LENGTH = 280000;
 
   const originalSetItem = Storage.prototype.setItem;
   const originalRemoveItem = Storage.prototype.removeItem;
@@ -128,6 +129,102 @@
         || hasAnyPhotoPreviewInList(exhibition.soldGoods)
         || hasAnyPhotoPreviewInList(exhibition.works)
         || hasAnyPhotoPreviewInList(exhibition.soldWorks);
+    });
+  }
+
+  function hasPhotoPreview(item) {
+    if (!item || typeof item !== 'object') return false;
+    return Boolean(
+      (typeof item.photoPreviewDataUrl === 'string' && item.photoPreviewDataUrl.length > 0)
+      || (typeof item.photoDataUrl === 'string' && item.photoDataUrl.length > 0)
+    );
+  }
+
+  function getPreviewIdentity(item) {
+    if (!item || typeof item !== 'object') return '';
+
+    const id = Number(item.id);
+    if (Number.isFinite(id) && id > 0) return `id:${id}`;
+
+    const workId = Number(item.workId);
+    if (Number.isFinite(workId) && workId > 0) return `work:${workId}`;
+
+    const manualNumber = (item.manualNumber || '').toString().trim().toLowerCase();
+    const title = (item.title || '').toString().trim().toLowerCase();
+    if (manualNumber || title) return `manual:${manualNumber}|title:${title}`;
+    return '';
+  }
+
+  function mergeItemPreservingPreview(localItem, remoteItem) {
+    if (!remoteItem || typeof remoteItem !== 'object') return remoteItem;
+    if (hasPhotoPreview(remoteItem)) return remoteItem;
+    if (!hasPhotoPreview(localItem)) return remoteItem;
+
+    const merged = { ...remoteItem };
+    if ((!merged.photoPreviewDataUrl || merged.photoPreviewDataUrl.length === 0)
+      && typeof localItem.photoPreviewDataUrl === 'string'
+      && localItem.photoPreviewDataUrl.length > 0) {
+      merged.photoPreviewDataUrl = localItem.photoPreviewDataUrl;
+    }
+
+    if ((!merged.photoDataUrl || merged.photoDataUrl.length === 0)
+      && typeof localItem.photoDataUrl === 'string'
+      && localItem.photoDataUrl.length > 0
+      && localItem.photoDataUrl.length <= PREVIEW_DATA_URL_SAFE_LENGTH) {
+      merged.photoDataUrl = localItem.photoDataUrl;
+    }
+
+    return merged;
+  }
+
+  function mergeListPreservingPreview(localList, remoteList) {
+    if (!Array.isArray(remoteList)) return remoteList;
+    if (!Array.isArray(localList) || localList.length === 0) return remoteList;
+
+    const localByIdentity = new Map();
+    localList.forEach((item) => {
+      const key = getPreviewIdentity(item);
+      if (!key || !hasPhotoPreview(item)) return;
+      if (!localByIdentity.has(key)) {
+        localByIdentity.set(key, item);
+      }
+    });
+
+    return remoteList.map((item) => {
+      const key = getPreviewIdentity(item);
+      if (!key) return item;
+      return mergeItemPreservingPreview(localByIdentity.get(key), item);
+    });
+  }
+
+  function mergeExhibitionPreservingPreview(localExhibition, remoteExhibition) {
+    if (!remoteExhibition || typeof remoteExhibition !== 'object') return remoteExhibition;
+    if (!localExhibition || typeof localExhibition !== 'object') return remoteExhibition;
+
+    const merged = { ...remoteExhibition };
+    ['artWorks', 'goods', 'artSoldWorks', 'soldGoods', 'works', 'soldWorks'].forEach((field) => {
+      if (Array.isArray(remoteExhibition[field])) {
+        merged[field] = mergeListPreservingPreview(localExhibition[field], remoteExhibition[field]);
+      }
+    });
+
+    return merged;
+  }
+
+  function mergeExhibitionsPreservingPreview(localExhibitions, remoteExhibitions) {
+    if (!Array.isArray(remoteExhibitions)) return remoteExhibitions;
+    if (!Array.isArray(localExhibitions) || localExhibitions.length === 0) return remoteExhibitions;
+
+    const localById = new Map(
+      localExhibitions
+        .filter((exhibition) => exhibition && typeof exhibition === 'object')
+        .map((exhibition) => [Number(exhibition.id), exhibition])
+    );
+
+    return remoteExhibitions.map((remoteExhibition) => {
+      const id = Number(remoteExhibition?.id);
+      if (!Number.isFinite(id) || id <= 0) return remoteExhibition;
+      return mergeExhibitionPreservingPreview(localById.get(id), remoteExhibition);
     });
   }
 
@@ -326,22 +423,26 @@
         if (typeof remoteValue !== 'undefined') {
           const remoteTime = getEpochMs(remoteUpdatedAt);
           const localTime = getEpochMs(localUpdatedAt);
+          let mergedRemoteValue = remoteValue;
+          let shouldHealRemotePreviews = false;
 
-          if (key === 'exhibitions' && localRaw && localTime === 0) {
+          if (key === 'exhibitions' && parsedLocal && Array.isArray(remoteValue)) {
             const localHasPreview = hasAnyPhotoPreviewInExhibitions(parsedLocal);
             const remoteHasPreview = hasAnyPhotoPreviewInExhibitions(remoteValue);
 
-            // If local has preview data but remote does not, avoid stale remote overwrite.
             if (localHasPreview && !remoteHasPreview) {
-              schedulePush(key, parsedLocal || localRaw);
-              return;
+              mergedRemoteValue = mergeExhibitionsPreservingPreview(parsedLocal, remoteValue);
+              shouldHealRemotePreviews = hasAnyPhotoPreviewInExhibitions(mergedRemoteValue);
             }
           }
 
           if (key === 'exhibitions' && shouldPreferRemoteExhibitions(parsedLocal, remoteValue)) {
-            originalSetItem.call(localStorage, key, JSON.stringify(remoteValue));
+            originalSetItem.call(localStorage, key, JSON.stringify(mergedRemoteValue));
             if (remoteUpdatedAt) {
               markLocalUpdate(key, remoteUpdatedAt);
+            }
+            if (shouldHealRemotePreviews) {
+              schedulePush(key, mergedRemoteValue);
             }
             appliedRemoteKeys.push(key);
             return;
@@ -358,9 +459,12 @@
 
           // Apply remote only when it is newer than local.
           if (!localRaw || remoteTime > localTime) {
-            originalSetItem.call(localStorage, key, JSON.stringify(remoteValue));
+            originalSetItem.call(localStorage, key, JSON.stringify(mergedRemoteValue));
             if (remoteUpdatedAt) {
               markLocalUpdate(key, remoteUpdatedAt);
+            }
+            if (shouldHealRemotePreviews) {
+              schedulePush(key, mergedRemoteValue);
             }
             appliedRemoteKeys.push(key);
             return;

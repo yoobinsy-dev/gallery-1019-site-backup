@@ -1,5 +1,6 @@
 // Authentication logic
 let currentUser = null;
+const MAX_PERSISTED_PHOTO_PREVIEW_LENGTH = 280000;
 
 function isStorageQuotaError(error) {
   if (!error) return false;
@@ -24,7 +25,10 @@ function stripHeavyFieldsFromValue(value, aggressive) {
   stripField('imageDataUrl');
 
   if (aggressive) {
-    stripField('photoPreviewDataUrl');
+    if (typeof value.photoPreviewDataUrl === 'string' && value.photoPreviewDataUrl.length > MAX_PERSISTED_PHOTO_PREVIEW_LENGTH) {
+      value.photoPreviewDataUrl = '';
+      stripped = true;
+    }
     stripField('fileDataUrl');
     stripField('previewDataUrl');
   }
