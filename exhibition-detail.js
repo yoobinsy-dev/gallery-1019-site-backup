@@ -3941,6 +3941,69 @@ function buildArtworkAnchorXml(imageAnchor, picId, relId) {
 </xdr:twoCellAnchor>`;
 }
 
+function getDrawingAnchorFromRowIndex(anchorXml) {
+  const match = String(anchorXml || '').match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>[\s\S]*?<\/xdr:from>/);
+  if (!match) return null;
+  const rowIndex = Number(match[1]);
+  return Number.isFinite(rowIndex) ? rowIndex : null;
+}
+
+function shiftDrawingAnchorRows(anchorXml, rowOffset) {
+  const offset = Number(rowOffset || 0);
+  if (!offset) return anchorXml;
+
+  return String(anchorXml || '')
+    .replace(
+      /(<xdr:from>[\s\S]*?<xdr:row>)(\d+)(<\/xdr:row>[\s\S]*?<\/xdr:from>)/,
+      (full, prefix, row, suffix) => `${prefix}${Number(row) + offset}${suffix}`
+    )
+    .replace(
+      /(<xdr:to>[\s\S]*?<xdr:row>)(\d+)(<\/xdr:row>[\s\S]*?<\/xdr:to>)/,
+      (full, prefix, row, suffix) => `${prefix}${Number(row) + offset}${suffix}`
+    );
+}
+
+function duplicateTemplateDrawingAnchorsForPages(drawingXml, pageCount) {
+  const totalPages = Number(pageCount || 0);
+  if (totalPages <= 1 || !drawingXml) return drawingXml;
+
+  const anchorBlocks = Array.from(String(drawingXml).matchAll(/<xdr:twoCellAnchor[\s\S]*?<\/xdr:twoCellAnchor>/g)).map((match) => match[0]);
+  if (anchorBlocks.length === 0) return drawingXml;
+
+  const blockStartZeroBased = CERTIFICATE_BLOCK_START_ROW - 1;
+  const blockEndZeroBased = CERTIFICATE_BLOCK_END_ROW - 1;
+
+  const templateAnchors = anchorBlocks.filter((anchorXml) => {
+    const fromRow = getDrawingAnchorFromRowIndex(anchorXml);
+    if (!Number.isFinite(fromRow)) return false;
+    return fromRow >= blockStartZeroBased && fromRow <= blockEndZeroBased;
+  });
+
+  if (templateAnchors.length === 0) return drawingXml;
+
+  let nextPicId = (() => {
+    const picIdNumbers = Array.from(String(drawingXml).matchAll(/<xdr:cNvPr[^>]*\sid="(\d+)"/g)).map((match) => Number(match[1]) || 0);
+    return picIdNumbers.length > 0 ? Math.max(...picIdNumbers) + 1 : 100;
+  })();
+
+  let insertedAnchorsXml = '';
+  for (let pageIndex = 1; pageIndex < totalPages; pageIndex += 1) {
+    const rowOffset = pageIndex * CERTIFICATE_BLOCK_HEIGHT;
+    templateAnchors.forEach((anchorXml) => {
+      let shifted = shiftDrawingAnchorRows(anchorXml, rowOffset);
+      shifted = shifted.replace(/(<xdr:cNvPr\b[^>]*\bid=")(\d+)(")/, (full, prefix, id, suffix) => {
+        const replacement = `${prefix}${nextPicId}${suffix}`;
+        nextPicId += 1;
+        return replacement;
+      });
+      insertedAnchorsXml += shifted;
+    });
+  }
+
+  if (!insertedAnchorsXml) return drawingXml;
+  return String(drawingXml).replace('</xdr:wsDr>', `${insertedAnchorsXml}</xdr:wsDr>`);
+}
+
 function parseSharedStringsText(sharedStringsXml) {
   if (!sharedStringsXml) return [];
   const doc = parseXmlDocumentOrThrow(sharedStringsXml, 'sharedStrings.xml');
@@ -4398,6 +4461,8 @@ async function buildAllCertificatesWorkbookBlob(entries) {
     pageBreakRows.push(CERTIFICATE_BLOCK_END_ROW + i * CERTIFICATE_BLOCK_HEIGHT);
   }
   newSheetXml = upsertWorksheetRowBreaksXml(newSheetXml, pageBreakRows);
+
+  drawingXml = duplicateTemplateDrawingAnchorsForPages(drawingXml, certificateEntries.length);
 
   const metrics = parseWorksheetMetrics(newSheetXml);
 
