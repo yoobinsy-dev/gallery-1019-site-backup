@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>도예공방 10.19 - 수강생 관리</title>
+  <link rel="stylesheet" href="pottery-students.css?v=20260809-4">
+</head>
+<body>
+  <a class="students-back-link" href="pottery-workshop.html" aria-label="도예공방 메뉴로 돌아가기">← 메뉴로</a>
+
+  <main class="students-wrap">
+    <header class="students-header">
+      <h1>수강생 관리</h1>
+      <p>수강생 정보를 입력하고 바로 수정할 수 있습니다.</p>
+    </header>
+
+    <section class="students-panel">
+      <h2>수강생 추가</h2>
+      <form id="student-add-form" class="students-form" autocomplete="off">
+        <div class="students-form-field">
+          <label for="student-name">이름</label>
+          <input id="student-name" type="text" placeholder="이름" aria-label="이름" required>
+        </div>
+        <div class="students-form-field">
+          <label for="student-tuition">수강료</label>
+          <input id="student-tuition" type="text" inputmode="numeric" placeholder="수강료" aria-label="수강료">
+        </div>
+        <div class="students-form-field">
+          <label for="student-tuition-basis">수강료 기준</label>
+          <select id="student-tuition-basis" aria-label="수강료 기준">
+            <option value="">선택</option>
+            <option value="1회">1회</option>
+            <option value="2회">2회</option>
+            <option value="3회">3회</option>
+            <option value="4회">4회</option>
+          </select>
+        </div>
+        <div class="students-form-field">
+          <label for="student-recent-payment">가장 최근 결제일</label>
+          <input id="student-recent-payment" type="date" aria-label="가장 최근 결제일">
+        </div>
+        <button type="submit" class="students-submit-btn">슬롯 선택</button>
+      </form>
+    </section>
+
+    <section class="students-table-panel">
+      <div class="students-table-wrap">
+        <table class="students-table">
+          <thead>
+            <tr>
+              <th>번호</th>
+              <th>이름</th>
+              <th>수업 시간</th>
+              <th>수업 종류</th>
+              <th>최근 수업일</th>
+              <th>수강료</th>
+              <th>수강료 기준</th>
+              <th>가장 최근 결제일</th>
+              <th>수업 남은 횟수</th>
+              <th>작업</th>
+            </tr>
+          </thead>
+          <tbody id="students-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="students-modal" id="student-class-slot-modal" aria-hidden="true">
+    <div class="students-modal-content students-modal-wide">
+      <h2>수강 일정 추가</h2>
+      <div class="students-modal-info">
+        <div><strong>일정 종류:</strong> 수강</div>
+        <div><strong>이용자:</strong> <span id="slot-modal-student-name">-</span></div>
+      </div>
+
+      <div class="students-modal-check-row">
+        <label for="slot-repeat-weekly">
+          <input type="checkbox" id="slot-repeat-weekly">
+          매주 반복
+        </label>
+      </div>
+
+      <div class="slot-week-nav">
+        <button type="button" id="slot-week-prev-btn">이전 주</button>
+        <strong id="slot-week-label">-</strong>
+        <button type="button" id="slot-week-next-btn">다음 주</button>
+      </div>
+
+      <div class="slot-selector-wrap" id="slot-selector-wrap"></div>
+      <p class="slot-selection-hint" id="slot-selection-hint">수업시간 블록을 클릭해 선택하세요.</p>
+
+      <div class="modal-actions">
+        <button type="button" class="students-primary-btn" id="slot-save-btn">저장</button>
+        <button type="button" class="students-secondary-btn" id="slot-cancel-btn">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="students-modal" id="student-edit-modal" aria-hidden="true">
+    <div class="students-modal-content">
+      <h2>수강생 수정</h2>
+      <form id="student-edit-form" class="students-edit-form" autocomplete="off">
+        <div class="students-form-field">
+          <label for="edit-student-name">이름</label>
+          <input id="edit-student-name" type="text" required>
+        </div>
+        <div class="students-form-field">
+          <label for="edit-student-class-time">수업 시간</label>
+          <input id="edit-student-class-time" type="text" disabled>
+          <small class="students-field-note">수업 변경은 마스터 캘린더에서 수정해주세요.</small>
+        </div>
+        <div class="students-form-field">
+          <label for="edit-student-class-type">수업 종류</label>
+          <input id="edit-student-class-type" type="text" disabled>
+          <small class="students-field-note">수업 변경은 마스터 캘린더에서 수정해주세요.</small>
+        </div>
+        <div class="students-form-field">
+          <label for="edit-student-tuition">수강료</label>
+          <input id="edit-student-tuition" type="text" inputmode="numeric">
+        </div>
+        <div class="students-form-field">
+          <label for="edit-student-tuition-basis">수강료 기준</label>
+          <select id="edit-student-tuition-basis">
+            <option value="">선택</option>
+            <option value="1회">1회</option>
+            <option value="2회">2회</option>
+            <option value="3회">3회</option>
+            <option value="4회">4회</option>
+          </select>
+        </div>
+        <div class="students-form-field">
+          <label for="edit-student-recent-payment">가장 최근 결제일</label>
+          <input id="edit-student-recent-payment" type="date">
+        </div>
+      </form>
+
+      <div class="modal-actions">
+        <button type="button" class="students-primary-btn" id="student-edit-save-btn">저장</button>
+        <button type="button" class="students-secondary-btn" id="student-edit-cancel-btn">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="auth.js?v=20260807-1"></script>
+  <script src="pottery-landing.js?v=20260809-1"></script>
+  <script src="pottery-students.js?v=20260809-12"></script>
+</body>
+</html>

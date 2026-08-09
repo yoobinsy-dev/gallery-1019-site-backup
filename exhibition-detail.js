@@ -69,7 +69,11 @@ const exhibitionDetailState = {
   pendingUploadFiles: [],
   pendingUploadEntries: [],
   lastSaveFailureAlertAt: 0,
-  allowLargeInventoryDropOnce: false
+  allowLargeInventoryDropOnce: false,
+  backupSnapshots: [],
+  backupCanUndo: false,
+  backupLoading: false,
+  backupError: ''
 };
 
 const INVENTORY_BACKUP_KEY_PREFIX = 'exhibition-inventory-backup:';
@@ -99,7 +103,8 @@ const EXHIBITION_TAB_ORDER = [
   'inventory-list',
   'inventory-sales',
   'exhibition-accounting',
-  'exhibition-files'
+  'exhibition-files',
+  'exhibition-backup'
 ];
 
 const EXHIBITION_TAB_ACCESS_BY_ROLE = {
@@ -121,11 +126,45 @@ function getCurrentUserId() {
   return Number.isFinite(Number(user?.id)) ? Number(user.id) : null;
 }
 
+function normalizeSiteAccess(access) {
+  const raw = access ? access.toString().trim().toLowerCase() : '';
+  if (raw === 'both' || raw === 'all') return 'both';
+  if (raw === 'pottery' || raw === 'studio') return 'pottery';
+  if (raw === 'gallery') return 'gallery';
+  return '';
+}
+
+function getEffectiveSiteAccess(user) {
+  const direct = normalizeSiteAccess(user?.siteAccess);
+  if (direct) return direct;
+  return 'gallery';
+}
+
+function hasGalleryAccess(user) {
+  const siteAccess = getEffectiveSiteAccess(user);
+  return siteAccess === 'gallery' || siteAccess === 'both';
+}
+
+function normalizeGalleryRole(role) {
+  const value = normalizeAccountType(role);
+  if (value === '기획자' || value === '작가') {
+    return '기획자/작가';
+  }
+  return value;
+}
+
+function getEffectiveGalleryRole(user) {
+  const direct = normalizeGalleryRole(user?.galleryRole);
+  if (direct) return direct;
+  return normalizeGalleryRole(user?.accountType);
+}
+
 function getExhibitionAccessRole() {
   const user = getCurrentUser();
   if (!user) return 'none';
+  if (!hasGalleryAccess(user)) return 'none';
 
-  if (normalizeAccountType(user.accountType) === '어드민') {
+  if (normalizeAccountType(getEffectiveGalleryRole(user)) === '어드민') {
     return 'admin';
   }
 
@@ -381,6 +420,7 @@ function restoreInventoryFromBackupIfNeeded(exhibitions, exhibitionIndex) {
   exhibition.goods = cloneJson(backupSnapshot.goods || [], []);
   exhibition.artSoldWorks = cloneJson(backupSnapshot.artSoldWorks || [], []);
   exhibition.soldGoods = cloneJson(backupSnapshot.soldGoods || [], []);
+  exhibition.updatedAt = new Date().toISOString();
 
   if (!Array.isArray(exhibition.works) || exhibition.works.length === 0) {
     exhibition.works = exhibition.artWorks;
@@ -733,6 +773,285 @@ function switchTab(tabName) {
     renderExhibitionFiles(content);
   } else if (tabName === 'exhibition-accounting') {
     renderExhibitionAccounting(content);
+  } else if (tabName === 'exhibition-backup') {
+    renderExhibitionBackup(content);
+  }
+}
+
+function getBackupExhibitionId() {
+  const id = Number(exhibitionDetailState.exhibitionId || getCurrentExhibition()?.id);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  return id;
+}
+
+function formatBackupDate(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('ko-KR', { hour12: false });
+}
+
+async function fetchExhibitionBackupSnapshots() {
+  const exhibitionId = getBackupExhibitionId();
+  if (!exhibitionId) {
+    exhibitionDetailState.backupError = '전시 ID를 찾을 수 없습니다.';
+    return;
+  }
+
+  exhibitionDetailState.backupLoading = true;
+  exhibitionDetailState.backupError = '';
+  switchTab('exhibition-backup');
+
+  try {
+    const response = await fetch(`/api/exhibition-snapshots?exhibitionId=${encodeURIComponent(exhibitionId)}&limit=100`);
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      exhibitionDetailState.backupError = payload?.error || '스냅샷 목록을 불러오지 못했습니다.';
+      exhibitionDetailState.backupSnapshots = [];
+      exhibitionDetailState.backupCanUndo = false;
+      return;
+    }
+
+    exhibitionDetailState.backupSnapshots = Array.isArray(payload.snapshots) ? payload.snapshots : [];
+    exhibitionDetailState.backupCanUndo = Boolean(payload.canUndo);
+  } catch (error) {
+    exhibitionDetailState.backupError = '네트워크 오류로 스냅샷 목록을 불러오지 못했습니다.';
+    exhibitionDetailState.backupSnapshots = [];
+    exhibitionDetailState.backupCanUndo = false;
+  } finally {
+    exhibitionDetailState.backupLoading = false;
+    switchTab('exhibition-backup');
+  }
+}
+
+function getBackupSnapshotRowsHtml() {
+  const rows = exhibitionDetailState.backupSnapshots || [];
+  if (rows.length === 0) {
+    return '<tr><td colspan="6" class="no-users">저장된 전시 스냅샷이 없습니다.</td></tr>';
+  }
+
+  return rows.map((snapshot) => {
+    const snapshotId = Number(snapshot.id);
+    const restoredTag = snapshot.restored_at
+      ? `<div style="font-size:12px;color:#2f6f3e;margin-top:4px;">복원됨: ${escapeAccountingHtml(formatBackupDate(snapshot.restored_at))}</div>`
+      : '';
+
+    return `
+      <tr>
+        <td>
+          <strong>#${snapshotId}</strong>
+          <div style="font-size:12px;color:#666;">${escapeAccountingHtml(snapshot.snapshot_type || '')}</div>
+        </td>
+        <td>${escapeAccountingHtml(String(snapshot.works_goods_count ?? 0))}</td>
+        <td>${escapeAccountingHtml(String(snapshot.sold_items_count ?? 0))}</td>
+        <td>${escapeAccountingHtml(formatBackupDate(snapshot.created_at))}${restoredTag}</td>
+        <td>${escapeAccountingHtml(snapshot.note || '-')}</td>
+        <td>
+          <button type="button" class="action-btn approve-btn" onclick="restoreExhibitionSnapshot(${snapshotId})">restore</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderExhibitionBackup(container) {
+  if (getExhibitionAccessRole() !== 'admin') {
+    const fallbackTab = getFirstAllowedTab() || 'exhibition-info';
+    switchTab(fallbackTab);
+    return;
+  }
+
+  const loadingNotice = exhibitionDetailState.backupLoading
+    ? '<p class="accounting-description">스냅샷 목록을 불러오는 중입니다...</p>'
+    : '';
+  const errorNotice = exhibitionDetailState.backupError
+    ? `<p class="accounting-description" style="color:#b23b3b;">${escapeAccountingHtml(exhibitionDetailState.backupError)}</p>`
+    : '';
+
+  container.innerHTML = `
+    <div class="works-sales-wrapper">
+      <div class="works-sales-title">전시 백업</div>
+      <p class="accounting-description">이 전시만 분리 저장된 스냅샷입니다. 잘못 복원했을 경우 되돌리기를 눌러 직전 상태로 복귀할 수 있습니다.</p>
+      ${loadingNotice}
+      ${errorNotice}
+      <div class="works-actions" style="margin-bottom:12px;">
+        <button type="button" class="works-action-btn" onclick="createManualExhibitionSnapshot()">스냅샷 생성</button>
+        <button type="button" class="works-action-btn works-action-btn-secondary" onclick="fetchExhibitionBackupSnapshots()">새로고침</button>
+        <button type="button" class="works-action-btn works-action-btn-secondary" onclick="undoExhibitionSnapshotRestore()" ${exhibitionDetailState.backupCanUndo ? '' : 'disabled'}>되돌리기</button>
+      </div>
+      <div class="works-table-wrapper expanded">
+        <table class="works-table">
+          <thead>
+            <tr>
+              <th>스냅샷</th>
+              <th>목록 수 (작품+굿즈)</th>
+              <th>판매 수량</th>
+              <th>생성 시각</th>
+              <th>메모</th>
+              <th>복원</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${getBackupSnapshotRowsHtml()}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  if (!exhibitionDetailState.backupLoading && exhibitionDetailState.backupSnapshots.length === 0 && !exhibitionDetailState.backupError) {
+    fetchExhibitionBackupSnapshots();
+  }
+}
+
+async function createManualExhibitionSnapshot() {
+  if (getExhibitionAccessRole() !== 'admin') {
+    alert('어드민 계정만 스냅샷을 생성할 수 있습니다.');
+    return;
+  }
+
+  const exhibitionId = getBackupExhibitionId();
+  if (!exhibitionId) {
+    alert('전시 ID를 찾을 수 없습니다.');
+    return;
+  }
+
+  const currentUser = getCurrentUser();
+  const actorName = (currentUser?.name || '').toString().trim() || 'admin';
+  const note = `manual backup by ${actorName}`;
+
+  try {
+    const response = await fetch('/api/exhibition-snapshots', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'capture-now',
+        exhibitionId,
+        note
+      })
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      alert(payload?.error || '스냅샷 생성에 실패했습니다.');
+      return;
+    }
+
+    alert('스냅샷이 생성되었습니다.');
+    await fetchExhibitionBackupSnapshots();
+  } catch (error) {
+    alert('스냅샷 생성 요청 중 오류가 발생했습니다.');
+  }
+}
+
+async function refreshExhibitionStateFromServer(exhibitionId) {
+  const targetId = Number(exhibitionId);
+  if (!Number.isFinite(targetId) || targetId <= 0) return false;
+
+  try {
+    const response = await fetch('/api/state?keys=exhibitions');
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok || !payload?.data) return false;
+
+    const remoteExhibitions = Array.isArray(payload.data.exhibitions) ? payload.data.exhibitions : [];
+    const serialized = JSON.stringify(remoteExhibitions);
+    if (typeof safeSetLocalStorageItem === 'function') {
+      safeSetLocalStorageItem('exhibitions', serialized);
+    } else {
+      localStorage.setItem('exhibitions', serialized);
+    }
+
+    const index = remoteExhibitions.findIndex((item) => Number(item?.id) === targetId);
+    if (index !== -1) {
+      exhibitionDetailState.exhibition = remoteExhibitions[index];
+    }
+
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function restoreExhibitionSnapshot(snapshotId) {
+  if (getExhibitionAccessRole() !== 'admin') {
+    alert('어드민 계정만 복원할 수 있습니다.');
+    return;
+  }
+
+  if (!confirm('이 스냅샷으로 전시 데이터를 복원하시겠습니까?')) {
+    return;
+  }
+
+  const exhibitionId = getBackupExhibitionId();
+  if (!exhibitionId) {
+    alert('전시 ID를 찾을 수 없습니다.');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/exhibition-snapshots', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'restore',
+        exhibitionId,
+        snapshotId
+      })
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      alert(payload?.error || '복원에 실패했습니다.');
+      return;
+    }
+
+    await refreshExhibitionStateFromServer(exhibitionId);
+
+    alert('복원이 완료되었습니다.');
+    await fetchExhibitionBackupSnapshots();
+  } catch (error) {
+    alert('복원 요청 중 오류가 발생했습니다.');
+  }
+}
+
+async function undoExhibitionSnapshotRestore() {
+  if (getExhibitionAccessRole() !== 'admin') {
+    alert('어드민 계정만 되돌릴 수 있습니다.');
+    return;
+  }
+
+  const exhibitionId = getBackupExhibitionId();
+  if (!exhibitionId) {
+    alert('전시 ID를 찾을 수 없습니다.');
+    return;
+  }
+
+  if (!confirm('마지막 복원을 되돌리시겠습니까?')) {
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/exhibition-snapshots', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'undo-restore',
+        exhibitionId
+      })
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      alert(payload?.error || '되돌리기에 실패했습니다.');
+      return;
+    }
+
+    await refreshExhibitionStateFromServer(exhibitionId);
+
+    alert('되돌리기가 완료되었습니다.');
+    await fetchExhibitionBackupSnapshots();
+  } catch (error) {
+    alert('되돌리기 요청 중 오류가 발생했습니다.');
   }
 }
 
@@ -4930,7 +5249,7 @@ function renderStaffManagement(container) {
   const staffs = exhibition.staff?.staffs || [];
 
   const users = JSON.parse(localStorage.getItem('users')) || [];
-  const candidates = users.filter(user => user.approved && normalizeAccountType(user.accountType) === '기획자/작가');
+  const candidates = users.filter(user => user.approved && normalizeAccountType(getEffectiveGalleryRole(user)) === '기획자/작가');
 
   const roleSection = (role, label, assignedIds) => {
     const section = document.createElement('section');
@@ -5042,7 +5361,7 @@ function renderInviteUserList(users, assignedIds) {
   let renderedCount = 0;
 
   users.forEach(user => {
-    const label = normalizeAccountType(user.accountType) || '미지정';
+    const label = normalizeAccountType(getEffectiveGalleryRole(user)) || '미지정';
     const text = `${user.name} ${user.username} ${user.email} ${label}`.toLowerCase();
     if (search && !text.includes(search)) return;
 
@@ -5645,7 +5964,7 @@ function renderStaffManagement(container) {
   const staffs = exhibition.staff?.staffs || [];
 
   const users = JSON.parse(localStorage.getItem('users')) || [];
-  const candidates = users.filter(user => user.approved && normalizeAccountType(user.accountType) === '기획자/작가');
+  const candidates = users.filter(user => user.approved && normalizeAccountType(getEffectiveGalleryRole(user)) === '기획자/작가');
 
   const roleSection = (role, label, assignedIds) => {
     const section = document.createElement('section');
@@ -5750,7 +6069,7 @@ function renderInviteUserList(users, assignedIds) {
   let renderedCount = 0;
 
   users.forEach(user => {
-    const label = normalizeAccountType(user.accountType) || '미지정';
+    const label = normalizeAccountType(getEffectiveGalleryRole(user)) || '미지정';
     const text = `${user.name} ${user.username} ${user.email} ${label}`.toLowerCase();
     if (search && !text.includes(search)) return;
 
@@ -7332,7 +7651,7 @@ function getSortedWorks() {
   return [...works].sort((a, b) => {
     const valueA = getWorkSortValue(a, exhibitionDetailState.workSortField);
     const valueB = getWorkSortValue(b, exhibitionDetailState.workSortField);
-    return compareWorkValues(valueA, valueB) * direction;
+    return compareWorkValues(valueA, valueB, exhibitionDetailState.workSortField) * direction;
   });
 }
 
@@ -7385,7 +7704,7 @@ function getSortedSoldWorks() {
   return [...soldWorks].sort((a, b) => {
     const valueA = getSoldSortValue(a, exhibitionDetailState.salesSortField);
     const valueB = getSoldSortValue(b, exhibitionDetailState.salesSortField);
-    return compareWorkValues(valueA, valueB) * direction;
+    return compareWorkValues(valueA, valueB, exhibitionDetailState.salesSortField) * direction;
   });
 }
 
@@ -7480,7 +7799,36 @@ function getSoldSortValue(sold, field) {
   }
 }
 
-function compareWorkValues(a, b) {
+function getManualNumberSortGroup(value) {
+  if (!value) return 3;
+  if (/^[A-Za-z]/.test(value)) return 0;
+  if (/^\d/.test(value)) return 1;
+  if (/^[가-힣]/.test(value)) return 2;
+  return 2;
+}
+
+function compareManualNumberValues(a, b) {
+  const textA = String(a ?? '').trim();
+  const textB = String(b ?? '').trim();
+
+  const groupA = getManualNumberSortGroup(textA);
+  const groupB = getManualNumberSortGroup(textB);
+  if (groupA !== groupB) {
+    return groupA - groupB;
+  }
+
+  const collator = new Intl.Collator(['en', 'ko'], {
+    numeric: true,
+    sensitivity: 'base'
+  });
+  return collator.compare(textA, textB);
+}
+
+function compareWorkValues(a, b, field = '') {
+  if (field === 'manualNumber') {
+    return compareManualNumberValues(a, b);
+  }
+
   const textA = String(a ?? '').trim();
   const textB = String(b ?? '').trim();
   const categoryA = getSortCategory(textA);
@@ -7923,6 +8271,7 @@ function saveExhibition() {
   }
 
   updateInventoryResetMarker(storageCopy);
+  storageCopy.updatedAt = new Date().toISOString();
 
   if (index !== -1) {
     exhibitions[index] = storageCopy;

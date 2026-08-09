@@ -40,11 +40,12 @@
           <tr>
             <th class="checkbox-col"><input type="checkbox" id="select-all-users" onclick="toggleSelectAllUsers(this)"></th>
             <th class="status-col">상태</th>
-            <th>계정 타입</th>
             <th>실명</th>
             <th>사용자명</th>
             <th>전화번호</th>
             <th>이메일</th>
+            <th>접근 사이트</th>
+            <th>접근 레벨</th>
             <th>작업</th>
           </tr>
         </thead>
@@ -78,8 +79,29 @@
       <p id="modal-user-info"></p>
       
       <div class="form-group">
-        <label for="account-type">계정 타입을 선택하세요:</label>
-        <select id="account-type" class="auth-input">
+        <label for="approve-site-access">접근 사이트를 선택하세요:</label>
+        <select id="approve-site-access" class="auth-input" onchange="syncApprovalAccountTypeOptions()">
+          <option value="">-- 선택 --</option>
+          <option value="pottery">도예공방 10.19</option>
+          <option value="gallery">10.19 Gallery&Lounge</option>
+          <option value="both">둘 다</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="approve-studio-role">도예공방 10.19 권한</label>
+        <select id="approve-studio-role" class="auth-input">
+          <option value="">-- 선택 --</option>
+          <option value="어드민">어드민</option>
+          <option value="강사">강사</option>
+          <option value="수강생">수강생</option>
+          <option value="작가">작가</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="approve-gallery-role">10.19 Gallery&Lounge 권한</label>
+        <select id="approve-gallery-role" class="auth-input">
           <option value="">-- 선택 --</option>
           <option value="어드민">어드민</option>
           <option value="기획자/작가">기획자/작가</option>
@@ -129,8 +151,29 @@
       </div>
 
       <div class="form-group">
-        <label for="create-account-type">계정 타입</label>
-        <select id="create-account-type" class="auth-input">
+        <label for="create-site-access">접근 사이트</label>
+        <select id="create-site-access" class="auth-input" onchange="syncCreateAccountTypeOptions()">
+          <option value="">-- 선택 --</option>
+          <option value="pottery">도예공방 10.19</option>
+          <option value="gallery">10.19 Gallery&Lounge</option>
+          <option value="both">둘 다</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="create-studio-role">도예공방 10.19 권한</label>
+        <select id="create-studio-role" class="auth-input">
+          <option value="">-- 선택 --</option>
+          <option value="어드민">어드민</option>
+          <option value="강사">강사</option>
+          <option value="수강생">수강생</option>
+          <option value="작가">작가</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="create-gallery-role">10.19 Gallery&Lounge 권한</label>
+        <select id="create-gallery-role" class="auth-input">
           <option value="">-- 선택 --</option>
           <option value="어드민">어드민</option>
           <option value="기획자/작가">기획자/작가</option>
@@ -145,8 +188,8 @@
     </div>
   </div>
 
-  <script src="cloud-sync.js?v=20260805-2"></script>
-  <script src="auth.js?v=20260803-4"></script>
-  <script src="users.js?v=20260804-1"></script>
+  <script src="cloud-sync.js?v=20260807-3"></script>
+  <script src="auth.js?v=20260807-1"></script>
+  <script src="users.js?v=20260809-2"></script>
 </body>
 </html>

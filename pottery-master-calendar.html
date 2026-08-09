@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>도예공방 10.19 - 마스터 캘린더</title>
+  <link rel="stylesheet" href="studio.css?v=20260809-48">
+</head>
+<body>
+  <a class="studio-back-link" href="pottery-workshop.html" aria-label="도예공방 10.19 메뉴로 돌아가기">← 메뉴로</a>
+
+  <div class="studio-page">
+    <header class="studio-header">
+      <div>
+        <h1>도예공방 10.19</h1>
+        <p>마스터 캘린더</p>
+      </div>
+      <div class="studio-week-nav">
+        <div class="studio-view-toggle" role="group" aria-label="캘린더 보기 전환">
+          <button type="button" id="go-today-btn">오늘</button>
+          <button type="button" id="week-view-btn" class="is-active">주간</button>
+          <button type="button" id="month-view-btn">월간</button>
+        </div>
+        <button type="button" id="prev-week-btn">이전 주</button>
+        <strong id="week-label">-</strong>
+        <button type="button" id="next-week-btn">다음 주</button>
+      </div>
+    </header>
+
+    <main class="studio-layout">
+      <aside class="studio-sidebar">
+        <button type="button" class="studio-primary-btn" id="open-add-event-btn">일정 추가</button>
+        <button type="button" class="studio-secondary-btn" id="open-base-editor-btn">베이스 시간표 수정</button>
+
+        <section class="studio-panel">
+          <h2>일정 종류</h2>
+          <ul class="legend-list">
+            <li><span class="dot kind-class"></span>수강</li>
+            <li><span class="dot kind-personal"></span>개인작업</li>
+            <li><span class="dot kind-guided"></span>강사 지도 하 개인작업</li>
+            <li><span class="dot kind-kiln"></span>가마 소성</li>
+            <li><span class="dot kind-exhibition"></span>전시회</li>
+            <li><span class="dot kind-other"></span>기타</li>
+          </ul>
+        </section>
+
+        <section class="studio-panel">
+          <h2>베이스 시간표</h2>
+          <ul class="legend-list">
+            <li><span class="dot base-class"></span>수업시간</li>
+            <li><span class="dot base-personal"></span>개인작업 시간</li>
+            <li><span class="dot base-closed"></span>이용 불가</li>
+          </ul>
+        </section>
+      </aside>
+
+      <section class="studio-calendar-wrap">
+        <div class="studio-calendar-header" id="calendar-day-header"></div>
+        <div class="studio-calendar-body" id="calendar-body"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="studio-modal" id="event-modal" aria-hidden="true">
+    <div class="studio-modal-content studio-modal-wide">
+      <h2>일정 추가</h2>
+      <div class="form-row">
+        <label for="event-kind">일정 종류</label>
+        <select id="event-kind">
+          <option value="수강">수강</option>
+          <option value="개인작업">개인작업</option>
+          <option value="강사 지도 하 개인작업">강사 지도 하 개인작업</option>
+          <option value="가마 소성">가마 소성</option>
+          <option value="전시회">전시회</option>
+          <option value="기타">기타</option>
+        </select>
+      </div>
+      <div class="form-row" id="event-user-row">
+        <label for="event-user">이용자</label>
+        <select id="event-user">
+          <option value="">이용자 선택</option>
+        </select>
+      </div>
+      <div class="form-row" id="event-title-row" style="display: none;">
+        <label for="event-title">제목</label>
+        <input id="event-title" type="text" placeholder="예: 배관 점검, 공사 작업">
+      </div>
+      <div class="form-row two-col">
+        <div id="event-date-wrap">
+          <label for="event-date">날짜</label>
+          <input id="event-date" type="date">
+        </div>
+        <div id="event-capacity-wrap">
+          <label for="event-capacity">사용 자리 수</label>
+          <select id="event-capacity">
+            <option value="1">1자리</option>
+            <option value="2">2자리</option>
+            <option value="3">3자리</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row two-col" id="event-range-row" style="display: none;">
+        <div>
+          <label for="event-range-start">시작</label>
+          <input id="event-range-start" type="date">
+        </div>
+        <div>
+          <label for="event-range-end">종료</label>
+          <input id="event-range-end" type="date">
+        </div>
+      </div>
+      <div class="form-row checkbox-row">
+        <label for="event-weekly-repeat">매주 반복</label>
+        <input type="checkbox" id="event-weekly-repeat">
+      </div>
+      <div class="form-row two-col event-time-row" id="event-time-row">
+        <div>
+          <label for="event-start">시작</label>
+          <input id="event-start" type="time" step="1800">
+        </div>
+        <div>
+          <label for="event-end">종료</label>
+          <input id="event-end" type="time" step="1800">
+        </div>
+      </div>
+      <div class="base-drag-hint" id="event-selector-hint"></div>
+      <div class="base-editor-grid" id="event-selector-grid"></div>
+      <div class="modal-actions">
+        <button type="button" class="studio-primary-btn" id="save-event-btn">저장</button>
+        <button type="button" class="studio-secondary-btn" data-close-modal="event-modal">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="studio-modal" id="event-quick-edit-modal" aria-hidden="true">
+    <div class="studio-modal-content">
+      <h2>일정 수정</h2>
+      <div class="form-row">
+        <label>일정 종류</label>
+        <div id="quick-edit-kind">-</div>
+      </div>
+      <div class="form-row" id="quick-edit-user-row" style="display: none;">
+        <label for="quick-edit-user">이용자</label>
+        <select id="quick-edit-user">
+          <option value="">이용자 선택</option>
+        </select>
+      </div>
+      <div class="form-row" id="quick-edit-title-row" style="display: none;">
+        <label for="quick-edit-title">제목</label>
+        <input id="quick-edit-title" type="text" placeholder="제목 입력">
+      </div>
+      <div class="form-row" id="quick-edit-date-row">
+        <label for="quick-edit-date">날짜</label>
+        <input id="quick-edit-date" type="date">
+      </div>
+      <div class="form-row two-col" id="quick-edit-range-row" style="display: none;">
+        <div>
+          <label for="quick-edit-range-start">시작</label>
+          <input id="quick-edit-range-start" type="date">
+        </div>
+        <div>
+          <label for="quick-edit-range-end">종료</label>
+          <input id="quick-edit-range-end" type="date">
+        </div>
+      </div>
+      <div class="form-row two-col" id="quick-edit-time-row">
+        <div>
+          <label for="quick-edit-start">시작</label>
+          <input id="quick-edit-start" type="time" step="1800">
+        </div>
+        <div>
+          <label for="quick-edit-end">종료</label>
+          <input id="quick-edit-end" type="time" step="1800">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="studio-primary-btn" id="save-event-quick-edit-btn">저장</button>
+        <button type="button" class="studio-secondary-btn" data-close-modal="event-quick-edit-modal">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="studio-modal" id="recurring-delete-modal" aria-hidden="true">
+    <div class="studio-modal-content">
+      <h2>반복 일정 삭제</h2>
+      <p style="margin: 0 0 12px; color: #5b677e; font-size: 13px;">이 일정은 매주 반복됩니다. 삭제 범위를 선택해주세요.</p>
+      <div class="modal-actions" style="justify-content: flex-start; flex-wrap: wrap;">
+        <button type="button" class="studio-primary-btn" id="delete-recurring-one-btn">이 일정만 삭제</button>
+        <button type="button" class="studio-secondary-btn" id="delete-recurring-following-btn">이 일정부터 이후 모두 삭제</button>
+        <button type="button" class="studio-secondary-btn" id="delete-recurring-cancel-btn">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="studio-modal" id="recurring-move-modal" aria-hidden="true">
+    <div class="studio-modal-content">
+      <h2>반복 일정 이동</h2>
+      <p style="margin: 0 0 12px; color: #5b677e; font-size: 13px;">이 일정은 매주 반복됩니다. 이동 범위를 선택해주세요.</p>
+      <div class="modal-actions" style="justify-content: flex-start; flex-wrap: wrap;">
+        <button type="button" class="studio-primary-btn" id="move-recurring-one-btn">이 일정만 이동</button>
+        <button type="button" class="studio-secondary-btn" id="move-recurring-following-btn">이 일정부터 이후 모두 이동</button>
+        <button type="button" class="studio-secondary-btn" id="move-recurring-cancel-btn">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="studio-modal" id="delete-confirm-modal" aria-hidden="true">
+    <div class="studio-modal-content">
+      <h2>일정 삭제</h2>
+      <p style="margin: 0 0 12px; color: #5b677e; font-size: 13px;">이 일정을 삭제하시겠습니까?</p>
+      <div class="modal-actions" style="justify-content: flex-start;">
+        <button type="button" class="studio-primary-btn" id="delete-confirm-ok-btn">삭제</button>
+        <button type="button" class="studio-secondary-btn" id="delete-confirm-cancel-btn">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="studio-modal" id="base-modal" aria-hidden="true">
+    <div class="studio-modal-content studio-modal-wide">
+      <h2>베이스 시간표 수정</h2>
+      <div class="form-row">
+        <label for="base-type">유형</label>
+        <select id="base-type">
+          <option value="">유형 선택</option>
+          <option value="수업시간">수업시간</option>
+          <option value="개인작업 시간">개인작업 시간</option>
+          <option value="이용 불가">이용 불가</option>
+        </select>
+      </div>
+
+      <div class="form-row" id="base-class-row">
+        <label for="base-class-name">수업명</label>
+        <select id="base-class-name">
+          <option value="">수업명 선택</option>
+          <option value="성인 레귤러">성인 레귤러</option>
+          <option value="성인 비기너">성인 비기너</option>
+          <option value="키즈 프로그램">키즈 프로그램</option>
+          <option value="핸드빌딩 클래스">핸드빌딩 클래스</option>
+          <option value="English-Only Class">English-Only Class</option>
+        </select>
+      </div>
+
+      <div class="base-drag-hint">추가: 같은 요일 칼럼 안에서 드래그해 30분 구간을 선택하세요. 이동: 블록을 길게 눌러 원하는 시간으로 옮기세요. 수정: 블록을 한 번 클릭하세요.</div>
+      <div class="base-editor-grid" id="base-editor-grid"></div>
+
+      <div class="modal-actions">
+        <button type="button" class="studio-secondary-btn" id="undo-base-btn">되돌리기</button>
+        <button type="button" class="studio-secondary-btn" data-close-modal="base-modal">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="studio-modal" id="base-edit-modal" aria-hidden="true">
+    <div class="studio-modal-content">
+      <h2>블록 수정</h2>
+      <div class="form-row">
+        <label for="edit-base-type">유형</label>
+        <select id="edit-base-type">
+          <option value="수업시간">수업시간</option>
+          <option value="개인작업 시간">개인작업 시간</option>
+          <option value="이용 불가">이용 불가</option>
+        </select>
+      </div>
+      <div class="form-row" id="edit-base-class-row">
+        <label for="edit-base-class-name">수업명</label>
+        <select id="edit-base-class-name">
+          <option value="">수업명 선택</option>
+          <option value="성인 레귤러">성인 레귤러</option>
+          <option value="성인 비기너">성인 비기너</option>
+          <option value="키즈 프로그램">키즈 프로그램</option>
+          <option value="핸드빌딩 클래스">핸드빌딩 클래스</option>
+          <option value="English-Only Class">English-Only Class</option>
+        </select>
+      </div>
+      <div class="form-row two-col">
+        <div>
+          <label for="edit-base-day">요일</label>
+          <select id="edit-base-day">
+            <option value="0">월요일</option>
+            <option value="1">화요일</option>
+            <option value="2">수요일</option>
+            <option value="3">목요일</option>
+            <option value="4">금요일</option>
+            <option value="5">토요일</option>
+            <option value="6">일요일</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row two-col">
+        <div>
+          <label for="edit-base-start">시작</label>
+          <input id="edit-base-start" type="time" step="1800">
+        </div>
+        <div>
+          <label for="edit-base-end">종료</label>
+          <input id="edit-base-end" type="time" step="1800">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="studio-primary-btn" id="save-base-edit-btn">수정 저장</button>
+        <button type="button" class="studio-secondary-btn" id="delete-base-edit-btn">삭제</button>
+        <button type="button" class="studio-secondary-btn" data-close-modal="base-edit-modal">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="cloud-sync.js?v=20260807-3"></script>
+  <script src="auth.js?v=20260807-1"></script>
+  <script src="studio.js?v=20260809-63"></script>
+</body>
+</html>

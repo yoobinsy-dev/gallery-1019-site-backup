@@ -3,42 +3,38 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>10.19 갤러리&라운지 - 관리자</title>
-
-  <link rel="stylesheet" href="style.css">
+  <title>10.19 선택 페이지</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="landing.css?v=20260809-4">
 </head>
-
 <body>
-  <div class="admin-container">
-    <h1 class="admin-title">10.19 갤러리&라운지</h1>
-    <p class="admin-subtitle">대시보드</p>
-    
-    <div class="menu-grid">
-      <button class="menu-btn" data-page="users">
-        <span class="menu-icon">👥</span>
-        <span class="menu-text">USER 관리</span>
-      </button>
-      
-      <button class="menu-btn" data-page="exhibitions">
-        <span class="menu-icon">🎨</span>
-        <span class="menu-text">전시 관리</span>
-      </button>
-      
-      <button class="menu-btn" data-page="accounting">
-        <span class="menu-icon">💰</span>
-        <span class="menu-text">회계</span>
-      </button>
-      
-      <button class="menu-btn" data-page="inventory">
-        <span class="menu-icon">📦</span>
-        <span class="menu-text">인벤토리</span>
-      </button>
-    </div>
-  </div>
+  <main class="landing-wrap">
+    <h1 class="landing-title">10.19</h1>
+    <p class="landing-subtitle">원하는 공간을 선택해 이동하세요.</p>
 
-  <script src="cloud-sync.js?v=20260805-2"></script>
-  <script src="auth.js?v=20260803-4"></script>
-  <script src="script.js"></script>
+    <section class="landing-grid" aria-label="브랜드 선택">
+      <a class="landing-card landing-card-pottery" href="pottery-workshop.html" aria-label="도예공방 10.19으로 이동">
+        <h2 class="landing-card-title">도예공방 10.19</h2>
+        <p class="landing-card-desc">도예공방 10.19 운영 화면으로 이동합니다.</p>
+        <span class="landing-card-badge">ENTER</span>
+      </a>
+
+      <a class="landing-card landing-card-gallery" href="gallery-lounge.html" aria-label="10.19 Gallery and Lounge로 이동">
+        <h2 class="landing-card-title">10.19 Gallery&Lounge</h2>
+        <p class="landing-card-desc">현재 운영 중인 갤러리 관리 사이트로 이동합니다.</p>
+        <span class="landing-card-badge">CURRENT SITE</span>
+      </a>
+
+      <a id="landing-users-card" class="landing-card landing-card-users landing-card-users-compact" href="users.html" aria-label="USER 관리 페이지로 이동" hidden>
+        <h2 class="landing-card-title">USER 관리</h2>
+        <p class="landing-card-desc">관리자 전용 계정 승인 및 권한 관리 페이지입니다.</p>
+        <span class="landing-card-badge">ADMIN ONLY</span>
+      </a>
+    </section>
+  </main>
+
+  <script src="landing.js?v=20260809-4"></script>
 </body>
 </html>

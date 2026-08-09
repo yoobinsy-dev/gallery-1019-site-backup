@@ -3,6 +3,9 @@
   const PUSH_DEBOUNCE_MS = 500;
   const META_KEY = '__sync_updated_at__';
   const SESSION_META_KEY = '__sync_updated_at_session__';
+  const REMOTE_META_KEY = '__sync_remote_updated_at__';
+  const SESSION_REMOTE_META_KEY = '__sync_remote_updated_at_session__';
+  const CLIENT_ID_KEY = '__cloud_sync_client_id__';
   const READY_EVENT = 'cloud-sync:ready';
   const STATE_APPLIED_EVENT = 'cloud-sync:state-applied';
   const REMOTE_DROP_MIN_PREVIOUS_TOTAL = 20;
@@ -106,6 +109,74 @@
     } catch (error) {
       // Ignore session metadata persistence errors.
     }
+  }
+
+  function getRemoteSyncMeta() {
+    const mergeMeta = (primary, secondary) => {
+      const merged = { ...(secondary || {}), ...(primary || {}) };
+      Object.keys(secondary || {}).forEach((key) => {
+        const primaryTime = getEpochMs(primary?.[key]);
+        const secondaryTime = getEpochMs(secondary[key]);
+        if (secondaryTime > primaryTime) {
+          merged[key] = secondary[key];
+        }
+      });
+      return merged;
+    };
+
+    try {
+      const raw = localStorage.getItem(REMOTE_META_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      const localMeta = parsed && typeof parsed === 'object' ? parsed : {};
+
+      if (typeof sessionStorage === 'undefined') {
+        return localMeta;
+      }
+
+      const sessionRaw = sessionStorage.getItem(SESSION_REMOTE_META_KEY);
+      const sessionParsed = sessionRaw ? JSON.parse(sessionRaw) : {};
+      const sessionMeta = sessionParsed && typeof sessionParsed === 'object' ? sessionParsed : {};
+      return mergeMeta(localMeta, sessionMeta);
+    } catch (error) {
+      try {
+        if (typeof sessionStorage !== 'undefined') {
+          const sessionRaw = sessionStorage.getItem(SESSION_REMOTE_META_KEY);
+          const sessionParsed = sessionRaw ? JSON.parse(sessionRaw) : {};
+          return sessionParsed && typeof sessionParsed === 'object' ? sessionParsed : {};
+        }
+      } catch (sessionError) {
+        // Ignore fallback parsing errors.
+      }
+
+      return {};
+    }
+  }
+
+  function setRemoteSyncMeta(meta) {
+    try {
+      originalSetItem.call(localStorage, REMOTE_META_KEY, JSON.stringify(meta || {}));
+    } catch (error) {
+      // Ignore metadata persistence errors.
+    }
+
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem(SESSION_REMOTE_META_KEY, JSON.stringify(meta || {}));
+      }
+    } catch (error) {
+      // Ignore session metadata persistence errors.
+    }
+  }
+
+  function markKnownRemoteVersion(key, updatedAtIso) {
+    if (!SYNCED_KEYS.has(key)) return;
+    const meta = getRemoteSyncMeta();
+    const previous = meta[key];
+    if (getEpochMs(updatedAtIso) < getEpochMs(previous)) {
+      return;
+    }
+    meta[key] = updatedAtIso;
+    setRemoteSyncMeta(meta);
   }
 
   function hasAnyPhotoPreviewInList(list) {
@@ -327,6 +398,31 @@
     return typeof window !== 'undefined' && window.location && !window.location.protocol.startsWith('file');
   }
 
+  function createClientId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+
+    return `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  function getClientId() {
+    if (typeof sessionStorage === 'undefined') {
+      return createClientId();
+    }
+
+    try {
+      const existing = sessionStorage.getItem(CLIENT_ID_KEY);
+      if (existing) return existing;
+
+      const next = createClientId();
+      sessionStorage.setItem(CLIENT_ID_KEY, next);
+      return next;
+    } catch (error) {
+      return createClientId();
+    }
+  }
+
   function schedulePush(key, value) {
     if (!canUseRemoteState()) return;
     if (!SYNCED_KEYS.has(key)) return;
@@ -346,11 +442,31 @@
           return;
         }
 
-        await fetch('/api/state', {
+        const remoteMeta = getRemoteSyncMeta();
+        const baseUpdatedAt = remoteMeta[key] || null;
+
+        const response = await fetch('/api/state', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key, value })
+          headers: {
+            'Content-Type': 'application/json',
+            'x-cloud-client-id': getClientId()
+          },
+          body: JSON.stringify({ key, value, baseUpdatedAt })
         });
+
+        if (!response.ok) {
+          if (response.status === 409 || response.status === 422) {
+            await pullRemoteState();
+          }
+          return;
+        }
+
+        const payload = await response.json().catch(() => null);
+        const serverUpdatedAt = payload?.meta?.updatedAt;
+        if (typeof serverUpdatedAt === 'string' && serverUpdatedAt) {
+          markKnownRemoteVersion(key, serverUpdatedAt);
+          markLocalUpdate(key, serverUpdatedAt);
+        }
       } catch (error) {
         console.error('Cloud sync push failed for key:', key, error);
       }
@@ -425,6 +541,10 @@
           const localTime = getEpochMs(localUpdatedAt);
           let mergedRemoteValue = remoteValue;
           let shouldHealRemotePreviews = false;
+
+          if (remoteUpdatedAt) {
+            markKnownRemoteVersion(key, remoteUpdatedAt);
+          }
 
           if (key === 'exhibitions' && parsedLocal && Array.isArray(remoteValue)) {
             const localHasPreview = hasAnyPhotoPreviewInExhibitions(parsedLocal);

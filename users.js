@@ -4,6 +4,15 @@ let userToApprove = null;
 let selectedUserIds = [];
 let lastUserCheckboxIndex = null;
 
+const SITE_ACCESS_LABELS = {
+  pottery: '도예공방 10.19',
+  gallery: '10.19 Gallery&Lounge',
+  both: '둘 다'
+};
+
+const STUDIO_ROLE_VALUES = ['어드민', '강사', '수강생', '작가'];
+const GALLERY_ROLE_VALUES = ['어드민', '기획자/작가', '스탭'];
+
 document.addEventListener('DOMContentLoaded', () => {
   checkAuth();
   setupFilterButtons();
@@ -42,10 +51,122 @@ async function initializeUsersPage() {
 
 function checkAuth() {
   const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-  if (!currentUser || currentUser.accountType !== '어드민') {
-    alert('관리자만 접근할 수 있습니다.');
+  if (!currentUser) {
+    alert('로그인이 필요합니다.');
     window.location.href = 'login.html';
+    return;
   }
+
+  if (!isDualSiteAdmin(currentUser)) {
+    alert('USER 관리 페이지는 양쪽 사이트 모두 어드민 권한을 가진 계정만 접근할 수 있습니다.');
+    window.location.href = 'index.html';
+    return;
+  }
+}
+
+function normalizeAccountType(type) {
+  return type ? type.toString().trim() : '';
+}
+
+function getAccountTypeKey(type) {
+  return normalizeAccountType(type).replace(/\s+/g, '');
+}
+
+function isAdminAccount(type) {
+  return getAccountTypeKey(type) === '어드민';
+}
+
+function normalizeStudioRole(role) {
+  const value = normalizeAccountType(role);
+  return STUDIO_ROLE_VALUES.includes(value) ? value : '';
+}
+
+function normalizeGalleryRole(role) {
+  const value = normalizeAccountType(role);
+  if (value === '기획자' || value === '작가') {
+    return '기획자/작가';
+  }
+  return GALLERY_ROLE_VALUES.includes(value) ? value : '';
+}
+
+function normalizeSiteAccess(access) {
+  const raw = access ? access.toString().trim().toLowerCase() : '';
+  if (raw === 'both' || raw === 'all') return 'both';
+  if (raw === 'pottery' || raw === 'studio') return 'pottery';
+  if (raw === 'gallery') return 'gallery';
+  return '';
+}
+
+function getEffectiveSiteAccess(user) {
+  const direct = normalizeSiteAccess(user?.siteAccess);
+  if (direct) return direct;
+  return 'gallery';
+}
+
+function getEffectiveStudioRole(user) {
+  const direct = normalizeStudioRole(user?.studioRole);
+  if (direct) return direct;
+
+  if (normalizeSiteAccess(user?.siteAccess) === 'pottery' && isAdminAccount(user?.accountType)) {
+    return '어드민';
+  }
+
+  return '';
+}
+
+function getEffectiveGalleryRole(user) {
+  const direct = normalizeGalleryRole(user?.galleryRole);
+  if (direct) return direct;
+  return normalizeGalleryRole(user?.accountType);
+}
+
+function isAdminAnywhere(user) {
+  if (getEffectiveStudioRole(user) === '어드민') return true;
+  if (getEffectiveGalleryRole(user) === '어드민') return true;
+  return isAdminAccount(user?.accountType);
+}
+
+function isDualSiteAdmin(user) {
+  if (!user) return false;
+  if (getEffectiveSiteAccess(user) !== 'both') return false;
+  return getEffectiveStudioRole(user) === '어드민'
+    && getEffectiveGalleryRole(user) === '어드민';
+}
+
+function getSiteAccessLabel(access) {
+  return SITE_ACCESS_LABELS[normalizeSiteAccess(access)] || '10.19 Gallery&Lounge';
+}
+
+function isStudioRoleRequired(siteAccess) {
+  const normalized = normalizeSiteAccess(siteAccess);
+  return normalized === 'pottery' || normalized === 'both';
+}
+
+function isGalleryRoleRequired(siteAccess) {
+  const normalized = normalizeSiteAccess(siteAccess);
+  return normalized === 'gallery' || normalized === 'both';
+}
+
+function applyRoleFieldVisibility(prefix, siteAccess) {
+  const studioGroup = document.querySelector(`label[for="${prefix}-studio-role"]`)?.closest('.form-group');
+  const galleryGroup = document.querySelector(`label[for="${prefix}-gallery-role"]`)?.closest('.form-group');
+
+  if (studioGroup) {
+    studioGroup.style.display = isStudioRoleRequired(siteAccess) ? '' : 'none';
+  }
+  if (galleryGroup) {
+    galleryGroup.style.display = isGalleryRoleRequired(siteAccess) ? '' : 'none';
+  }
+}
+
+function syncApprovalAccountTypeOptions() {
+  const siteAccess = document.getElementById('approve-site-access')?.value || '';
+  applyRoleFieldVisibility('approve', siteAccess);
+}
+
+function syncCreateAccountTypeOptions() {
+  const siteAccess = document.getElementById('create-site-access')?.value || '';
+  applyRoleFieldVisibility('create', siteAccess);
 }
 
 function setupFilterButtons() {
@@ -169,7 +290,7 @@ function loadUsers() {
   updateUserSelectionUi(filteredUsers);
 
   if (filteredUsers.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="no-users">사용자가 없습니다</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="no-users">사용자가 없습니다</td></tr>';
     return;
   }
 
@@ -179,7 +300,19 @@ function loadUsers() {
     const isSelected = selectedUserIds.includes(user.id);
 
     const statusDot = user.approved ? '🟢' : '🔴';
-    const accountType = user.accountType || '—';
+    const studioRole = getEffectiveStudioRole(user);
+    const galleryRole = getEffectiveGalleryRole(user);
+    const levelLabelParts = [];
+    if (studioRole) {
+      levelLabelParts.push(`도예공방:${studioRole}`);
+    }
+    if (galleryRole) {
+      levelLabelParts.push(`갤러리:${galleryRole}`);
+    }
+    const accountType = levelLabelParts.length > 0 ? levelLabelParts.join(' / ') : (user.accountType || '—');
+    const siteAccessLabel = !user.approved && !normalizeSiteAccess(user.siteAccess)
+      ? '미지정'
+      : getSiteAccessLabel(getEffectiveSiteAccess(user));
 
     row.innerHTML = `
       <td class="checkbox-col">
@@ -190,11 +323,12 @@ function loadUsers() {
           ${statusDot}
         </span>
       </td>
-      <td>${accountType}</td>
       <td>${user.name}</td>
       <td>${user.username}</td>
       <td>${user.phone}</td>
       <td>${user.email}</td>
+      <td>${siteAccessLabel}</td>
+      <td>${accountType}</td>
       <td class="action-col">
         ${!user.approved ? `
           <button class="action-btn approve-btn" onclick="openApproveModal(${user.id})">
@@ -271,16 +405,31 @@ function openApproveModal(userId) {
   const modalUserInfo = document.getElementById('modal-user-info');
   modalUserInfo.innerHTML = `<strong>${user.name}</strong> (${user.username})을 승인하시겠습니까?`;
 
-  document.getElementById('account-type').value = '';
+  document.getElementById('approve-site-access').value = '';
+  document.getElementById('approve-studio-role').value = '';
+  document.getElementById('approve-gallery-role').value = '';
+  syncApprovalAccountTypeOptions();
   document.getElementById('approve-modal').style.display = 'flex';
 }
 
 function confirmApproval() {
   if (!userToApprove) return;
 
-  const accountType = document.getElementById('account-type').value;
-  if (!accountType) {
-    alert('계정 타입을 선택해주세요.');
+  const siteAccess = normalizeSiteAccess(document.getElementById('approve-site-access').value);
+  const studioRole = normalizeStudioRole(document.getElementById('approve-studio-role').value);
+  const galleryRole = normalizeGalleryRole(document.getElementById('approve-gallery-role').value);
+  if (!siteAccess) {
+    alert('접근 사이트를 선택해주세요.');
+    return;
+  }
+
+  if (isStudioRoleRequired(siteAccess) && !studioRole) {
+    alert('도예공방 권한을 선택해주세요.');
+    return;
+  }
+
+  if (isGalleryRoleRequired(siteAccess) && !galleryRole) {
+    alert('갤러리 권한을 선택해주세요.');
     return;
   }
 
@@ -289,7 +438,11 @@ function confirmApproval() {
 
   if (userIndex !== -1) {
     users[userIndex].approved = true;
-    users[userIndex].accountType = accountType;
+    users[userIndex].studioRole = isStudioRoleRequired(siteAccess) ? studioRole : null;
+    users[userIndex].galleryRole = isGalleryRoleRequired(siteAccess) ? galleryRole : null;
+    users[userIndex].siteAccess = siteAccess;
+    // Keep legacy field in sync for existing pages that still read accountType.
+    users[userIndex].accountType = users[userIndex].galleryRole || users[userIndex].studioRole || users[userIndex].accountType || null;
     const saved = persistUsers(users);
     if (!saved) {
       alert('저장 공간이 부족해 사용자 승인을 저장하지 못했습니다.');
@@ -321,7 +474,10 @@ function openCreateUserModal() {
   document.getElementById('create-email').value = '';
   document.getElementById('create-password').value = '';
   document.getElementById('create-confirm').value = '';
-  document.getElementById('create-account-type').value = '';
+  document.getElementById('create-site-access').value = '';
+  document.getElementById('create-studio-role').value = '';
+  document.getElementById('create-gallery-role').value = '';
+  syncCreateAccountTypeOptions();
   document.getElementById('create-user-modal').style.display = 'flex';
 }
 
@@ -343,10 +499,22 @@ function createUserByAdmin() {
   const email = document.getElementById('create-email').value.trim();
   const password = document.getElementById('create-password').value.trim();
   const confirm = document.getElementById('create-confirm').value.trim();
-  const accountType = document.getElementById('create-account-type').value;
+  const siteAccess = normalizeSiteAccess(document.getElementById('create-site-access').value);
+  const studioRole = normalizeStudioRole(document.getElementById('create-studio-role').value);
+  const galleryRole = normalizeGalleryRole(document.getElementById('create-gallery-role').value);
 
-  if (!name || !username || !phone || !email || !password || !confirm || !accountType) {
+  if (!name || !username || !phone || !email || !password || !confirm || !siteAccess) {
     alert('모든 필드를 입력해주세요.');
+    return;
+  }
+
+  if (isStudioRoleRequired(siteAccess) && !studioRole) {
+    alert('도예공방 권한을 선택해주세요.');
+    return;
+  }
+
+  if (isGalleryRoleRequired(siteAccess) && !galleryRole) {
+    alert('갤러리 권한을 선택해주세요.');
     return;
   }
 
@@ -381,7 +549,10 @@ function createUserByAdmin() {
     phone,
     email,
     password,
-    accountType,
+    siteAccess,
+    studioRole: isStudioRoleRequired(siteAccess) ? studioRole : null,
+    galleryRole: isGalleryRoleRequired(siteAccess) ? galleryRole : null,
+    accountType: (isGalleryRoleRequired(siteAccess) ? galleryRole : null) || (isStudioRoleRequired(siteAccess) ? studioRole : null),
     approved: true,
     createdAt: new Date().toISOString()
   };
@@ -399,25 +570,64 @@ function createUserByAdmin() {
 }
 
 function editUser(userId) {
-  // Placeholder for editing user account type
   const users = JSON.parse(localStorage.getItem('users')) || [];
   const user = users.find(u => u.id === userId);
 
   if (!user) return;
 
-  const newAccountType = prompt(`${user.name}의 새 계정 타입을 선택하세요:\n(어드민 / 기획자/작가 / 스탭)`, user.accountType);
+  const currentSiteAccess = getEffectiveSiteAccess(user);
+  const newSiteAccess = normalizeSiteAccess(prompt(
+    `${user.name}의 접근 사이트를 선택하세요:\n(pottery / gallery / both)`,
+    currentSiteAccess
+  ));
 
-  if (newAccountType && ['어드민', '기획자/작가', '기획자', '작가', '스탭'].includes(newAccountType)) {
-    const userIndex = users.findIndex(u => u.id === userId);
-    users[userIndex].accountType = newAccountType;
-    const saved = persistUsers(users);
-    if (!saved) {
-      alert('저장 공간이 부족해 사용자 정보를 저장하지 못했습니다.');
+  if (!newSiteAccess) {
+    return;
+  }
+
+  let newStudioRole = normalizeStudioRole(user.studioRole);
+  let newGalleryRole = normalizeGalleryRole(user.galleryRole || user.accountType);
+
+  if (isStudioRoleRequired(newSiteAccess)) {
+    newStudioRole = normalizeStudioRole(prompt(
+      `${user.name}의 도예공방 권한을 선택하세요:\n(어드민 / 강사 / 수강생 / 작가)`,
+      newStudioRole || ''
+    ));
+    if (!newStudioRole) {
+      alert('도예공방 권한이 올바르지 않습니다.');
       return;
     }
-    refreshCurrentUserIfMatches(users[userIndex]);
-    loadUsers();
+  } else {
+    newStudioRole = '';
   }
+
+  if (isGalleryRoleRequired(newSiteAccess)) {
+    newGalleryRole = normalizeGalleryRole(prompt(
+      `${user.name}의 갤러리 권한을 선택하세요:\n(어드민 / 기획자/작가 / 스탭)`,
+      newGalleryRole || ''
+    ));
+    if (!newGalleryRole) {
+      alert('갤러리 권한이 올바르지 않습니다.');
+      return;
+    }
+  } else {
+    newGalleryRole = '';
+  }
+
+  const userIndex = users.findIndex(u => u.id === userId);
+  users[userIndex].siteAccess = newSiteAccess;
+  users[userIndex].studioRole = newStudioRole || null;
+  users[userIndex].galleryRole = newGalleryRole || null;
+  users[userIndex].accountType = newGalleryRole || newStudioRole || users[userIndex].accountType || null;
+
+  const saved = persistUsers(users);
+  if (!saved) {
+    alert('저장 공간이 부족해 사용자 정보를 저장하지 못했습니다.');
+    return;
+  }
+
+  refreshCurrentUserIfMatches(users[userIndex]);
+  loadUsers();
 }
 
 function deleteUser(userId) {

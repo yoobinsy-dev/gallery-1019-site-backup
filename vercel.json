@@ -1,1 +1,12 @@
-{}
+{
+	"crons": [
+		{
+			"path": "/api/snapshots-cron",
+			"schedule": "0 22 * * *"
+		},
+		{
+			"path": "/api/snapshots-cron",
+			"schedule": "0 10 * * *"
+		}
+	]
+}

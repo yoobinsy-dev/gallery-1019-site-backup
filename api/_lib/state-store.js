@@ -59,15 +59,19 @@ async function getStateMapWithMeta(keys) {
 
 async function setStateValue(key, value) {
   await ensureTable();
-  await query(
+  const result = await query(
     `
       INSERT INTO app_state (state_key, state_value, updated_at)
       VALUES ($1, $2::jsonb, NOW())
       ON CONFLICT (state_key)
       DO UPDATE SET state_value = EXCLUDED.state_value, updated_at = NOW()
+      RETURNING updated_at
     `,
     [key, JSON.stringify(value)]
   );
+
+  const updatedAt = result.rows[0]?.updated_at;
+  return updatedAt ? new Date(updatedAt).toISOString() : new Date().toISOString();
 }
 
 async function deleteStateValue(key) {

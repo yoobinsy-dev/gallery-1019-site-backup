@@ -18,6 +18,39 @@ function isStaffAccount(type) {
   return getAccountTypeKey(type) === '스탭';
 }
 
+function normalizeGalleryRole(role) {
+  const value = normalizeAccountType(role);
+  if (value === '기획자' || value === '작가') {
+    return '기획자/작가';
+  }
+  return value;
+}
+
+function getEffectiveGalleryRole(user) {
+  const direct = normalizeGalleryRole(user?.galleryRole);
+  if (direct) return direct;
+  return normalizeGalleryRole(user?.accountType);
+}
+
+function normalizeSiteAccess(access) {
+  const raw = access ? access.toString().trim().toLowerCase() : '';
+  if (raw === 'both' || raw === 'all') return 'both';
+  if (raw === 'pottery' || raw === 'studio') return 'pottery';
+  if (raw === 'gallery') return 'gallery';
+  return '';
+}
+
+function getEffectiveSiteAccess(user) {
+  const direct = normalizeSiteAccess(user?.siteAccess);
+  if (direct) return direct;
+  return 'gallery';
+}
+
+function hasGalleryAccess(user) {
+  const siteAccess = getEffectiveSiteAccess(user);
+  return siteAccess === 'gallery' || siteAccess === 'both';
+}
+
 function getCurrentUserId(user) {
   const id = Number(user?.id);
   return Number.isFinite(id) ? id : null;
@@ -39,13 +72,19 @@ function loadInventoryExhibitions() {
     return;
   }
 
-  const accountType = currentUser.accountType;
+  if (!hasGalleryAccess(currentUser)) {
+    alert('갤러리 사이트 접근 권한이 없습니다.');
+    window.location.href = 'index.html';
+    return;
+  }
+
+  const accountType = getEffectiveGalleryRole(currentUser);
   const isAdmin = isAdminAccount(accountType);
   const isStaff = isStaffAccount(accountType);
 
   if (!isAdmin && !isStaff) {
     alert('이 페이지에 접근할 권한이 없습니다.');
-    window.location.href = 'index.html';
+    window.location.href = 'gallery-lounge.html';
     return;
   }
 
@@ -79,7 +118,7 @@ function loadInventoryExhibitions() {
 }
 
 function goBack() {
-  window.location.href = 'index.html';
+  window.location.href = 'gallery-lounge.html';
 }
 
 window.addEventListener('DOMContentLoaded', loadInventoryExhibitions);

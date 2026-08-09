@@ -27,6 +27,39 @@ function isExhibitionMemberAccount(type) {
   return key === '기획자/작가' || key === '기획자' || key === '작가' || key === '스탭';
 }
 
+function normalizeGalleryRole(role) {
+  const value = normalizeAccountType(role);
+  if (value === '기획자' || value === '작가') {
+    return '기획자/작가';
+  }
+  return value;
+}
+
+function getEffectiveGalleryRole(user) {
+  const direct = normalizeGalleryRole(user?.galleryRole);
+  if (direct) return direct;
+  return normalizeGalleryRole(user?.accountType);
+}
+
+function normalizeSiteAccess(access) {
+  const raw = access ? access.toString().trim().toLowerCase() : '';
+  if (raw === 'both' || raw === 'all') return 'both';
+  if (raw === 'pottery' || raw === 'studio') return 'pottery';
+  if (raw === 'gallery') return 'gallery';
+  return '';
+}
+
+function getEffectiveSiteAccess(user) {
+  const direct = normalizeSiteAccess(user?.siteAccess);
+  if (direct) return direct;
+  return 'gallery';
+}
+
+function hasGalleryAccess(user) {
+  const siteAccess = getEffectiveSiteAccess(user);
+  return siteAccess === 'gallery' || siteAccess === 'both';
+}
+
 function checkAuth() {
   const currentUser = JSON.parse(localStorage.getItem('currentUser'));
   if (!currentUser) {
@@ -34,12 +67,18 @@ function checkAuth() {
     window.location.href = 'login.html';
     return null;
   }
+  if (!hasGalleryAccess(currentUser)) {
+    alert('갤러리 사이트 접근 권한이 없습니다.');
+    window.location.href = 'index.html';
+    return null;
+  }
   return currentUser;
 }
 
 function displayUserInfo(currentUser) {
   const userDisplay = document.getElementById('user-display');
-  userDisplay.innerHTML = `<strong>${currentUser.name}</strong> (${normalizeAccountType(currentUser.accountType) || '미지정'})`;
+  const galleryRole = normalizeAccountType(getEffectiveGalleryRole(currentUser));
+  userDisplay.innerHTML = `<strong>${currentUser.name}</strong> (${galleryRole || '미지정'})`;
 }
 
 function logout() {
@@ -52,10 +91,10 @@ function logout() {
 function setupMenuButtons(currentUser) {
   const menuButtons = document.querySelectorAll('.menu-btn');
 
-  const accountType = currentUser.accountType;
+  const accountType = getEffectiveGalleryRole(currentUser);
   let allowedPages = [];
   if (isAdminAccount(accountType)) {
-    allowedPages = ['users', 'exhibitions', 'accounting', 'inventory'];
+    allowedPages = ['exhibitions', 'accounting', 'inventory'];
   } else if (isStaffAccount(accountType)) {
     allowedPages = ['exhibitions', 'inventory'];
   } else if (isExhibitionMemberAccount(accountType)) {
@@ -83,9 +122,6 @@ function setupMenuButtons(currentUser) {
 
 function handleMenuClick(page) {
   switch(page) {
-    case 'users':
-      window.location.href = 'users.html';
-      break;
     case 'exhibitions':
       window.location.href = 'exhibitions.html';
       break;

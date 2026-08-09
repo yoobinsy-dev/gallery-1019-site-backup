@@ -25,10 +25,8 @@ function stripHeavyFieldsFromValue(value, aggressive) {
   stripField('imageDataUrl');
 
   if (aggressive) {
-    if (typeof value.photoPreviewDataUrl === 'string' && value.photoPreviewDataUrl.length > MAX_PERSISTED_PHOTO_PREVIEW_LENGTH) {
-      value.photoPreviewDataUrl = '';
-      stripped = true;
-    }
+    // Keep lightweight preview thumbnails whenever possible.
+    // Removing photoPreviewDataUrl causes user-visible "disappearing image" regressions.
     stripField('fileDataUrl');
     stripField('previewDataUrl');
   }
@@ -371,6 +369,15 @@ function canUseRemoteState() {
   return typeof window !== 'undefined' && window.location && !window.location.protocol.startsWith('file');
 }
 
+function isLocalPreviewEnvironment() {
+  if (typeof window === 'undefined' || !window.location) {
+    return false;
+  }
+
+  const host = (window.location.hostname || '').toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
 function isLoginPage() {
   if (typeof window === 'undefined' || !window.location) {
     return false;
@@ -418,7 +425,7 @@ async function seedDefaultUsersIfNeeded() {
     return;
   }
 
-  if (canUseRemoteState()) {
+  if (canUseRemoteState() && !isLocalPreviewEnvironment()) {
     const remoteReachable = Boolean(syncStatus && syncStatus.remoteReachable);
     const remoteHasUsers = Boolean(syncStatus && syncStatus.hadRemoteData && syncStatus.hadRemoteData.users);
 
@@ -433,6 +440,98 @@ async function seedDefaultUsersIfNeeded() {
   }
 
   seedDefaultUsers();
+}
+
+function ensureLocalPreviewDualSiteAdmin() {
+  if (!isLocalPreviewEnvironment()) {
+    return;
+  }
+
+  const rawUsers = JSON.parse(localStorage.getItem('users'));
+  const users = Array.isArray(rawUsers) ? rawUsers : [];
+
+  let changed = false;
+  const now = new Date().toISOString();
+
+  const applyDualAdminFields = (user) => {
+    if (!user || typeof user !== 'object') return;
+
+    if (user.accountType !== '어드민') {
+      user.accountType = '어드민';
+      changed = true;
+    }
+    if (user.approved !== true) {
+      user.approved = true;
+      changed = true;
+    }
+    if (user.siteAccess !== 'both') {
+      user.siteAccess = 'both';
+      changed = true;
+    }
+    if (user.studioRole !== '어드민') {
+      user.studioRole = '어드민';
+      changed = true;
+    }
+    if (user.galleryRole !== '어드민') {
+      user.galleryRole = '어드민';
+      changed = true;
+    }
+  };
+
+  const candidates = users.filter((user) => {
+    const username = normalizeLoginValue(user && user.username);
+    const email = normalizeLoginValue(user && user.email);
+    return username === 'admin'
+      || username === 'yoobinsy'
+      || email === 'admin@1019.com'
+      || email === 'yoobinsy@gmail.com';
+  });
+
+  if (candidates.length > 0) {
+    candidates.forEach((user) => applyDualAdminFields(user));
+  } else {
+    const maxId = users.reduce((acc, user) => {
+      const id = Number(user && user.id);
+      return Number.isFinite(id) && id > acc ? id : acc;
+    }, 0);
+
+    users.push({
+      id: maxId + 1,
+      name: '로컬 어드민',
+      username: 'localadmin',
+      email: 'localadmin@1019.com',
+      phone: '010-1019-1019',
+      password: 'localadmin123',
+      accountType: '어드민',
+      siteAccess: 'both',
+      studioRole: '어드민',
+      galleryRole: '어드민',
+      approved: true,
+      createdAt: now
+    });
+    changed = true;
+  }
+
+  if (changed) {
+    safeSetLocalStorageItem('users', JSON.stringify(users));
+  }
+}
+
+function registerLocalPreviewAdminGuards() {
+  if (!isLocalPreviewEnvironment()) {
+    return;
+  }
+
+  waitForCloudSyncReady().finally(() => {
+    ensureLocalPreviewDualSiteAdmin();
+  });
+
+  window.addEventListener('cloud-sync:state-applied', (event) => {
+    const keys = Array.isArray(event?.detail?.keys) ? event.detail.keys : [];
+    if (keys.includes('users')) {
+      ensureLocalPreviewDualSiteAdmin();
+    }
+  });
 }
 
 function seedDefaultUsers() {
@@ -451,6 +550,9 @@ function seedDefaultUsers() {
       phone: '010-0000-0000',
       password: 'admin123',
       accountType: '어드민',
+      siteAccess: 'both',
+      studioRole: '어드민',
+      galleryRole: '어드민',
       approved: true,
       createdAt: new Date().toISOString()
     },
@@ -539,6 +641,9 @@ function seedDefaultUsers() {
       phone: '010-1234-5678',
       password: 'test123',
       accountType: '어드민',
+      siteAccess: 'both',
+      studioRole: '어드민',
+      galleryRole: '어드민',
       approved: true,
       createdAt: new Date().toISOString()
     }
@@ -552,3 +657,5 @@ function seedDefaultUsers() {
 }
 
 seedDefaultUsersIfNeeded();
+ensureLocalPreviewDualSiteAdmin();
+registerLocalPreviewAdminGuards();

@@ -15,10 +15,43 @@ function isMemberAccountType(type) {
   return key === '기획자/작가' || key === '기획자' || key === '작가' || key === '스탭';
 }
 
+function normalizeGalleryRole(role) {
+  const value = normalizeAccountType(role);
+  if (value === '기획자' || value === '작가') {
+    return '기획자/작가';
+  }
+  return value;
+}
+
+function getEffectiveGalleryRole(user) {
+  const direct = normalizeGalleryRole(user?.galleryRole);
+  if (direct) return direct;
+  return normalizeGalleryRole(user?.accountType);
+}
+
+function normalizeSiteAccess(access) {
+  const raw = access ? access.toString().trim().toLowerCase() : '';
+  if (raw === 'both' || raw === 'all') return 'both';
+  if (raw === 'pottery' || raw === 'studio') return 'pottery';
+  if (raw === 'gallery') return 'gallery';
+  return '';
+}
+
+function getEffectiveSiteAccess(user) {
+  const direct = normalizeSiteAccess(user?.siteAccess);
+  if (direct) return direct;
+  return 'gallery';
+}
+
+function hasGalleryAccess(user) {
+  const siteAccess = getEffectiveSiteAccess(user);
+  return siteAccess === 'gallery' || siteAccess === 'both';
+}
+
 function getExhibitionPageRole(user) {
-  const key = getAccountTypeKey(user?.accountType);
+  const key = getAccountTypeKey(getEffectiveGalleryRole(user));
   if (key === '어드민') return 'admin';
-  if (isMemberAccountType(user?.accountType)) return 'member';
+  if (isMemberAccountType(getEffectiveGalleryRole(user))) return 'member';
   return 'none';
 }
 
@@ -59,10 +92,16 @@ function loadExhibitions() {
     return;
   }
 
+  if (!hasGalleryAccess(currentUser)) {
+    alert('갤러리 사이트 접근 권한이 없습니다.');
+    window.location.href = 'index.html';
+    return;
+  }
+
   const role = getExhibitionPageRole(currentUser);
   if (role === 'none') {
     alert('이 페이지에 접근할 권한이 없습니다.');
-    window.location.href = 'index.html';
+    window.location.href = 'gallery-lounge.html';
     return;
   }
 
@@ -195,7 +234,8 @@ function addExhibition() {
     },
     works: [],
     active: new Date(endDate) >= new Date(),
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   };
 
   exhibitions.push(newExhibition);
@@ -218,7 +258,7 @@ function addExhibition() {
 
 
 function goBack() {
-  window.location.href = 'index.html';
+  window.location.href = 'gallery-lounge.html';
 }
 
 window.addEventListener('click', (event) => {
