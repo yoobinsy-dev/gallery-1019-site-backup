@@ -70,6 +70,7 @@
     });
 
     document.getElementById('slot-save-btn')?.addEventListener('click', saveStudentWithSelectedSlot);
+    document.getElementById('slot-save-later-btn')?.addEventListener('click', saveStudentWithoutSlot);
     document.getElementById('student-edit-save-btn')?.addEventListener('click', saveStudentEdit);
     document.getElementById('student-edit-cancel-btn')?.addEventListener('click', closeEditModal);
 
@@ -122,10 +123,6 @@
     }
 
     const paymentDate = String(paymentInput?.value || '').trim();
-    if (!paymentDate) {
-      alert('최근 결제일을 입력해주세요.');
-      return;
-    }
 
     const purchasedCount = basisToCount(tuitionBasis);
 
@@ -189,6 +186,32 @@
       capacity: 1,
       repeatWeekly
     });
+
+    saveStudents();
+    saveCalendarState();
+    closeSlotModal();
+    clearStudentForm();
+    renderStudents();
+  }
+
+  function saveStudentWithoutSlot() {
+    if (!state.pendingStudent) return;
+
+    const student = {
+      id: `stu-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: state.pendingStudent.name,
+      classTime: '',
+      classType: '',
+      mostRecentClassDate: '',
+      tuition: state.pendingStudent.tuition,
+      tuitionBasis: state.pendingStudent.tuitionBasis,
+      mostRecentPaymentDate: state.pendingStudent.mostRecentPaymentDate,
+      carryOverBeforePayment: state.pendingStudent.carryOverBeforePayment,
+      paymentCycleCredits: state.pendingStudent.paymentCycleCredits
+    };
+
+    state.students.push(student);
+    addStudioUserName(state.pendingStudent.name);
 
     saveStudents();
     saveCalendarState();
@@ -625,7 +648,10 @@
     const name = String(studentName || '').trim();
     if (!name) return 0;
 
-    const startDate = paymentDate ? new Date(`${paymentDate}T00:00:00`) : null;
+    const normalizedPaymentDate = String(paymentDate || '').trim();
+    if (!normalizedPaymentDate) return 0;
+
+    const startDate = new Date(`${normalizedPaymentDate}T00:00:00`);
     if (startDate && Number.isNaN(startDate.getTime())) return 0;
 
     const now = new Date();
