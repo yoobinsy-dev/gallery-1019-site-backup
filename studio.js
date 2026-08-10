@@ -1961,10 +1961,11 @@
     if (direct) return direct;
 
     const accountType = String(user?.accountType || '').trim();
+    const access = getEffectiveSiteAccess(user);
     if (accountType === '강사') {
       return '강사';
     }
-    if (normalizeInstructorSiteAccess(user?.siteAccess) === 'pottery' && accountType === '어드민') {
+    if ((access === 'pottery' || access === 'both') && accountType === '어드민') {
       return '어드민';
     }
 
@@ -1993,7 +1994,8 @@
           if (!user || user.approved === false) return false;
           const access = getEffectiveSiteAccess(user);
           if (access !== 'pottery' && access !== 'both') return false;
-          return getEffectiveStudioRole(user) === '강사';
+          const role = getEffectiveStudioRole(user);
+          return role === '강사' || role === '어드민';
         })
         .map((user) => String(user?.name || user?.username || '').trim())
         .filter(Boolean);
