@@ -10,7 +10,8 @@
     calendar: {
       events: [],
       baseRules: [],
-      studioUsers: []
+      studioUsers: [],
+      classTeachingLog: []
     },
     pendingStudent: null,
     editingStudentId: '',
@@ -163,6 +164,7 @@
       name: state.pendingStudent.name,
       classTime: formatClassTime(slot.date, slot.start, slot.end),
       classType: slot.className || '수업시간',
+      instructor: slot.instructor || '',
       mostRecentClassDate: '',
       tuition: state.pendingStudent.tuition,
       tuitionBasis: state.pendingStudent.tuitionBasis,
@@ -183,6 +185,9 @@
       endDate: '',
       start: slot.start,
       end: slot.end,
+      classType: slot.className || '수업시간',
+      instructor: slot.instructor || '',
+      baseRuleId: slot.baseRuleId || '',
       capacity: 1,
       repeatWeekly
     });
@@ -202,6 +207,7 @@
       name: state.pendingStudent.name,
       classTime: '',
       classType: '',
+      instructor: '',
       mostRecentClassDate: '',
       tuition: state.pendingStudent.tuition,
       tuitionBasis: state.pendingStudent.tuitionBasis,
@@ -316,7 +322,9 @@
               date,
               start: slotToTime(Number(rule.startSlot)),
               end: slotToTime(Number(rule.endSlot)),
-              className: rule.className || '수업시간'
+              className: rule.className || '수업시간',
+              instructor: String(rule.instructor || '').trim(),
+              baseRuleId: String(rule.id || '')
             };
             if (hint) {
               hint.textContent = `선택됨: ${state.slotPicker.selected.className} · ${formatClassTime(date, state.slotPicker.selected.start, state.slotPicker.selected.end)}`;
@@ -364,7 +372,7 @@
     if (!tbody) return;
 
     if (!state.students.length) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="10">수강생을 추가하면 여기에 표시됩니다.</td></tr>';
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="11">수강생을 추가하면 여기에 표시됩니다.</td></tr>';
       return;
     }
 
@@ -375,6 +383,7 @@
       const completedSincePayment = getCompletedClassCountSince(student.name, student.mostRecentPaymentDate);
       const remainingCount = getRemainingClassCount(student, completedSincePayment);
       const recentClassDate = stats.mostRecentClassDate || '';
+      const currentInstructor = getStudentCurrentInstructor(student);
 
       const tr = document.createElement('tr');
       tr.dataset.id = String(student.id || '');
@@ -387,6 +396,7 @@
       tr.appendChild(buildTextCell(student.name || '-'));
       tr.appendChild(buildTextCell(student.classTime || '-'));
       tr.appendChild(buildTextCell(student.classType || '-'));
+      tr.appendChild(buildTextCell(currentInstructor || '-'));
       tr.appendChild(buildTextCell(recentClassDate || '-'));
       tr.appendChild(buildTextCell(student.tuition ? formatWon(student.tuition) : '-'));
       tr.appendChild(buildTextCell(student.tuitionBasis || '-'));
@@ -443,6 +453,7 @@
     document.getElementById('edit-student-name').value = student.name || '';
     document.getElementById('edit-student-class-time').value = student.classTime || '';
     document.getElementById('edit-student-class-type').value = student.classType || '';
+    document.getElementById('edit-student-instructor').value = getStudentCurrentInstructor(student) || '';
     document.getElementById('edit-student-tuition').value = student.tuition ? formatWon(student.tuition) : '';
     document.getElementById('edit-student-tuition-basis').value = student.tuitionBasis || '';
     document.getElementById('edit-student-recent-payment').value = student.mostRecentPaymentDate || '';
@@ -555,6 +566,58 @@
     const safeUsed = Number.isFinite(used) ? used : 0;
 
     return safeCarry + safeCycle - safeUsed;
+  }
+
+  function getStudentCurrentInstructor(student) {
+    const name = String(student?.name || '').trim();
+    if (!name) return '';
+
+    const recurring = state.calendar.events
+      .filter((event) => {
+        if (!event || event.kind !== '수강') return false;
+        if (!event.repeatWeekly) return false;
+        return String(event.title || '').trim() === name;
+      })
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
+    const todayKey = formatDateInput(new Date());
+    const activeRecurring = recurring.find((event) => {
+      if (!event.repeatEndDate) return true;
+      return String(event.repeatEndDate) >= todayKey;
+    });
+
+    const sourceEvent = activeRecurring || recurring[0] || null;
+    if (sourceEvent) {
+      return getEventInstructor(sourceEvent) || String(student?.instructor || '').trim();
+    }
+
+    return String(student?.instructor || '').trim();
+  }
+
+  function getEventInstructor(event) {
+    const rule = getClassRuleForEvent(event);
+    if (rule) {
+      const fromRule = String(rule.instructor || '').trim();
+      if (fromRule) return fromRule;
+    }
+
+    return String(event?.instructor || '').trim();
+  }
+
+  function getClassRuleForEvent(event) {
+    if (!event || event.kind !== '수강' || !event.date) return null;
+
+    const day = getDayIndexFromDateString(event.date);
+    if (day < 0) return null;
+
+    const startSlot = timeToSlot(event.start);
+    const endSlot = Math.max(startSlot + 1, timeToSlot(event.end));
+    const startRule = getBaseRuleForSlot(day, startSlot);
+    const endRule = getBaseRuleForSlot(day, endSlot - 1);
+    if (!startRule || !endRule) return null;
+    if (startRule.id !== endRule.id) return null;
+    if (String(startRule.type || '') !== '수업시간') return null;
+    return startRule;
   }
 
   function formatNumberWithCommas(value) {
@@ -703,10 +766,12 @@
       state.calendar.events = Array.isArray(parsed.events) ? parsed.events : [];
       state.calendar.baseRules = Array.isArray(parsed.baseRules) ? parsed.baseRules : [];
       state.calendar.studioUsers = Array.isArray(parsed.studioUsers) ? parsed.studioUsers : [];
+      state.calendar.classTeachingLog = Array.isArray(parsed.classTeachingLog) ? parsed.classTeachingLog : [];
     } catch (error) {
       state.calendar.events = [];
       state.calendar.baseRules = [];
       state.calendar.studioUsers = [];
+      state.calendar.classTeachingLog = [];
     }
   }
 
@@ -717,14 +782,16 @@
         ...parsed,
         events: state.calendar.events,
         baseRules: state.calendar.baseRules,
-        studioUsers: state.calendar.studioUsers
+        studioUsers: state.calendar.studioUsers,
+        classTeachingLog: state.calendar.classTeachingLog
       };
       localStorage.setItem(CALENDAR_STORAGE_KEY, JSON.stringify(next));
     } catch (error) {
       localStorage.setItem(CALENDAR_STORAGE_KEY, JSON.stringify({
         events: state.calendar.events,
         baseRules: state.calendar.baseRules,
-        studioUsers: state.calendar.studioUsers
+        studioUsers: state.calendar.studioUsers,
+        classTeachingLog: state.calendar.classTeachingLog
       }));
     }
   }
@@ -901,6 +968,7 @@
       state.students = Array.isArray(parsed)
         ? parsed.map((student) => ({
             ...student,
+            instructor: String(student?.instructor || '').trim(),
             carryOverBeforePayment: Number(student.carryOverBeforePayment ?? 0),
             paymentCycleCredits: Number(
               student.paymentCycleCredits

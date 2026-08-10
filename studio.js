@@ -25,6 +25,8 @@
     events: [],
     baseRules: [],
     studioUsers: [],
+    instructors: [],
+    classTeachingLog: [],
     eventSelection: {
       active: false,
       dragging: false,
@@ -121,7 +123,10 @@
       occurrenceDate: '',
       nextDate: '',
       nextStart: '',
-      nextEnd: ''
+      nextEnd: '',
+      nextClassType: '',
+      nextInstructor: '',
+      nextBaseRuleId: ''
     },
     deleteConfirm: {
       eventId: ''
@@ -202,6 +207,9 @@
       openModal('base-modal');
       document.getElementById('base-type').value = '';
       document.getElementById('base-class-name').value = '';
+      document.getElementById('base-instructor').value = '';
+      loadStudioInstructors();
+      populateInstructorOptions('base-instructor');
       renderBaseEditorGrid({ forceDefaultViewport: true });
       syncBaseClassNameVisibility();
       updateUndoButtonState();
@@ -1138,6 +1146,9 @@
         const nextDate = formatDateInput(addDays(state.weekStart, edit.targetDayIndex));
         const nextStart = slotToTime(edit.targetStartSlot);
         const nextEnd = slotToTime(edit.targetEndSlot);
+        const nextClassRule = eventItem.kind === '수강'
+          ? getClassBaseRuleForRange(nextDate, nextStart, nextEnd)
+          : null;
         const changed = isMasterEditChanged(edit, nextDate, nextStart, nextEnd);
 
         if (changed && eventItem.repeatWeekly && state.viewMode === 'week' && edit.pointerMoved) {
@@ -1146,6 +1157,9 @@
           state.recurringMove.nextDate = nextDate;
           state.recurringMove.nextStart = nextStart;
           state.recurringMove.nextEnd = nextEnd;
+          state.recurringMove.nextClassType = String(nextClassRule?.className || eventItem.classType || '');
+          state.recurringMove.nextInstructor = String(nextClassRule?.instructor || eventItem.instructor || '').trim();
+          state.recurringMove.nextBaseRuleId = String(nextClassRule?.id || eventItem.baseRuleId || '');
 
           resetMasterEditState();
           renderCalendar();
@@ -1156,6 +1170,7 @@
         eventItem.date = nextDate;
         eventItem.start = nextStart;
         eventItem.end = nextEnd;
+        applyClassEventBaseMetadata(eventItem, nextDate);
         saveState();
       }
 
@@ -1370,6 +1385,11 @@
       }
     }
 
+    if (kind === '수강' && !getClassBaseRuleForRange(nextDate, finalStart, finalEnd)) {
+      alert('수강 일정은 하나의 수업시간 블록과 정확히 일치해야 합니다.');
+      return;
+    }
+
     if (isOther) {
       if (!nextTitle) {
         alert('제목을 입력해주세요.');
@@ -1388,6 +1408,7 @@
     eventItem.endDate = isAllDay ? '' : (eventItem.endDate || '');
     eventItem.start = finalStart;
     eventItem.end = finalEnd;
+    applyClassEventBaseMetadata(eventItem, nextDate);
 
     saveState();
     closeModal('event-quick-edit-modal');
@@ -1573,6 +1594,14 @@
       }
     }
 
+    const classRule = kind === '수강'
+      ? getClassBaseRuleForRange(eventDate, normalizedStart, normalizedEnd)
+      : null;
+    if (kind === '수강' && !classRule) {
+      alert('수강 일정은 하나의 수업시간 블록과 정확히 일치해야 합니다.');
+      return;
+    }
+
     state.events.push({
       id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       kind,
@@ -1581,6 +1610,9 @@
       endDate: eventEndDate,
       start: normalizedStart,
       end: normalizedEnd,
+      classType: classRule ? String(classRule.className || '수업시간') : '',
+      instructor: classRule ? String(classRule.instructor || '').trim() : '',
+      baseRuleId: classRule ? String(classRule.id || '') : '',
       capacity,
       repeatWeekly: weeklyRepeat
     });
@@ -1718,6 +1750,9 @@
     const nextStart = String(state.recurringMove.nextStart || '');
     const nextEnd = String(state.recurringMove.nextEnd || '');
     const eventItem = state.events.find((item) => item && item.id === eventId);
+    const nextClassType = String(state.recurringMove.nextClassType || eventItem?.classType || '');
+    const nextInstructor = String(state.recurringMove.nextInstructor || eventItem?.instructor || '').trim();
+    const nextBaseRuleId = String(state.recurringMove.nextBaseRuleId || eventItem?.baseRuleId || '');
     if (!eventItem || !occurrenceDate || !nextDate || !nextStart || !nextEnd) {
       resetRecurringMoveState();
       closeModal('recurring-move-modal');
@@ -1731,7 +1766,7 @@
     }
     eventItem.repeatSkipDates = skipDates;
 
-    state.events.push({
+    const movedEvent = {
       id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       kind: eventItem.kind,
       title: eventItem.title,
@@ -1739,9 +1774,14 @@
       endDate: '',
       start: nextStart,
       end: nextEnd,
+      classType: nextClassType,
+      instructor: nextInstructor,
+      baseRuleId: nextBaseRuleId,
       capacity: Math.max(1, Math.min(3, Number(eventItem.capacity || 1))),
       repeatWeekly: false
-    });
+    };
+    applyClassEventBaseMetadata(movedEvent, nextDate);
+    state.events.push(movedEvent);
 
     saveState();
     resetRecurringMoveState();
@@ -1756,6 +1796,9 @@
     const nextStart = String(state.recurringMove.nextStart || '');
     const nextEnd = String(state.recurringMove.nextEnd || '');
     const eventItem = state.events.find((item) => item && item.id === eventId);
+    const nextClassType = String(state.recurringMove.nextClassType || eventItem?.classType || '');
+    const nextInstructor = String(state.recurringMove.nextInstructor || eventItem?.instructor || '').trim();
+    const nextBaseRuleId = String(state.recurringMove.nextBaseRuleId || eventItem?.baseRuleId || '');
     if (!eventItem || !occurrenceDate || !nextDate || !nextStart || !nextEnd) {
       resetRecurringMoveState();
       closeModal('recurring-move-modal');
@@ -1776,9 +1819,13 @@
       eventItem.date = nextDate;
       eventItem.start = nextStart;
       eventItem.end = nextEnd;
+      eventItem.classType = nextClassType;
+      eventItem.instructor = nextInstructor;
+      eventItem.baseRuleId = nextBaseRuleId;
       if (Array.isArray(eventItem.repeatSkipDates)) {
         eventItem.repeatSkipDates = eventItem.repeatSkipDates.filter((d) => d >= nextDate);
       }
+      applyClassEventBaseMetadata(eventItem, nextDate);
       saveState();
       resetRecurringMoveState();
       closeModal('recurring-move-modal');
@@ -1791,7 +1838,7 @@
     const oldSkipDates = Array.isArray(eventItem.repeatSkipDates) ? eventItem.repeatSkipDates.slice() : [];
     eventItem.repeatSkipDates = oldSkipDates.filter((d) => d <= eventItem.repeatEndDate);
 
-    state.events.push({
+    const movedSeries = {
       id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       kind: eventItem.kind,
       title: eventItem.title,
@@ -1799,11 +1846,16 @@
       endDate: '',
       start: nextStart,
       end: nextEnd,
+      classType: nextClassType,
+      instructor: nextInstructor,
+      baseRuleId: nextBaseRuleId,
       capacity: Math.max(1, Math.min(3, Number(eventItem.capacity || 1))),
       repeatWeekly: true,
       repeatEndDate: oldRepeatEndDate || '',
       repeatSkipDates: []
-    });
+    };
+    applyClassEventBaseMetadata(movedSeries, nextDate);
+    state.events.push(movedSeries);
 
     saveState();
     resetRecurringMoveState();
@@ -1817,6 +1869,9 @@
     state.recurringMove.nextDate = '';
     state.recurringMove.nextStart = '';
     state.recurringMove.nextEnd = '';
+    state.recurringMove.nextClassType = '';
+    state.recurringMove.nextInstructor = '';
+    state.recurringMove.nextBaseRuleId = '';
   }
 
   function buildDailyOccupancyMap(date, excludeEventId) {
@@ -1852,6 +1907,70 @@
     return jsDay === 0 ? 6 : jsDay - 1;
   }
 
+  function getClassBaseRuleForRange(date, startTime, endTime) {
+    const dayIndex = getDayIndexFromDateString(date);
+    if (dayIndex < 0) return null;
+
+    const startSlot = timeToSlot(startTime);
+    const endSlot = Math.max(startSlot + 1, timeToSlot(endTime));
+    const startRule = getBaseRuleForSlot(dayIndex, startSlot);
+    const endRule = getBaseRuleForSlot(dayIndex, endSlot - 1);
+    if (!startRule || !endRule) return null;
+    if (startRule.id !== endRule.id) return null;
+    if (String(startRule.type || '') !== '수업시간') return null;
+    if (Number(startRule.startSlot) !== Number(startSlot)) return null;
+    if (Number(startRule.endSlot) !== Number(endSlot)) return null;
+    return startRule;
+  }
+
+  function applyClassEventBaseMetadata(eventItem, targetDate) {
+    if (!eventItem || String(eventItem.kind || '') !== '수강') return;
+    const date = String(targetDate || eventItem.date || '').trim();
+    if (!date) return;
+
+    const rule = getClassBaseRuleForRange(date, eventItem.start, eventItem.end);
+    if (!rule) return;
+
+    eventItem.classType = String(rule.className || '수업시간');
+    eventItem.instructor = String(rule.instructor || '').trim();
+    eventItem.baseRuleId = String(rule.id || '');
+  }
+
+  function normalizeStudioRole(role) {
+    const value = String(role || '').trim();
+    const allowed = ['어드민', '강사', '수강생', '작가'];
+    return allowed.includes(value) ? value : '';
+  }
+
+  function normalizeInstructorSiteAccess(access) {
+    const raw = String(access || '').trim().toLowerCase();
+    if (raw === 'both' || raw === 'all') return 'both';
+    if (raw === 'pottery' || raw === 'studio') return 'pottery';
+    if (raw === 'gallery') return 'gallery';
+    return '';
+  }
+
+  function getEffectiveSiteAccess(user) {
+    const direct = normalizeInstructorSiteAccess(user?.siteAccess);
+    if (direct) return direct;
+    return 'gallery';
+  }
+
+  function getEffectiveStudioRole(user) {
+    const direct = normalizeStudioRole(user?.studioRole);
+    if (direct) return direct;
+
+    const accountType = String(user?.accountType || '').trim();
+    if (accountType === '강사') {
+      return '강사';
+    }
+    if (normalizeInstructorSiteAccess(user?.siteAccess) === 'pottery' && accountType === '어드민') {
+      return '어드민';
+    }
+
+    return '';
+  }
+
   function loadStudioUsers() {
     try {
       const rawStudents = JSON.parse(localStorage.getItem(STUDENT_STORAGE_KEY) || '[]');
@@ -1863,6 +1982,133 @@
     } catch (error) {
       state.studioUsers = [];
     }
+  }
+
+  function loadStudioInstructors() {
+    let fromUsers = [];
+    try {
+      const parsedUsers = JSON.parse(localStorage.getItem('users') || '[]');
+      fromUsers = (Array.isArray(parsedUsers) ? parsedUsers : [])
+        .filter((user) => {
+          if (!user || user.approved === false) return false;
+          const access = getEffectiveSiteAccess(user);
+          if (access !== 'pottery' && access !== 'both') return false;
+          return getEffectiveStudioRole(user) === '강사';
+        })
+        .map((user) => String(user?.name || user?.username || '').trim())
+        .filter(Boolean);
+    } catch (error) {
+      fromUsers = [];
+    }
+
+    const fromBaseRules = (state.baseRules || [])
+      .filter((rule) => String(rule?.type || '') === '수업시간')
+      .map((rule) => String(rule?.instructor || '').trim())
+      .filter(Boolean);
+
+    const fromEvents = (state.events || [])
+      .filter((event) => String(event?.kind || '') === '수강')
+      .map((event) => String(event?.instructor || '').trim())
+      .filter(Boolean);
+
+    state.instructors = Array.from(new Set([...fromUsers, ...fromBaseRules, ...fromEvents]))
+      .sort((a, b) => a.localeCompare(b, 'ko'));
+  }
+
+  function populateInstructorOptions(selectId, selected) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+
+    const current = String(selected || select.value || '').trim();
+    const options = ['<option value="">강사 선택</option>'];
+    (state.instructors || []).forEach((name) => {
+      options.push(`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`);
+    });
+
+    select.innerHTML = options.join('');
+    if (current) {
+      select.value = current;
+    }
+  }
+
+  function getEventClassMetadataForDate(eventItem, occurrenceDate) {
+    const rule = getClassBaseRuleForRange(occurrenceDate, eventItem.start, eventItem.end);
+    return {
+      classType: String(rule?.className || eventItem.classType || '수업시간'),
+      instructor: String(rule?.instructor || eventItem.instructor || '').trim(),
+      baseRuleId: String(rule?.id || eventItem.baseRuleId || '')
+    };
+  }
+
+  function rebuildClassTeachingLog() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const horizon = addDays(today, 365);
+
+    const records = [];
+    const seenKeys = new Set();
+
+    const pushOccurrence = (eventItem, occurrenceDate) => {
+      const meta = getEventClassMetadataForDate(eventItem, occurrenceDate);
+      const key = `${String(eventItem.id || '')}|${occurrenceDate}|${String(eventItem.start || '')}|${String(eventItem.end || '')}|${String(eventItem.title || '')}`;
+      if (seenKeys.has(key)) return;
+      seenKeys.add(key);
+
+      records.push({
+        key,
+        eventId: String(eventItem.id || ''),
+        date: occurrenceDate,
+        start: String(eventItem.start || ''),
+        end: String(eventItem.end || ''),
+        studentName: String(eventItem.title || '').trim(),
+        classType: meta.classType,
+        instructor: meta.instructor,
+        baseRuleId: meta.baseRuleId,
+        repeatWeekly: Boolean(eventItem.repeatWeekly)
+      });
+    };
+
+    (state.events || []).forEach((eventItem) => {
+      if (!eventItem || String(eventItem.kind || '') !== '수강') return;
+      const startDate = new Date(`${String(eventItem.date || '')}T00:00:00`);
+      if (Number.isNaN(startDate.getTime())) return;
+
+      if (!eventItem.repeatWeekly) {
+        if (startDate <= horizon) {
+          pushOccurrence(eventItem, formatDateInput(startDate));
+        }
+        return;
+      }
+
+      const skipDates = Array.isArray(eventItem.repeatSkipDates) ? eventItem.repeatSkipDates : [];
+      const repeatEndDate = eventItem.repeatEndDate
+        ? new Date(`${eventItem.repeatEndDate}T00:00:00`)
+        : horizon;
+      const effectiveEndDate = Number.isNaN(repeatEndDate.getTime())
+        ? horizon
+        : new Date(Math.min(repeatEndDate.getTime(), horizon.getTime()));
+
+      let cursor = new Date(startDate);
+      let safety = 0;
+      while (cursor <= effectiveEndDate && safety < 500) {
+        const keyDate = formatDateInput(cursor);
+        if (!skipDates.includes(keyDate)) {
+          pushOccurrence(eventItem, keyDate);
+        }
+        cursor = addDays(cursor, 7);
+        safety += 1;
+      }
+    });
+
+    records.sort((a, b) => {
+      const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
+      if (dateCompare !== 0) return dateCompare;
+      const startCompare = String(a.start || '').localeCompare(String(b.start || ''));
+      if (startCompare !== 0) return startCompare;
+      return String(a.studentName || '').localeCompare(String(b.studentName || ''), 'ko');
+    });
+
+    state.classTeachingLog = records;
   }
 
   function populateEventUserOptions(selected, selectId = 'event-user') {
@@ -3084,6 +3330,7 @@
   function applyBaseRule(day, startSlot, endSlot) {
     const type = document.getElementById('base-type').value;
     const className = document.getElementById('base-class-name').value;
+    const instructor = String(document.getElementById('base-instructor')?.value || '').trim();
 
     if (!type) {
       alert('유형을 먼저 선택해주세요.');
@@ -3094,6 +3341,10 @@
       alert('수업시간은 수업명을 입력해주세요.');
       return;
     }
+    if (type === '수업시간' && !instructor) {
+      alert('수업시간은 강사를 선택해주세요.');
+      return;
+    }
 
     pushBaseUndoState();
     state.baseRules.push({
@@ -3102,7 +3353,8 @@
       startSlot,
       endSlot,
       type,
-      className: type === '수업시간' ? className : ''
+      className: type === '수업시간' ? className : '',
+      instructor: type === '수업시간' ? instructor : ''
     });
 
     saveState();
@@ -3122,7 +3374,9 @@
   function getBaseLabelText(rule) {
     if (!rule) return '';
     if (rule.type === '수업시간') {
-      return rule.className || '수업시간';
+      const className = String(rule.className || '수업시간').trim();
+      const instructor = String(rule.instructor || '').trim();
+      return instructor ? `${className} · ${instructor}` : className;
     }
     return rule.type;
   }
@@ -3181,29 +3435,61 @@
 
   function syncBaseClassNameVisibility() {
     const type = document.getElementById('base-type').value;
-    const input = document.getElementById('base-class-name');
-    const row = document.getElementById('base-class-row');
-    if (!input) return;
-    if (row) {
-      row.style.display = type === '수업시간' ? '' : 'none';
+    const classInput = document.getElementById('base-class-name');
+    const classRow = document.getElementById('base-class-row');
+    const instructorInput = document.getElementById('base-instructor');
+    const instructorRow = document.getElementById('base-instructor-row');
+
+    if (classRow) {
+      classRow.style.display = type === '수업시간' ? '' : 'none';
     }
-    input.disabled = type !== '수업시간';
-    if (type !== '수업시간') {
-      input.value = '';
+    if (instructorRow) {
+      instructorRow.style.display = type === '수업시간' ? '' : 'none';
+    }
+
+    if (classInput) {
+      classInput.disabled = type !== '수업시간';
+      if (type !== '수업시간') classInput.value = '';
+    }
+
+    if (instructorInput) {
+      instructorInput.disabled = type !== '수업시간';
+      if (type !== '수업시간') {
+        instructorInput.value = '';
+      } else {
+        loadStudioInstructors();
+        populateInstructorOptions('base-instructor');
+      }
     }
   }
 
   function syncEditBaseClassNameVisibility() {
     const type = document.getElementById('edit-base-type').value;
-    const input = document.getElementById('edit-base-class-name');
-    const row = document.getElementById('edit-base-class-row');
-    if (!input) return;
-    if (row) {
-      row.style.display = type === '수업시간' ? '' : 'none';
+    const classInput = document.getElementById('edit-base-class-name');
+    const classRow = document.getElementById('edit-base-class-row');
+    const instructorInput = document.getElementById('edit-base-instructor');
+    const instructorRow = document.getElementById('edit-base-instructor-row');
+
+    if (classRow) {
+      classRow.style.display = type === '수업시간' ? '' : 'none';
     }
-    input.disabled = type !== '수업시간';
-    if (type !== '수업시간') {
-      input.value = '';
+    if (instructorRow) {
+      instructorRow.style.display = type === '수업시간' ? '' : 'none';
+    }
+
+    if (classInput) {
+      classInput.disabled = type !== '수업시간';
+      if (type !== '수업시간') classInput.value = '';
+    }
+
+    if (instructorInput) {
+      instructorInput.disabled = type !== '수업시간';
+      if (type !== '수업시간') {
+        instructorInput.value = '';
+      } else {
+        loadStudioInstructors();
+        populateInstructorOptions('edit-base-instructor');
+      }
     }
   }
 
@@ -3211,8 +3497,12 @@
     if (!rule) return;
     state.editBaseRuleId = rule.id;
 
+    loadStudioInstructors();
+    populateInstructorOptions('edit-base-instructor', rule.instructor || '');
+
     document.getElementById('edit-base-type').value = rule.type || '수업시간';
     document.getElementById('edit-base-class-name').value = rule.className || '';
+    document.getElementById('edit-base-instructor').value = rule.instructor || '';
     document.getElementById('edit-base-day').value = String(rule.day);
     document.getElementById('edit-base-start').value = slotToTime(rule.startSlot);
     document.getElementById('edit-base-end').value = slotToTime(rule.endSlot);
@@ -3230,6 +3520,7 @@
 
     const type = document.getElementById('edit-base-type').value;
     const className = document.getElementById('edit-base-class-name').value;
+    const instructor = String(document.getElementById('edit-base-instructor')?.value || '').trim();
     const day = Number(document.getElementById('edit-base-day').value);
     const start = document.getElementById('edit-base-start').value;
     const end = document.getElementById('edit-base-end').value;
@@ -3250,10 +3541,15 @@
       alert('수업시간은 수업명을 선택해주세요.');
       return;
     }
+    if (type === '수업시간' && !instructor) {
+      alert('수업시간은 강사를 선택해주세요.');
+      return;
+    }
 
     pushBaseUndoState();
     rule.type = type;
     rule.className = type === '수업시간' ? className : '';
+    rule.instructor = type === '수업시간' ? instructor : '';
     rule.day = day;
     rule.startSlot = startSlot;
     rule.endSlot = endSlot;
@@ -3316,24 +3612,59 @@
   }
 
   function saveState() {
+    loadStudioInstructors();
+    rebuildClassTeachingLog();
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       events: state.events,
       baseRules: state.baseRules,
-      studioUsers: state.studioUsers
+      studioUsers: state.studioUsers,
+      instructors: state.instructors,
+      classTeachingLog: state.classTeachingLog
     }));
   }
 
   function loadState() {
     try {
       const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-      state.events = Array.isArray(parsed.events) ? parsed.events : [];
-      state.baseRules = Array.isArray(parsed.baseRules) ? parsed.baseRules : [];
+      state.events = Array.isArray(parsed.events)
+        ? parsed.events.map((event) => ({
+            ...event,
+            date: String(event?.date || ''),
+            endDate: String(event?.endDate || ''),
+            start: String(event?.start || ''),
+            end: String(event?.end || ''),
+            capacity: Math.max(1, Math.min(3, Number(event?.capacity || 1))),
+            classType: String(event?.classType || '').trim(),
+            instructor: String(event?.instructor || '').trim(),
+            baseRuleId: String(event?.baseRuleId || '').trim(),
+            repeatWeekly: Boolean(event?.repeatWeekly),
+            repeatSkipDates: Array.isArray(event?.repeatSkipDates) ? event.repeatSkipDates.slice() : [],
+            repeatEndDate: String(event?.repeatEndDate || '')
+          }))
+        : [];
+      state.baseRules = Array.isArray(parsed.baseRules)
+        ? parsed.baseRules.map((rule) => ({
+            ...rule,
+            day: Number(rule?.day || 0),
+            startSlot: Number(rule?.startSlot || 0),
+            endSlot: Number(rule?.endSlot || 1),
+            className: String(rule?.className || '').trim(),
+            instructor: String(rule?.instructor || '').trim()
+          }))
+        : [];
       state.studioUsers = Array.isArray(parsed.studioUsers) ? parsed.studioUsers : [];
+      state.instructors = Array.isArray(parsed.instructors) ? parsed.instructors : [];
+      state.classTeachingLog = Array.isArray(parsed.classTeachingLog) ? parsed.classTeachingLog : [];
     } catch (error) {
       state.events = [];
       state.baseRules = [];
       state.studioUsers = [];
+      state.instructors = [];
+      state.classTeachingLog = [];
     }
+
+    loadStudioInstructors();
+    rebuildClassTeachingLog();
   }
 
   function getWeekStart(date) {
