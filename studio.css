@@ -609,7 +609,8 @@ body {
 
 .event-bubble-absence {
   position: absolute;
-  right: 24px;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: 3px;
   min-width: 34px;
   height: 18px;
@@ -632,7 +633,7 @@ body {
 .event-bubble-delete {
   position: absolute;
   right: 3px;
-  bottom: 3px;
+  top: 3px;
   width: 18px;
   height: 18px;
   border: 1px solid rgba(205, 215, 228, 0.95);
