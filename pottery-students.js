@@ -637,6 +637,13 @@
     return `${num.toLocaleString('ko-KR')}원`;
   }
 
+  function isEventAbsentOnDate(event, dateKey) {
+    const key = String(dateKey || '').trim();
+    if (!key) return false;
+    const absenceDates = Array.isArray(event?.absenceDates) ? event.absenceDates : [];
+    return absenceDates.includes(key);
+  }
+
   function applyWonInputFormat(inputEl, options = {}) {
     if (!inputEl) return;
     const withSuffix = Boolean(options.withSuffix);
@@ -670,6 +677,7 @@
 
       if (!event.repeatWeekly) {
         const key = String(event.date || '').trim();
+        if (isEventAbsentOnDate(event, key)) return;
         const endAt = getOccurrenceEndDateTime(key, event.start, event.end);
         if (!endAt || endAt > now) return;
         completedCount += 1;
@@ -691,7 +699,7 @@
         const key = formatDateInput(cursor);
         const endAt = getOccurrenceEndDateTime(key, event.start, event.end);
         if (!endAt || endAt > now) break;
-        if (!skipDates.includes(key)) {
+        if (!skipDates.includes(key) && !isEventAbsentOnDate(event, key)) {
           completedCount += 1;
           if (!mostRecentClassDate || key > mostRecentClassDate) {
             mostRecentClassDate = key;
@@ -727,6 +735,7 @@
 
       if (!event.repeatWeekly) {
         const key = String(event.date || '').trim();
+        if (isEventAbsentOnDate(event, key)) return;
         const d = new Date(`${key}T00:00:00`);
         if (Number.isNaN(d.getTime())) return;
         const endAt = getOccurrenceEndDateTime(key, event.start, event.end);
@@ -749,8 +758,9 @@
         const endAt = getOccurrenceEndDateTime(key, event.start, event.end);
         if (!endAt || endAt > now) break;
         const notSkipped = !skipDates.includes(key);
+        const notAbsent = !isEventAbsentOnDate(event, key);
         const afterPayment = !startDate || cursor >= startDate;
-        if (notSkipped && afterPayment) {
+        if (notSkipped && notAbsent && afterPayment) {
           completedCount += 1;
         }
         cursor = addDays(cursor, 7);
