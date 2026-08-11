@@ -613,7 +613,7 @@ body {
   left: 50%;
   transform: translateX(-50%);
   bottom: 3px;
-  min-width: 34px;
+  min-width: 40px;
   height: 18px;
   border: 1px solid rgba(205, 215, 228, 0.95);
   border-radius: 999px;
@@ -626,6 +626,13 @@ body {
   cursor: pointer;
   box-shadow: 0 1px 4px rgba(10, 16, 30, 0.2);
   z-index: 3;
+}
+
+.event-bubble-absence.is-clear {
+  min-width: 62px;
+  background: #fff1f1;
+  border-color: rgba(196, 80, 80, 0.55);
+  color: #8f1717;
 }
 
 .event-bubble-absence:hover {

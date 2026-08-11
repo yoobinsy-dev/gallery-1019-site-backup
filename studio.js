@@ -950,8 +950,14 @@
           const absenceBtn = document.createElement('button');
           absenceBtn.type = 'button';
           absenceBtn.className = 'event-bubble-absence';
-          absenceBtn.setAttribute('aria-label', isAbsent ? '결석 해제' : '결석 처리');
-          absenceBtn.textContent = isAbsent ? '결석 해제' : '결석';
+          if (isAbsent) {
+            absenceBtn.classList.add('is-clear');
+            absenceBtn.setAttribute('aria-label', '결석 해제');
+            absenceBtn.textContent = '결석 해제';
+          } else {
+            absenceBtn.setAttribute('aria-label', '결석 처리');
+            absenceBtn.textContent = '결석';
+          }
           absenceBtn.addEventListener('mousedown', (mouseEvent) => {
             mouseEvent.preventDefault();
             mouseEvent.stopPropagation();
