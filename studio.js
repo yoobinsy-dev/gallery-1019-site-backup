@@ -928,12 +928,41 @@
         bubble.type = 'button';
         bubble.className = `event-bubble ${kindToClass(event.kind)}`;
         bubble.classList.add('has-delete');
+        const isAbsent = isEventAbsentOnDate(event, date);
+        if (isAbsent) {
+          bubble.classList.add('is-absent');
+        }
         bubble.style.top = `${startSlot * SLOT_HEIGHT + 1}px`;
         bubble.style.height = `${Math.max(SLOT_HEIGHT - 2, (endSlot - startSlot) * SLOT_HEIGHT - 2)}px`;
         bubble.style.left = `${((dayIndex + (lane / 3)) / 7) * 100}%`;
         bubble.style.width = `${((need / 3) / 7) * 100}%`;
         bubble.title = `${event.title || '이용자 없음'}`;
         bubble.innerHTML = `<strong>${escapeHtml(event.title || '이용자 없음')}</strong>`;
+
+        if (isAbsent) {
+          const absentTag = document.createElement('span');
+          absentTag.className = 'event-absent-tag';
+          absentTag.textContent = '결석';
+          bubble.appendChild(absentTag);
+        }
+
+        if (event.kind === '수강') {
+          const absenceBtn = document.createElement('button');
+          absenceBtn.type = 'button';
+          absenceBtn.className = 'event-bubble-absence';
+          absenceBtn.setAttribute('aria-label', isAbsent ? '결석 해제' : '결석 처리');
+          absenceBtn.textContent = isAbsent ? '결석 해제' : '결석';
+          absenceBtn.addEventListener('mousedown', (mouseEvent) => {
+            mouseEvent.preventDefault();
+            mouseEvent.stopPropagation();
+          });
+          absenceBtn.addEventListener('click', (clickEvent) => {
+            clickEvent.preventDefault();
+            clickEvent.stopPropagation();
+            toggleEventAbsence(event.id, date);
+          });
+          bubble.appendChild(absenceBtn);
+        }
 
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
@@ -1658,6 +1687,35 @@
     });
   }
 
+  function isEventAbsentOnDate(eventItem, occurrenceDate) {
+    if (!eventItem || String(eventItem.kind || '') !== '수강') return false;
+    const dates = Array.isArray(eventItem.absenceDates) ? eventItem.absenceDates : [];
+    return dates.includes(String(occurrenceDate || ''));
+  }
+
+  function toggleEventAbsence(eventId, occurrenceDate) {
+    const id = String(eventId || '');
+    const date = String(occurrenceDate || '');
+    if (!id || !date) return;
+
+    const eventItem = state.events.find((item) => item && String(item.id || '') === id);
+    if (!eventItem || String(eventItem.kind || '') !== '수강') return;
+
+    const dates = Array.isArray(eventItem.absenceDates) ? eventItem.absenceDates.slice() : [];
+    const existingIndex = dates.indexOf(date);
+    if (existingIndex >= 0) {
+      dates.splice(existingIndex, 1);
+    } else {
+      dates.push(date);
+      dates.sort();
+    }
+
+    eventItem.absenceDates = dates;
+    saveState();
+    renderCalendar();
+    renderEventSelectorGrid();
+  }
+
   function requestDeleteEvent(eventId, occurrenceDate) {
     const eventItem = state.events.find((item) => item && item.id === eventId);
     if (!eventItem) return;
@@ -2377,6 +2435,7 @@
           endSlot,
           lane,
           need,
+          absent: isEventAbsentOnDate(event, date),
           preview: false
         });
       });
@@ -2413,11 +2472,20 @@
       layouts.forEach((item) => {
         const bubble = document.createElement('div');
         bubble.className = `event-bubble event-selector-bubble ${kindToClass(item.kind)}${item.preview ? ' is-preview' : ''}`;
+        if (item.absent) {
+          bubble.classList.add('is-absent');
+        }
         bubble.style.top = `${EVENT_SELECTOR_ROW_HEIGHT + item.startSlot * EVENT_SELECTOR_ROW_HEIGHT + 1}px`;
         bubble.style.height = `${Math.max(EVENT_SELECTOR_ROW_HEIGHT - 2, (item.endSlot - item.startSlot) * EVENT_SELECTOR_ROW_HEIGHT - 2)}px`;
         bubble.style.left = `${EVENT_SELECTOR_TIME_COL_WIDTH + dayIndex * dayWidth + (item.lane * (dayWidth / 3)) + 1}px`;
         bubble.style.width = `${Math.max(10, (item.need * (dayWidth / 3)) - 2)}px`;
         bubble.innerHTML = `<strong>${escapeHtml(item.title || '이용자 없음')}</strong>`;
+        if (item.absent) {
+          const absentTag = document.createElement('span');
+          absentTag.className = 'event-absent-tag';
+          absentTag.textContent = '결석';
+          bubble.appendChild(absentTag);
+        }
         overlay.appendChild(bubble);
       });
     }

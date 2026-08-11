@@ -582,12 +582,51 @@ body {
   padding: 4px;
 }
 
+.event-bubble.is-absent.kind-class {
+  background: #81bc95;
+}
+
 .event-bubble strong {
   display: block;
   max-width: calc(100% - 8px);
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: keep-all;
+}
+
+.event-absent-tag {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #ffffff;
+  background: #c61f1f;
+}
+
+.event-bubble-absence {
+  position: absolute;
+  right: 24px;
+  bottom: 3px;
+  min-width: 34px;
+  height: 18px;
+  border: 1px solid rgba(205, 215, 228, 0.95);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #b22626;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 16px;
+  padding: 0 6px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(10, 16, 30, 0.2);
+}
+
+.event-bubble-absence:hover {
+  background: #fff6f6;
 }
 
 .event-bubble-delete {
@@ -781,6 +820,13 @@ body {
   padding: 3px 4px;
   font-size: 10px;
   line-height: 1.15;
+}
+
+.event-selector-bubble .event-absent-tag {
+  left: 3px;
+  bottom: 3px;
+  font-size: 8px;
+  padding: 1px 4px;
 }
 
 .event-selector-bubble.is-preview {
