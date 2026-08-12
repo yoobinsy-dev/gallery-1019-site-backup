@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>도예공방 10.19 - 마스터 캘린더</title>
-  <link rel="stylesheet" href="studio.css?v=20260812-1">
+  <link rel="stylesheet" href="studio.css?v=20260812-3">
 </head>
 <body>
   <a class="studio-back-link" href="pottery-workshop.html" aria-label="도예공방 10.19 메뉴로 돌아가기">← 메뉴로</a>
@@ -52,6 +52,15 @@
             <li><span class="dot base-closed"></span>이용 불가</li>
           </ul>
         </section>
+
+        <section class="studio-panel my-workshop-panel" id="my-workshop-panel" hidden>
+          <h2>나의 개인작업 현황</h2>
+          <div class="my-workshop-info-row"><strong>계약 기간</strong><span id="my-workshop-cycle">-</span></div>
+          <div class="my-workshop-info-row"><strong>월별 이용료</strong><span id="my-workshop-fee">-</span></div>
+          <div class="my-workshop-info-row"><strong>최근 결제일</strong><span id="my-workshop-payment">-</span></div>
+          <div class="my-workshop-info-row"><strong>사용한 이용시간</strong><span id="my-workshop-used">0시간</span></div>
+          <div class="my-workshop-info-row"><strong>남은 이용시간</strong><span id="my-workshop-remain">0시간</span></div>
+        </section>
       </aside>
 
       <section class="studio-calendar-wrap">
@@ -80,6 +89,10 @@
         <select id="event-user">
           <option value="">이용자 선택</option>
         </select>
+        <div class="event-personal-user-info" id="event-personal-user-info" hidden>
+          <div class="event-personal-user-info-line"><strong>계약 기간</strong><span id="event-personal-cycle">-</span></div>
+          <div class="event-personal-user-info-line"><strong>이용시간</strong><span id="event-personal-hours">사용 0시간 / 남은 0시간</span></div>
+        </div>
       </div>
       <div class="form-row" id="event-title-row" style="display: none;">
         <label for="event-title">제목</label>
@@ -386,6 +399,6 @@
 
   <script src="cloud-sync.js?v=20260811-3"></script>
   <script src="auth.js?v=20260807-1"></script>
-  <script src="studio.js?v=20260812-1"></script>
+  <script src="studio.js?v=20260812-5"></script>
 </body>
 </html>

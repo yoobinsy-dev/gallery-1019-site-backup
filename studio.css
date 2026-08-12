@@ -146,6 +146,34 @@ body {
   font-size: 15px;
 }
 
+.my-workshop-panel {
+  display: grid;
+  gap: 7px;
+}
+
+.my-workshop-info-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: #3b4a66;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: #f6f8fd;
+  border: 1px solid #e6ebf7;
+}
+
+.my-workshop-info-row strong {
+  color: #26344d;
+}
+
+.my-workshop-info-row span {
+  text-align: right;
+  color: #2f3f5d;
+  font-weight: 600;
+}
+
 .legend-list {
   margin: 0;
   padding: 0;
@@ -773,6 +801,29 @@ body {
   border-radius: 8px;
   padding: 9px 10px;
   font-size: 14px;
+}
+
+.event-personal-user-info {
+  margin-top: 2px;
+  border: 1px solid #d8e3fb;
+  background: #f2f6ff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.event-personal-user-info-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  color: #30456d;
+}
+
+.event-personal-user-info-line strong {
+  min-width: 58px;
+  color: #1e335c;
 }
 
 .checkbox-row input[type="checkbox"] {

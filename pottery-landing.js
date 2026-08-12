@@ -42,6 +42,7 @@ function getPotteryAllowedPagesByRole(role) {
       'pottery-workshop.html',
       'pottery-master-calendar.html',
       'pottery-students.html',
+      'pottery-personal-work.html',
       'pottery-material-orders.html',
       'pottery-accounting.html',
       'pottery-exhibition-works.html'
@@ -53,7 +54,7 @@ function getPotteryAllowedPagesByRole(role) {
   }
 
   if (role === '작가') {
-    return ['pottery-master-calendar.html'];
+    return ['pottery-workshop.html', 'pottery-master-calendar.html'];
   }
 
   return [];

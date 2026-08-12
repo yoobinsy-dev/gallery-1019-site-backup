@@ -229,6 +229,21 @@
     el.setAttribute('aria-disabled', 'true');
   }
 
+  function clearRoleLockedMessage(el) {
+    if (!el) return;
+    el.classList.remove('role-locked');
+    el.removeAttribute('data-locked-message');
+    el.removeAttribute('aria-disabled');
+    el.removeAttribute('title');
+  }
+
+  function isArtistRegisteredForPersonalWork() {
+    if (!isStudioArtist()) return true;
+    const me = getActiveStudioUserName();
+    if (!me) return false;
+    return getPersonalUsersForEvents().includes(me);
+  }
+
   function canUseEventKindByRole(kind) {
     if (isStudioAdmin()) return true;
     if (isStudioArtist()) return kind === '개인작업';
@@ -286,7 +301,11 @@
 
     if (isStudioArtist()) {
       const owner = String(title || '').trim();
-      return owner === getActiveStudioUserName() && isPersonalBaseRange(date, startTime, endTime);
+      const activeUserName = getActiveStudioUserName();
+      if (!getPersonalUsersForEvents().includes(activeUserName)) {
+        return false;
+      }
+      return owner === activeUserName && isPersonalBaseRange(date, startTime, endTime);
     }
 
     if (isStudioInstructor()) {
@@ -367,6 +386,10 @@
 
     document.getElementById('open-add-event-btn').addEventListener('click', () => {
       if (!isStudioAdmin() && !isStudioInstructor() && !isStudioArtist()) {
+        return;
+      }
+      if (isStudioArtist() && !isArtistRegisteredForPersonalWork()) {
+        alert('개인작업 일정은 개인작업 관리에 등록된 이용자만 생성할 수 있습니다. 먼저 개인작업 관리 페이지에 본인을 추가해주세요.');
         return;
       }
       openEventModal();
@@ -474,6 +497,7 @@
     });
     document.getElementById('event-date').addEventListener('change', () => {
       syncEventSelectionFromInputs();
+      renderEventPersonalUserInfo();
       renderEventSelectorGrid();
     });
     document.getElementById('event-range-start').addEventListener('change', () => {
@@ -544,16 +568,35 @@
     if (baseBtn && !isStudioAdmin()) {
       baseBtn.disabled = false;
       setRoleLockedMessage(baseBtn);
+    } else if (baseBtn) {
+      clearRoleLockedMessage(baseBtn);
     }
 
     const addBtn = document.getElementById('open-add-event-btn');
-    if (addBtn && !isStudioAdmin() && !isStudioInstructor() && !isStudioArtist()) {
+    if (!addBtn) return;
+
+    if (!isStudioAdmin() && !isStudioInstructor() && !isStudioArtist()) {
       addBtn.disabled = false;
       setRoleLockedMessage(addBtn);
+      return;
     }
+
+    if (isStudioArtist() && !isArtistRegisteredForPersonalWork()) {
+      addBtn.disabled = true;
+      addBtn.classList.add('role-locked');
+      addBtn.setAttribute('title', '개인작업 관리에 등록된 이용자만 일정 추가가 가능합니다.');
+      addBtn.setAttribute('data-locked-message', '개인작업 관리에 등록된 이용자만 일정 추가가 가능합니다.');
+      addBtn.setAttribute('aria-disabled', 'true');
+      return;
+    }
+
+    addBtn.disabled = false;
+    clearRoleLockedMessage(addBtn);
   }
 
   function renderAll() {
+    applyStudioRoleUiLocks();
+    renderMyWorkshopUsagePanel();
     syncViewToggleButtons();
     renderWeekLabel();
     renderCalendar();
@@ -2043,6 +2086,15 @@
     const effectiveTitleForPermission = (kind === '기타' || isExhibitionKind(kind))
       ? customTitle
       : (isKilnKind(kind) ? '가마 소성' : user);
+
+    if (isStudioArtist() && kind === '개인작업') {
+      const me = getActiveStudioUserName();
+      if (!getPersonalUsersForEvents().includes(me)) {
+        alert('개인작업 일정은 개인작업 관리에 등록된 이용자만 생성할 수 있습니다. 먼저 개인작업 관리 페이지에 본인을 추가해주세요.');
+        return;
+      }
+    }
+
     if (!canManageEventPlacementByRole(kind, eventDate, normalizedStart, normalizedEnd, effectiveTitleForPermission)) {
       alert(ROLE_LOCK_MESSAGE);
       return;
@@ -2541,14 +2593,277 @@
   function loadStudioUsers() {
     try {
       const rawStudents = JSON.parse(localStorage.getItem(STUDENT_STORAGE_KEY) || '[]');
-      const names = (Array.isArray(rawStudents) ? rawStudents : [])
+      const studentNames = (Array.isArray(rawStudents) ? rawStudents : [])
         .map((student) => String(student?.name || '').trim())
         .filter(Boolean);
 
-      state.studioUsers = Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'ko'));
+      let personalNames = [];
+      try {
+        const rawPersonal = JSON.parse(localStorage.getItem('pottery-personal-work-v1') || '[]');
+        personalNames = (Array.isArray(rawPersonal) ? rawPersonal : [])
+          .filter((entry) => !entry?.isDormant)
+          .map((entry) => String(entry?.userName || '').trim())
+          .filter(Boolean);
+      } catch (error) {
+        personalNames = [];
+      }
+
+      state.studioUsers = Array.from(new Set([...studentNames, ...personalNames]))
+        .sort((a, b) => a.localeCompare(b, 'ko'));
     } catch (error) {
       state.studioUsers = [];
     }
+  }
+
+  function getStudentUsersForEvents() {
+    try {
+      const rawStudents = JSON.parse(localStorage.getItem(STUDENT_STORAGE_KEY) || '[]');
+      return Array.from(new Set(
+        (Array.isArray(rawStudents) ? rawStudents : [])
+          .map((student) => String(student?.name || '').trim())
+          .filter(Boolean)
+      )).sort((a, b) => a.localeCompare(b, 'ko'));
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function getPersonalUsersForEvents() {
+    try {
+      const rawPersonal = JSON.parse(localStorage.getItem('pottery-personal-work-v1') || '[]');
+      return Array.from(new Set(
+        (Array.isArray(rawPersonal) ? rawPersonal : [])
+          .filter((entry) => !entry?.isDormant)
+          .map((entry) => String(entry?.userName || '').trim())
+          .filter(Boolean)
+      )).sort((a, b) => a.localeCompare(b, 'ko'));
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function getActivePersonalWorkEntries() {
+    try {
+      const rawPersonal = JSON.parse(localStorage.getItem('pottery-personal-work-v1') || '[]');
+      return (Array.isArray(rawPersonal) ? rawPersonal : [])
+        .filter((entry) => !entry?.isDormant)
+        .map((entry) => {
+          const userName = String(entry?.userName || '').trim();
+          const startDate = String(entry?.startDate || '').trim();
+          const maxHours = Number(entry?.maxHours || 0);
+          if (!userName || !startDate || !Number.isFinite(maxHours) || maxHours <= 0) return null;
+          return {
+            userName,
+            startDate,
+            maxHours,
+            monthlyFee: Number(entry?.monthlyFee || 0),
+            lastPaymentDate: String(entry?.lastPaymentDate || '').trim()
+          };
+        })
+        .filter(Boolean);
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function getActivePersonalWorkEntryByUserName(userName) {
+    const key = String(userName || '').trim();
+    if (!key) return null;
+    const entries = getActivePersonalWorkEntries();
+    return entries.find((entry) => entry.userName === key) || null;
+  }
+
+  function addMonthKeepDay(date, diff) {
+    const next = new Date(date);
+    const day = next.getDate();
+    next.setDate(1);
+    next.setMonth(next.getMonth() + diff);
+    const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+    next.setDate(Math.min(day, lastDay));
+    next.setHours(0, 0, 0, 0);
+    return next;
+  }
+
+  function getPersonalWorkCycleRangeForDate(startDateStr, referenceDate) {
+    const anchor = new Date(`${String(startDateStr || '').trim()}T00:00:00`);
+    const ref = referenceDate instanceof Date ? new Date(referenceDate) : new Date();
+
+    if (Number.isNaN(anchor.getTime())) {
+      const fallbackStart = new Date(ref);
+      fallbackStart.setHours(0, 0, 0, 0);
+      return {
+        start: formatDateInput(fallbackStart),
+        end: formatDateInput(addMonthKeepDay(fallbackStart, 1))
+      };
+    }
+
+    let cycleStart = new Date(anchor);
+    let cycleEnd = addMonthKeepDay(cycleStart, 1);
+    while (ref >= cycleEnd) {
+      cycleStart = cycleEnd;
+      cycleEnd = addMonthKeepDay(cycleStart, 1);
+    }
+
+    return {
+      start: formatDateInput(cycleStart),
+      end: formatDateInput(cycleEnd)
+    };
+  }
+
+  function getPersonalWorkUsageHoursForCycle(userName, cycleStart, cycleEnd) {
+    const from = new Date(`${String(cycleStart || '').trim()}T00:00:00`);
+    const to = new Date(`${String(cycleEnd || '').trim()}T00:00:00`);
+    const now = new Date();
+    const targetName = String(userName || '').trim();
+
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || !targetName) return 0;
+
+    let total = 0;
+    const addOccurrence = (eventItem, dateKey) => {
+      const startAt = new Date(`${dateKey}T${String(eventItem?.start || '00:00')}:00`);
+      if (Number.isNaN(startAt.getTime())) return;
+
+      const startSlot = timeToSlot(eventItem?.start);
+      const endSlot = Math.max(startSlot + 1, timeToSlot(eventItem?.end));
+      const endAt = new Date(new Date(`${dateKey}T00:00:00`).getTime() + (endSlot * SLOT_MINUTES * 60 * 1000));
+      if (Number.isNaN(endAt.getTime())) return;
+      if (endAt > now) return;
+      if (startAt < from || startAt >= to) return;
+
+      total += ((endSlot - startSlot) * SLOT_MINUTES) / 60;
+    };
+
+    (state.events || []).forEach((eventItem) => {
+      if (!eventItem || String(eventItem.kind || '').trim() !== '개인작업') return;
+      if (String(eventItem.title || '').trim() !== targetName) return;
+
+      const eventDate = String(eventItem.date || '').trim();
+      if (!eventDate) return;
+
+      if (!eventItem.repeatWeekly) {
+        addOccurrence(eventItem, eventDate);
+        return;
+      }
+
+      const startDate = new Date(`${eventDate}T00:00:00`);
+      if (Number.isNaN(startDate.getTime())) return;
+
+      const skipDates = Array.isArray(eventItem.repeatSkipDates) ? eventItem.repeatSkipDates : [];
+      const repeatEndDate = eventItem.repeatEndDate
+        ? new Date(`${eventItem.repeatEndDate}T00:00:00`)
+        : null;
+      const horizon = Number.isNaN(repeatEndDate?.getTime?.() ?? NaN)
+        ? to
+        : new Date(Math.min(repeatEndDate.getTime(), to.getTime()));
+
+      let cursor = new Date(startDate);
+      let safety = 0;
+      while (cursor < horizon && safety < 520) {
+        const key = formatDateInput(cursor);
+        if (!skipDates.includes(key)) {
+          addOccurrence(eventItem, key);
+        }
+        cursor = addDays(cursor, 7);
+        safety += 1;
+      }
+    });
+
+    return Math.round(total * 10) / 10;
+  }
+
+  function formatHourValue(hours) {
+    const rounded = Math.round(Number(hours || 0) * 10) / 10;
+    if (Number.isInteger(rounded)) return String(rounded);
+    return rounded.toFixed(1);
+  }
+
+  function formatWonAmount(value) {
+    const raw = Number(value);
+    if (!Number.isFinite(raw)) return '-';
+    if (raw === 0) return '0원';
+    if (raw < 0) return '-';
+    const num = Math.round(raw);
+    return `${Math.round(num).toLocaleString('ko-KR')}원`;
+  }
+
+  function renderMyWorkshopUsagePanel() {
+    const panel = document.getElementById('my-workshop-panel');
+    if (!panel) return;
+
+    const cycleEl = document.getElementById('my-workshop-cycle');
+    const feeEl = document.getElementById('my-workshop-fee');
+    const paymentEl = document.getElementById('my-workshop-payment');
+    const usedEl = document.getElementById('my-workshop-used');
+    const remainEl = document.getElementById('my-workshop-remain');
+    if (!cycleEl || !feeEl || !paymentEl || !usedEl || !remainEl) return;
+
+    const me = getActiveStudioUserName();
+    const myEntry = getActivePersonalWorkEntryByUserName(me);
+    if (!myEntry) {
+      panel.hidden = true;
+      return;
+    }
+
+    const cycle = getPersonalWorkCycleRangeForDate(myEntry.startDate, new Date());
+    const usedHours = getPersonalWorkUsageHoursForCycle(me, cycle.start, cycle.end);
+    const remainHours = Math.max(0, Math.round((myEntry.maxHours - usedHours) * 10) / 10);
+
+    cycleEl.textContent = `${cycle.start} ~ ${cycle.end}`;
+    feeEl.textContent = formatWonAmount(myEntry.monthlyFee);
+    paymentEl.textContent = Number(myEntry.monthlyFee || 0) <= 0 ? '-' : (myEntry.lastPaymentDate || '-');
+    usedEl.textContent = `${formatHourValue(usedHours)}시간`;
+    remainEl.textContent = `${formatHourValue(remainHours)}시간`;
+    panel.hidden = false;
+  }
+
+  function renderEventPersonalUserInfo() {
+    const box = document.getElementById('event-personal-user-info');
+    const cycleEl = document.getElementById('event-personal-cycle');
+    const hoursEl = document.getElementById('event-personal-hours');
+    if (!box || !cycleEl || !hoursEl) return;
+
+    const kind = String(document.getElementById('event-kind')?.value || '').trim();
+    const selectedUser = String(document.getElementById('event-user')?.value || '').trim();
+    if (kind !== '개인작업' || !selectedUser) {
+      box.hidden = true;
+      return;
+    }
+
+    const entry = getActivePersonalWorkEntryByUserName(selectedUser);
+    if (!entry) {
+      box.hidden = true;
+      return;
+    }
+
+    const refDateValue = String(document.getElementById('event-date')?.value || '').trim();
+    const refDate = refDateValue ? new Date(`${refDateValue}T00:00:00`) : new Date();
+    const cycle = getPersonalWorkCycleRangeForDate(entry.startDate, refDate);
+    const usedHours = getPersonalWorkUsageHoursForCycle(selectedUser, cycle.start, cycle.end);
+    const remainHours = Math.max(0, Math.round((entry.maxHours - usedHours) * 10) / 10);
+
+    cycleEl.textContent = `${cycle.start} ~ ${cycle.end}`;
+    hoursEl.textContent = `사용 ${formatHourValue(usedHours)}시간 / 남은 ${formatHourValue(remainHours)}시간`;
+    box.hidden = false;
+  }
+
+  function getEventUsersByKind(kind) {
+    const normalizedKind = String(kind || '').trim();
+    const studentUsers = getStudentUsersForEvents();
+    const personalUsers = getPersonalUsersForEvents();
+
+    if (normalizedKind === '수강') {
+      return studentUsers;
+    }
+    if (normalizedKind === '개인작업') {
+      return personalUsers;
+    }
+    if (normalizedKind === '강사 지도 하 개인작업') {
+      return Array.from(new Set([...studentUsers, ...personalUsers]))
+        .sort((a, b) => a.localeCompare(b, 'ko'));
+    }
+
+    return Array.from(new Set([...studentUsers, ...personalUsers]))
+      .sort((a, b) => a.localeCompare(b, 'ko'));
   }
 
   function loadStudioInstructors() {
@@ -2685,15 +3000,26 @@
     state.classTeachingLog = records;
   }
 
-  function populateEventUserOptions(selected, selectId = 'event-user') {
+  function populateEventUserOptions(selected, selectId = 'event-user', forcedKind) {
     const select = document.getElementById(selectId);
     if (!select) return;
 
-    const current = selected || select.value || '';
+    const current = String(selected || select.value || '').trim();
+    const kind = String(
+      forcedKind
+      || (selectId === 'quick-edit-user'
+        ? (document.getElementById('quick-edit-kind')?.textContent || '')
+        : (document.getElementById('event-kind')?.value || ''))
+    ).trim();
+    const optionsUsers = getEventUsersByKind(kind);
+
     const options = ['<option value="">이용자 선택</option>'];
-    state.studioUsers.forEach((name) => {
+    optionsUsers.forEach((name) => {
       options.push(`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`);
     });
+    if (current && !optionsUsers.includes(current)) {
+      options.push(`<option value="${escapeHtml(current)}">${escapeHtml(current)}</option>`);
+    }
     select.innerHTML = options.join('');
 
     if (current) {
@@ -2702,6 +3028,7 @@
   }
 
   function handleEventUserSelectChange() {
+    renderEventPersonalUserInfo();
     renderEventSelectorGrid();
   }
 
@@ -2782,7 +3109,12 @@
         userInput.disabled = true;
         setRoleLockedMessage(userInput);
       }
+    } else if (userInput) {
+      const previous = String(userInput.value || '').trim();
+      populateEventUserOptions(previous, 'event-user', kind);
     }
+
+    renderEventPersonalUserInfo();
   }
 
   function syncEventSelectionFromInputs() {
