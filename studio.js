@@ -3989,6 +3989,65 @@
     });
   }
 
+  function createBaseRuleId() {
+    return `base-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function applyMovedRuleOverride(targetRules, movedRule) {
+    if (!Array.isArray(targetRules) || !movedRule) return;
+
+    const movedDay = Number(movedRule.day);
+    const movedStart = Number(movedRule.startSlot);
+    const movedEnd = Number(movedRule.endSlot);
+    const movedId = String(movedRule.id || '');
+    if (!Number.isInteger(movedDay) || movedEnd <= movedStart || !movedId) return;
+
+    const nextRules = [];
+
+    (targetRules || []).forEach((rule) => {
+      if (!rule) return;
+      if (String(rule.id || '') === movedId) return;
+
+      const day = Number(rule.day);
+      const start = Number(rule.startSlot);
+      const end = Number(rule.endSlot);
+      const sameDay = day === movedDay;
+
+      if (!sameDay || !rangesOverlap(movedStart, movedEnd, start, end)) {
+        nextRules.push(rule);
+        return;
+      }
+
+      if (start < movedStart) {
+        const leftEnd = Math.min(end, movedStart);
+        if (leftEnd > start) {
+          nextRules.push({
+            ...rule,
+            id: createBaseRuleId(),
+            startSlot: start,
+            endSlot: leftEnd
+          });
+        }
+      }
+
+      if (end > movedEnd) {
+        const rightStart = Math.max(start, movedEnd);
+        if (end > rightStart) {
+          nextRules.push({
+            ...rule,
+            id: createBaseRuleId(),
+            startSlot: rightStart,
+            endSlot: end
+          });
+        }
+      }
+    });
+
+    nextRules.push(movedRule);
+    targetRules.length = 0;
+    nextRules.forEach((rule) => targetRules.push(rule));
+  }
+
   function applyBaseRule(day, startSlot, endSlot) {
     const type = document.getElementById('base-type').value;
     const className = document.getElementById('base-class-name').value;
@@ -4280,6 +4339,7 @@
         rule.day = payload.day;
         rule.startSlot = payload.startSlot;
         rule.endSlot = payload.endSlot;
+        applyMovedRuleOverride(targetRules, rule);
         if (payload.moveEvents) {
           applyBaseEventMovePlan(payload.movePlan);
         }
@@ -4314,8 +4374,16 @@
     return (rules || []).map((rule) => ({ ...rule }));
   }
 
+  function cloneEventsForUndo(events) {
+    return (events || []).map((eventItem) => ({
+      ...eventItem,
+      repeatSkipDates: Array.isArray(eventItem?.repeatSkipDates) ? eventItem.repeatSkipDates.slice() : []
+    }));
+  }
+
   function pushBaseUndoState() {
     state.baseUndoStack.push({
+      events: cloneEventsForUndo(state.events),
       baseRules: cloneBaseRules(state.baseRules),
       baseRuleTimeline: cloneBaseRuleTimeline(state.baseRuleTimeline),
       baseWeekOverrides: cloneBaseWeekOverrides(state.baseWeekOverrides)
@@ -4334,6 +4402,9 @@
       state.baseRuleTimeline = [];
       state.baseWeekOverrides = {};
     } else {
+      if (Array.isArray(previous?.events)) {
+        state.events = cloneEventsForUndo(previous.events);
+      }
       state.baseRules = cloneBaseRules(previous?.baseRules);
       state.baseRuleTimeline = cloneBaseRuleTimeline(previous?.baseRuleTimeline);
       state.baseWeekOverrides = cloneBaseWeekOverrides(previous?.baseWeekOverrides);
