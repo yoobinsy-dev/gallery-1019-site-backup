@@ -240,6 +240,7 @@
 
     document.getElementById('base-prev-week-btn').addEventListener('click', () => {
       state.baseEditorWeekStart = addDays(getBaseEditorWeekStart(), -7);
+      state.baseEditMode = hasWeekOverride(state.baseEditorWeekStart) ? 'week' : 'base';
       renderBaseEditorWeekLabel();
       renderBaseEditModeToggle();
       renderBaseEditorGrid({ forceDefaultViewport: true });
@@ -248,6 +249,7 @@
 
     document.getElementById('base-next-week-btn').addEventListener('click', () => {
       state.baseEditorWeekStart = addDays(getBaseEditorWeekStart(), 7);
+      state.baseEditMode = hasWeekOverride(state.baseEditorWeekStart) ? 'week' : 'base';
       renderBaseEditorWeekLabel();
       renderBaseEditModeToggle();
       renderBaseEditorGrid({ forceDefaultViewport: true });
@@ -256,6 +258,7 @@
 
     document.getElementById('base-go-today-btn').addEventListener('click', () => {
       state.baseEditorWeekStart = getWeekStart(new Date());
+      state.baseEditMode = hasWeekOverride(state.baseEditorWeekStart) ? 'week' : 'base';
       renderBaseEditorWeekLabel();
       renderBaseEditModeToggle();
       renderBaseEditorGrid({ forceDefaultViewport: true });
@@ -263,10 +266,17 @@
     });
 
     document.getElementById('base-edit-mode-switch').addEventListener('change', (event) => {
+      if (hasWeekOverride(getBaseEditorWeekStart())) {
+        state.baseEditMode = 'week';
+        renderBaseEditModeToggle();
+        renderBaseEditorGrid();
+        updateUndoButtonState();
+        return;
+      }
       const checked = Boolean(event?.target?.checked);
       state.baseEditMode = checked ? 'week' : 'base';
       renderBaseEditModeToggle();
-      renderBaseEditorGrid({ forceDefaultViewport: true });
+      renderBaseEditorGrid();
       updateUndoButtonState();
     });
 
@@ -396,9 +406,20 @@
     const labelEl = document.getElementById('base-edit-mode-label');
     const gridEl = document.getElementById('base-editor-grid');
     const fromCurrentCheckbox = document.getElementById('base-edit-from-current-week');
+    const overrideHintEl = document.getElementById('base-override-week-hint');
+    const isOverrideWeek = hasWeekOverride(getBaseEditorWeekStart());
+    if (isOverrideWeek) {
+      state.baseEditMode = 'week';
+    }
     const isWeek = state.baseEditMode === 'week';
 
-    if (switchEl) switchEl.checked = isWeek;
+    if (switchEl) {
+      switchEl.checked = isWeek;
+      switchEl.disabled = isOverrideWeek;
+    }
+    if (overrideHintEl) {
+      overrideHintEl.hidden = !isOverrideWeek;
+    }
     if (labelEl) {
       labelEl.textContent = isWeek ? '1주 시간표 수정 모드' : '기본 시간표 수정 모드';
       labelEl.classList.toggle('is-week', isWeek);
@@ -3257,6 +3278,7 @@
         rule.day = payload.nextDay;
         rule.startSlot = payload.nextStart;
         rule.endSlot = payload.nextEnd;
+        applyMovedRuleOverride(targetRules, rule);
         if (payload.moveEvents) {
           applyBaseEventMovePlan(payload.movePlan);
         }
@@ -4100,9 +4122,7 @@
   }
 
   function getBaseEditorDisplayRules() {
-    if (getBaseEditScope() === 'all') {
-      return getTemplateRulesForWeek(getBaseEditorWeekStart());
-    }
+    // Keep the visible week stable regardless of edit mode; toggle should change scope, not current view.
     return getRulesForWeek(getBaseEditorWeekStart());
   }
 

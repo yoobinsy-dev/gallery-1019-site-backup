@@ -880,6 +880,17 @@ body {
   color: #2e65c5;
 }
 
+.base-override-week-hint {
+  margin: -2px 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #6a4d00;
+  background: #fff6dd;
+  border: 1px solid #f0dc98;
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
 .base-fancy-check {
   display: inline-flex;
   align-items: center;
