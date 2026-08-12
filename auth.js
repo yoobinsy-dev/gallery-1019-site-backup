@@ -492,6 +492,8 @@ window.closeProfileEditModal = closeProfileEditModal;
 window.saveProfileEdit = saveProfileEdit;
 
 function renderGlobalUserInfoBox() {
+  ensureProfileEditStyles();
+
   const activeUser = JSON.parse(localStorage.getItem('currentUser')) || null;
   const existingBox = document.querySelector('.user-info');
 
