@@ -8,6 +8,9 @@ const ALLOWED_KEYS = new Set(['users', 'exhibitions']);
 const HARD_DROP_MIN_PREVIOUS_TOTAL = 20;
 const HARD_DROP_MIN_ABSOLUTE = 15;
 const HARD_DROP_RATIO = 0.7;
+const USER_DROP_MIN_PREVIOUS_TOTAL = 3;
+const USER_DROP_MIN_ABSOLUTE = 2;
+const USER_DROP_RATIO = 0.5;
 
 function toEpochMs(value) {
   const parsed = new Date(value || '').getTime();
@@ -266,6 +269,156 @@ function mergeUsersPreservingPasswords(currentUsers, incomingUsers) {
       password: preservedPassword
     };
   });
+}
+
+function indexUsersByIdentity(users) {
+  const map = new Map();
+  (Array.isArray(users) ? users : []).forEach((user) => {
+    if (!user || typeof user !== 'object') return;
+    buildUserIdentityKeys(user).forEach((key) => {
+      if (!map.has(key)) {
+        map.set(key, user);
+      }
+    });
+  });
+  return map;
+}
+
+function findUserIndex(users, targetUser) {
+  if (!Array.isArray(users) || !targetUser || typeof targetUser !== 'object') {
+    return -1;
+  }
+
+  const targetId = Number(targetUser.id);
+  if (Number.isFinite(targetId) && targetId > 0) {
+    const byIdIndex = users.findIndex((user) => Number(user?.id) === targetId);
+    if (byIdIndex !== -1) {
+      return byIdIndex;
+    }
+  }
+
+  const targetIdentitySet = new Set(buildUserIdentityKeys(targetUser));
+  if (targetIdentitySet.size === 0) {
+    return -1;
+  }
+
+  return users.findIndex((user) => {
+    const identities = buildUserIdentityKeys(user);
+    return identities.some((identity) => targetIdentitySet.has(identity));
+  });
+}
+
+function mergeSingleUserPreservingPassword(currentUsersByIdentity, incomingUser) {
+  if (!incomingUser || typeof incomingUser !== 'object') return incomingUser;
+
+  const hasIncomingPassword = Boolean(String(incomingUser.password || '').trim());
+  if (hasIncomingPassword) {
+    return incomingUser;
+  }
+
+  const matched = buildUserIdentityKeys(incomingUser)
+    .map((key) => currentUsersByIdentity.get(key))
+    .find((candidate) => candidate && typeof candidate === 'object');
+  const preservedPassword = String(matched?.password || '').trim();
+  if (!preservedPassword) {
+    return incomingUser;
+  }
+
+  return {
+    ...incomingUser,
+    password: preservedPassword
+  };
+}
+
+function mergeUsersWithDelta(currentUsers, incomingUsers, removedIds = []) {
+  const current = Array.isArray(currentUsers) ? currentUsers : [];
+  const incoming = Array.isArray(incomingUsers) ? incomingUsers : [];
+  const currentByIdentity = indexUsersByIdentity(current);
+  const mergedUsers = current.slice();
+
+  incoming.forEach((incomingUser) => {
+    if (!incomingUser || typeof incomingUser !== 'object') return;
+    const mergedIncoming = mergeSingleUserPreservingPassword(currentByIdentity, incomingUser);
+    const existingIndex = findUserIndex(mergedUsers, mergedIncoming);
+    if (existingIndex === -1) {
+      mergedUsers.push(mergedIncoming);
+    } else {
+      mergedUsers[existingIndex] = mergedIncoming;
+    }
+  });
+
+  const removeIdSet = new Set(
+    (Array.isArray(removedIds) ? removedIds : [])
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id) && id > 0)
+  );
+
+  const uniqueUsers = [];
+  const seenIdentities = new Set();
+  mergedUsers.forEach((user) => {
+    if (!user || typeof user !== 'object') return;
+    const id = Number(user.id);
+    if (removeIdSet.has(id)) return;
+
+    const primaryIdentity = buildUserIdentityKeys(user)[0] || `anon:${uniqueUsers.length}`;
+    if (seenIdentities.has(primaryIdentity)) return;
+    seenIdentities.add(primaryIdentity);
+    uniqueUsers.push(user);
+  });
+
+  return uniqueUsers;
+}
+
+function hasUsersWithMissingPasswords(users) {
+  if (!Array.isArray(users)) return false;
+  return users.some((user) => {
+    if (!user || typeof user !== 'object') return false;
+    return !String(user.password || '').trim();
+  });
+}
+
+function hasAdminRoleValue(value) {
+  return String(value || '').trim() === '어드민';
+}
+
+function hasAtLeastOneAdminWithPassword(users) {
+  if (!Array.isArray(users)) return false;
+  return users.some((user) => {
+    if (!user || typeof user !== 'object') return false;
+    const hasPassword = Boolean(String(user.password || '').trim());
+    if (!hasPassword) return false;
+
+    return hasAdminRoleValue(user.accountType)
+      || hasAdminRoleValue(user.studioRole)
+      || hasAdminRoleValue(user.galleryRole);
+  });
+}
+
+function detectSuspiciousUserDrop(currentUsers, nextUsers, removedIds = []) {
+  if (!Array.isArray(currentUsers) || !Array.isArray(nextUsers)) return null;
+
+  const previousCount = currentUsers.length;
+  const nextCount = nextUsers.length;
+  if (previousCount < USER_DROP_MIN_PREVIOUS_TOTAL) return null;
+  if (nextCount >= previousCount) return null;
+
+  const dropped = previousCount - nextCount;
+  const ratio = dropped / previousCount;
+  if (dropped < USER_DROP_MIN_ABSOLUTE) return null;
+  if (ratio < USER_DROP_RATIO) return null;
+
+  const removedCount = Array.isArray(removedIds) ? removedIds.length : 0;
+  if (removedCount >= dropped) {
+    return null;
+  }
+
+  return {
+    previousCount,
+    nextCount,
+    dropped,
+    ratio,
+    explicitRemovedIds: removedCount
+  };
 }
 
 function getRequestId(req) {
@@ -571,11 +724,138 @@ module.exports = async function handler(req, res) {
       let valueToPersist = body.value;
       let mergedOnConflict = false;
       let imageMigrationStats = null;
+      let writeReason = mergedOnConflict ? 'stale-client-merged-server-side' : 'normal-write';
+      let writeDetails;
 
       if (key === 'users' && Array.isArray(body.value)) {
         const existingMap = await getStateMap(['users']);
         const currentUsers = Array.isArray(existingMap.users) ? existingMap.users : [];
-        valueToPersist = mergeUsersPreservingPasswords(currentUsers, body.value);
+        const syncMode = String(body.syncMode || 'full').trim().toLowerCase() === 'delta' ? 'delta' : 'full';
+        const removedIds = Array.isArray(body.removedIds)
+          ? body.removedIds
+              .map((id) => Number(id))
+              .filter((id) => Number.isFinite(id) && id > 0)
+          : [];
+
+        if (syncMode === 'delta') {
+          valueToPersist = mergeUsersWithDelta(currentUsers, body.value, removedIds);
+          writeReason = 'users-delta-merged';
+        } else {
+          valueToPersist = mergeUsersWithDelta(currentUsers, body.value, removedIds);
+          writeReason = 'users-full-merged-with-guards';
+        }
+
+        const blockedDrop = detectSuspiciousUserDrop(currentUsers, valueToPersist, removedIds);
+        if (blockedDrop) {
+          await logStateWriteAttempt({
+            requestId,
+            stateKey: key,
+            action: 'PUT',
+            decision: 'drop_blocked',
+            reason: 'large-unexpected-user-drop-without-explicit-removals',
+            baseUpdatedAt,
+            serverUpdatedAt,
+            incomingCount: body.value.length,
+            serverCount: currentUsers.length,
+            mergedCount: valueToPersist.length,
+            clientId,
+            details: {
+              ...blockedDrop,
+              syncMode
+            }
+          });
+
+          await recordAlert({
+            alertType: 'large-user-drop-blocked',
+            severity: 'critical',
+            message: `Blocked suspicious user drop from ${blockedDrop.previousCount} to ${blockedDrop.nextCount}.`,
+            details: blockedDrop
+          });
+
+          sendJson(res, 422, {
+            ok: false,
+            error: 'Blocked suspicious user account drop. Retry with explicit removals from a fresh client state.',
+            blocked: blockedDrop
+          });
+          return;
+        }
+
+        if (hasUsersWithMissingPasswords(valueToPersist)) {
+          await logStateWriteAttempt({
+            requestId,
+            stateKey: key,
+            action: 'PUT',
+            decision: 'rejected',
+            reason: 'users-missing-password-after-merge',
+            baseUpdatedAt,
+            serverUpdatedAt,
+            incomingCount: body.value.length,
+            serverCount: currentUsers.length,
+            mergedCount: valueToPersist.length,
+            clientId,
+            details: {
+              syncMode,
+              removedIdsCount: removedIds.length
+            }
+          });
+
+          await recordAlert({
+            alertType: 'users-missing-password-rejected',
+            severity: 'critical',
+            message: 'Rejected users write because one or more accounts had missing passwords after merge.',
+            details: {
+              syncMode,
+              removedIdsCount: removedIds.length
+            }
+          });
+
+          sendJson(res, 422, {
+            ok: false,
+            error: 'Rejected users write: one or more accounts would have missing passwords.'
+          });
+          return;
+        }
+
+        if (!hasAtLeastOneAdminWithPassword(valueToPersist)) {
+          await logStateWriteAttempt({
+            requestId,
+            stateKey: key,
+            action: 'PUT',
+            decision: 'rejected',
+            reason: 'users-missing-admin-with-password',
+            baseUpdatedAt,
+            serverUpdatedAt,
+            incomingCount: body.value.length,
+            serverCount: currentUsers.length,
+            mergedCount: valueToPersist.length,
+            clientId,
+            details: {
+              syncMode,
+              removedIdsCount: removedIds.length
+            }
+          });
+
+          await recordAlert({
+            alertType: 'users-admin-invariant-rejected',
+            severity: 'critical',
+            message: 'Rejected users write because no admin account with password would remain.',
+            details: {
+              syncMode,
+              removedIdsCount: removedIds.length
+            }
+          });
+
+          sendJson(res, 422, {
+            ok: false,
+            error: 'Rejected users write: at least one admin account with password must remain.'
+          });
+          return;
+        }
+
+        writeDetails = {
+          syncMode,
+          removedIdsCount: removedIds.length
+        };
       }
 
       if (key === 'exhibitions') {
@@ -678,11 +958,13 @@ module.exports = async function handler(req, res) {
         stateKey: key,
         action: 'PUT',
         decision: mergedOnConflict ? 'merged_accept' : 'accepted',
-        reason: mergedOnConflict ? 'stale-client-merged-server-side' : 'normal-write',
+        reason: mergedOnConflict ? 'stale-client-merged-server-side' : writeReason,
         baseUpdatedAt,
         serverUpdatedAt,
         incomingCount: Array.isArray(body.value) ? body.value.length : null,
-        serverCount: key === 'exhibitions' && Array.isArray(valueToPersist) ? valueToPersist.length : null,
+        serverCount: key === 'users' && Array.isArray(valueToPersist)
+          ? valueToPersist.length
+          : (key === 'exhibitions' && Array.isArray(valueToPersist) ? valueToPersist.length : null),
         mergedCount: Array.isArray(valueToPersist) ? valueToPersist.length : null,
         clientId,
         details: key === 'exhibitions'
@@ -690,7 +972,7 @@ module.exports = async function handler(req, res) {
             syncMode: String(body.syncMode || 'full').trim().toLowerCase() === 'delta' ? 'delta' : 'full',
             imageMigration: imageMigrationStats
           }
-          : undefined
+          : writeDetails
       });
 
       sendJson(res, 200, {
@@ -711,6 +993,23 @@ module.exports = async function handler(req, res) {
       const clientId = getClientIdFromRequest(req);
       if (!ALLOWED_KEYS.has(key)) {
         sendJson(res, 400, { ok: false, error: 'Invalid key. Allowed: users, exhibitions.' });
+        return;
+      }
+
+      if (key === 'users') {
+        await logStateWriteAttempt({
+          requestId,
+          stateKey: key,
+          action: 'DELETE',
+          decision: 'rejected',
+          reason: 'users-delete-blocked',
+          clientId
+        });
+
+        sendJson(res, 403, {
+          ok: false,
+          error: 'Deleting users state is blocked. Remove accounts through users updates instead.'
+        });
         return;
       }
 

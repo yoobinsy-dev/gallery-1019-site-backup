@@ -231,9 +231,105 @@
     };
   }
 
+  function normalizeUserIdentityPart(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  function getUserIdentity(user) {
+    const id = Number(user?.id);
+    if (Number.isFinite(id) && id > 0) {
+      return `id:${id}`;
+    }
+
+    const username = normalizeUserIdentityPart(user?.username);
+    if (username) {
+      return `username:${username}`;
+    }
+
+    const email = normalizeUserIdentityPart(user?.email);
+    if (email) {
+      return `email:${email}`;
+    }
+
+    const name = normalizeUserIdentityPart(user?.name);
+    if (name) {
+      return `name:${name}`;
+    }
+
+    return '';
+  }
+
+  function buildUsersDelta(previousUsers, nextUsers) {
+    if (!Array.isArray(previousUsers) || !Array.isArray(nextUsers)) {
+      return {
+        changed: Array.isArray(nextUsers) ? nextUsers : [],
+        removedIds: []
+      };
+    }
+
+    const previousByIdentity = new Map();
+    previousUsers.forEach((user) => {
+      if (!user || typeof user !== 'object') return;
+      const identity = getUserIdentity(user);
+      if (!identity || previousByIdentity.has(identity)) return;
+      previousByIdentity.set(identity, user);
+    });
+
+    const nextByIdentity = new Map();
+    const changed = [];
+    nextUsers.forEach((user) => {
+      if (!user || typeof user !== 'object') {
+        changed.push(user);
+        return;
+      }
+
+      const identity = getUserIdentity(user);
+      if (!identity) {
+        changed.push(user);
+        return;
+      }
+
+      nextByIdentity.set(identity, user);
+      const previous = previousByIdentity.get(identity);
+      if (!previous || !isSameValue(previous, user)) {
+        changed.push(user);
+      }
+    });
+
+    const removedIds = [];
+    previousByIdentity.forEach((user, identity) => {
+      if (nextByIdentity.has(identity)) return;
+      const id = Number(user?.id);
+      if (Number.isFinite(id) && id > 0) {
+        removedIds.push(id);
+      }
+    });
+
+    return {
+      changed,
+      removedIds: Array.from(new Set(removedIds))
+    };
+  }
+
   function queuePushWithBaseline(key, nextValue, baselineValue) {
     const normalizedKey = String(key || '').trim();
     if (!normalizedKey) return;
+
+    if (normalizedKey === 'users' && Array.isArray(nextValue) && Array.isArray(baselineValue)) {
+      const stateSignature = buildStateSignature(nextValue);
+      const delta = buildUsersDelta(baselineValue, nextValue);
+
+      if (delta.changed.length === 0 && delta.removedIds.length === 0) {
+        return;
+      }
+
+      schedulePush(normalizedKey, delta.changed, {
+        stateSignature,
+        syncMode: 'delta',
+        removedIds: delta.removedIds
+      });
+      return;
+    }
 
     if (normalizedKey === 'exhibitions' && Array.isArray(nextValue) && Array.isArray(baselineValue)) {
       const transferSafeNext = buildTransferSafeExhibitionsPayload(nextValue);
@@ -696,6 +792,13 @@
     }
 
     const syncMode = options.syncMode === 'delta' ? 'delta' : 'full';
+    const removedIds = key === 'users' && Array.isArray(options.removedIds)
+      ? Array.from(new Set(
+        options.removedIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id) && id > 0)
+      ))
+      : [];
 
     const existing = pendingTimers.get(key);
     if (existing) {
@@ -718,13 +821,24 @@
           ? buildTransferSafeExhibitionsPayload(value)
           : value;
 
+        const requestBody = {
+          key,
+          value: valueForTransfer,
+          baseUpdatedAt,
+          syncMode
+        };
+
+        if (key === 'users') {
+          requestBody.removedIds = removedIds;
+        }
+
         const response = await fetch('/api/state', {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             'x-cloud-client-id': getClientId()
           },
-          body: JSON.stringify({ key, value: valueForTransfer, baseUpdatedAt, syncMode })
+          body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
@@ -765,7 +879,7 @@
       return;
     }
 
-    if (key === 'exhibitions') {
+    if (key === 'exhibitions' || key === 'users') {
       const nextParsed = parseJsonSafe(value);
       const previousParsed = parseJsonSafe(previousRaw);
 
