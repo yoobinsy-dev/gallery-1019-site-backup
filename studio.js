@@ -3695,7 +3695,7 @@
   function ensureWeekOverrideRules(weekStartDate) {
     const weekKey = getBaseWeekKey(weekStartDate || state.weekStart);
     if (!Array.isArray(state.baseWeekOverrides[weekKey])) {
-      state.baseWeekOverrides[weekKey] = cloneBaseRules(state.baseRules);
+      state.baseWeekOverrides[weekKey] = cloneBaseRules(getTemplateRulesForWeek(weekStartDate || state.weekStart));
     }
     return state.baseWeekOverrides[weekKey];
   }
