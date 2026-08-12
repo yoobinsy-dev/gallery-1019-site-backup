@@ -26,6 +26,10 @@ window.addEventListener('cloud-sync:state-applied', (event) => {
   }
 });
 
+window.addEventListener('auth:profile-updated', () => {
+  loadUsers();
+});
+
 function waitForCloudSyncReady(timeoutMs = 4000) {
   const cloudReady = window.cloudSyncReady;
   if (!cloudReady || typeof cloudReady.then !== 'function') {

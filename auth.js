@@ -164,6 +164,331 @@ function normalizeAccountTypeLabel(type) {
   return type ? type.toString().trim() : '';
 }
 
+function ensureProfileEditStyles() {
+  if (document.getElementById('profile-edit-styles')) return;
+
+  const style = document.createElement('style');
+  style.id = 'profile-edit-styles';
+  style.textContent = `
+    .user-pill-actions {
+      display: inline-flex;
+      gap: 8px;
+      margin-left: 10px;
+      align-items: center;
+    }
+
+    .edit-account-btn {
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      color: #111827;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .edit-account-btn:hover {
+      background: #e5e7eb;
+    }
+
+    .profile-edit-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    .profile-edit-modal {
+      width: 100%;
+      max-width: 480px;
+      background: #ffffff;
+      border-radius: 14px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+      overflow: hidden;
+    }
+
+    .profile-edit-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .profile-edit-title {
+      margin: 0;
+      font-size: 18px;
+      color: #111827;
+    }
+
+    .profile-edit-body {
+      padding: 16px 18px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .profile-edit-body label {
+      font-size: 13px;
+      color: #374151;
+      font-weight: 600;
+    }
+
+    .profile-edit-body input {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 9px 10px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+
+    .profile-edit-note {
+      margin: 2px 0 0;
+      color: #6b7280;
+      font-size: 12px;
+    }
+
+    .profile-edit-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 14px 18px 18px;
+    }
+
+    .profile-edit-btn {
+      border: none;
+      border-radius: 8px;
+      padding: 9px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .profile-edit-cancel {
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .profile-edit-save {
+      background: #111827;
+      color: #ffffff;
+    }
+
+    .profile-edit-message {
+      min-height: 18px;
+      font-size: 12px;
+      color: #b91c1c;
+      margin-top: 2px;
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function ensureProfileEditModal() {
+  ensureProfileEditStyles();
+  if (document.getElementById('profile-edit-overlay')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'profile-edit-overlay';
+  overlay.className = 'profile-edit-overlay';
+  overlay.innerHTML = `
+    <div class="profile-edit-modal">
+      <div class="profile-edit-header">
+        <h3 class="profile-edit-title">계정 수정</h3>
+      </div>
+      <div class="profile-edit-body">
+        <label for="profile-edit-name">실명</label>
+        <input id="profile-edit-name" type="text" autocomplete="name">
+
+        <label for="profile-edit-username">사용자명</label>
+        <input id="profile-edit-username" type="text" autocomplete="username">
+
+        <label for="profile-edit-email">이메일</label>
+        <input id="profile-edit-email" type="email" autocomplete="email">
+
+        <label for="profile-edit-phone">전화번호</label>
+        <input id="profile-edit-phone" type="tel" autocomplete="tel">
+
+        <label for="profile-edit-password">새 비밀번호 (선택)</label>
+        <input id="profile-edit-password" type="password" autocomplete="new-password">
+
+        <label for="profile-edit-confirm">새 비밀번호 확인</label>
+        <input id="profile-edit-confirm" type="password" autocomplete="new-password">
+
+        <p class="profile-edit-note">접근 사이트/권한은 여기서 수정할 수 없습니다.</p>
+        <div id="profile-edit-message" class="profile-edit-message"></div>
+      </div>
+      <div class="profile-edit-footer">
+        <button class="profile-edit-btn profile-edit-cancel" onclick="closeProfileEditModal()">취소</button>
+        <button class="profile-edit-btn profile-edit-save" onclick="saveProfileEdit()">저장</button>
+      </div>
+    </div>
+  `;
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeProfileEditModal();
+    }
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function getCurrentUserRecordIndex(users, activeUser) {
+  if (!Array.isArray(users) || !activeUser) return -1;
+
+  const currentId = Number(activeUser.id);
+  if (Number.isFinite(currentId) && currentId > 0) {
+    const byId = users.findIndex((user) => Number(user?.id) === currentId);
+    if (byId !== -1) return byId;
+  }
+
+  const normalizedUsername = normalizeLoginValue(activeUser.username);
+  const normalizedEmail = normalizeLoginValue(activeUser.email);
+  const normalizedPhone = normalizeLoginValue(activeUser.phone);
+  const normalizedName = normalizeLoginValue(activeUser.name);
+
+  return users.findIndex((user) => {
+    if (!user || typeof user !== 'object') return false;
+    return normalizeLoginValue(user.username) === normalizedUsername
+      || normalizeLoginValue(user.email) === normalizedEmail
+      || normalizeLoginValue(user.phone) === normalizedPhone
+      || normalizeLoginValue(user.name) === normalizedName;
+  });
+}
+
+function showProfileEditMessage(message) {
+  const messageEl = document.getElementById('profile-edit-message');
+  if (!messageEl) return;
+  messageEl.textContent = message || '';
+}
+
+function openProfileEditModal() {
+  const activeUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+  if (!activeUser) return;
+
+  ensureProfileEditModal();
+
+  const overlay = document.getElementById('profile-edit-overlay');
+  if (!overlay) return;
+
+  document.getElementById('profile-edit-name').value = activeUser.name || '';
+  document.getElementById('profile-edit-username').value = activeUser.username || '';
+  document.getElementById('profile-edit-email').value = activeUser.email || '';
+  document.getElementById('profile-edit-phone').value = activeUser.phone || '';
+  document.getElementById('profile-edit-password').value = '';
+  document.getElementById('profile-edit-confirm').value = '';
+  showProfileEditMessage('');
+
+  overlay.style.display = 'flex';
+}
+
+function closeProfileEditModal() {
+  const overlay = document.getElementById('profile-edit-overlay');
+  if (overlay) {
+    overlay.style.display = 'none';
+  }
+  showProfileEditMessage('');
+}
+
+function saveProfileEdit() {
+  const activeUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+  if (!activeUser) {
+    showProfileEditMessage('로그인 정보가 없어 수정할 수 없습니다.');
+    return;
+  }
+
+  const users = JSON.parse(localStorage.getItem('users')) || [];
+  const userIndex = getCurrentUserRecordIndex(users, activeUser);
+  if (userIndex === -1) {
+    showProfileEditMessage('사용자 계정을 찾을 수 없습니다.');
+    return;
+  }
+
+  const name = document.getElementById('profile-edit-name').value.trim();
+  const username = document.getElementById('profile-edit-username').value.trim();
+  const email = document.getElementById('profile-edit-email').value.trim();
+  const phone = document.getElementById('profile-edit-phone').value.trim();
+  const newPassword = document.getElementById('profile-edit-password').value.trim();
+  const confirmPassword = document.getElementById('profile-edit-confirm').value.trim();
+
+  if (!name || !username || !email || !phone) {
+    showProfileEditMessage('실명, 사용자명, 이메일, 전화번호를 모두 입력하세요.');
+    return;
+  }
+
+  if (newPassword) {
+    if (newPassword.length < 6) {
+      showProfileEditMessage('비밀번호는 최소 6자 이상이어야 합니다.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      showProfileEditMessage('새 비밀번호가 일치하지 않습니다.');
+      return;
+    }
+  }
+
+  const normalizedName = normalizeLoginValue(name);
+  const normalizedUsername = normalizeLoginValue(username);
+  const duplicateIdentity = users.some((user, index) => {
+    if (!user || typeof user !== 'object') return false;
+    if (index === userIndex) return false;
+    return normalizeLoginValue(user.name) === normalizedName
+      || normalizeLoginValue(user.username) === normalizedUsername;
+  });
+
+  if (duplicateIdentity) {
+    showProfileEditMessage('이미 사용 중인 실명 또는 사용자명입니다.');
+    return;
+  }
+
+  const updatedUser = {
+    ...users[userIndex],
+    name,
+    username,
+    email,
+    phone
+  };
+
+  if (newPassword) {
+    updatedUser.password = newPassword;
+  }
+
+  users[userIndex] = updatedUser;
+
+  const savedUsers = safeSetLocalStorageItem('users', JSON.stringify(users));
+  if (!savedUsers) {
+    showProfileEditMessage('저장 공간이 부족해 계정 수정을 저장하지 못했습니다.');
+    return;
+  }
+
+  currentUser = updatedUser;
+  const savedCurrentUser = safeSetLocalStorageItem('currentUser', JSON.stringify(updatedUser));
+  if (!savedCurrentUser) {
+    showProfileEditMessage('로그인 상태 저장에 실패했습니다. 다시 시도해 주세요.');
+    return;
+  }
+
+  renderGlobalUserInfoBox();
+  closeProfileEditModal();
+
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('auth:profile-updated', {
+      detail: { user: updatedUser }
+    }));
+  }
+}
+
+window.openProfileEditModal = openProfileEditModal;
+window.closeProfileEditModal = closeProfileEditModal;
+window.saveProfileEdit = saveProfileEdit;
+
 function renderGlobalUserInfoBox() {
   const activeUser = JSON.parse(localStorage.getItem('currentUser')) || null;
   const existingBox = document.querySelector('.user-info');
@@ -184,12 +509,28 @@ function renderGlobalUserInfoBox() {
       userDisplay.innerHTML = userLabel;
     }
 
+    let actionWrap = existingBox.querySelector('.user-pill-actions');
+    if (!actionWrap) {
+      actionWrap = document.createElement('span');
+      actionWrap.className = 'user-pill-actions';
+      existingBox.appendChild(actionWrap);
+    }
+
+    let editButton = existingBox.querySelector('.edit-account-btn');
+    if (!editButton) {
+      editButton = document.createElement('button');
+      editButton.className = 'edit-account-btn';
+      editButton.textContent = '계정 수정';
+      actionWrap.appendChild(editButton);
+    }
+    editButton.setAttribute('onclick', 'openProfileEditModal()');
+
     let logoutButton = existingBox.querySelector('.logout-btn');
     if (!logoutButton) {
       logoutButton = document.createElement('button');
       logoutButton.className = 'logout-btn';
       logoutButton.textContent = '로그아웃';
-      existingBox.appendChild(logoutButton);
+      actionWrap.appendChild(logoutButton);
     }
     logoutButton.setAttribute('onclick', 'logout()');
     return;
@@ -199,7 +540,10 @@ function renderGlobalUserInfoBox() {
   userInfoBox.className = 'user-info';
   userInfoBox.innerHTML = `
     <span id="user-display">${userLabel}</span>
-    <button class="logout-btn" onclick="logout()">로그아웃</button>
+    <span class="user-pill-actions">
+      <button class="edit-account-btn" onclick="openProfileEditModal()">계정 수정</button>
+      <button class="logout-btn" onclick="logout()">로그아웃</button>
+    </span>
   `;
   document.body.prepend(userInfoBox);
 }
