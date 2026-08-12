@@ -1,6 +1,8 @@
-const { sendJson, methodNotAllowed } = require('./_lib/http');
+const { createWeakEtag, sendCachedJson, sendJson, methodNotAllowed, writeCacheHeaders } = require('./_lib/http');
 const { query } = require('./_lib/db');
 const { getRecentDecisionCount, getRecentAlerts } = require('./_lib/audit-store');
+
+const HEALTH_CACHE_CONTROL = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -14,7 +16,7 @@ module.exports = async function handler(req, res) {
     const blockedDrops24h = await getRecentDecisionCount(['drop_blocked'], 24 * 60);
     const latestAlerts = await getRecentAlerts(5);
 
-    sendJson(res, 200, {
+    const payload = {
       ok: true,
       service: 'gallery-1019-api',
       timestamp: new Date().toISOString(),
@@ -23,8 +25,15 @@ module.exports = async function handler(req, res) {
         blockedLargeDropsLast24h: blockedDrops24h,
         latestAlerts
       }
+    };
+
+    const etag = createWeakEtag(payload, 'health');
+    sendCachedJson(req, res, 200, payload, {
+      cacheControl: HEALTH_CACHE_CONTROL,
+      etag
     });
   } catch (error) {
+    writeCacheHeaders(res, 'no-store');
     sendJson(res, 500, {
       ok: false,
       error: error.message || 'Database connection failed.'

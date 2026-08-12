@@ -30,6 +30,7 @@
           <label for="student-tuition-basis">수강료 기준</label>
           <select id="student-tuition-basis" aria-label="수강료 기준">
             <option value="">선택</option>
+            <option value="월초">월초</option>
             <option value="1회">1회</option>
             <option value="2회">2회</option>
             <option value="3회">3회</option>
@@ -131,6 +132,7 @@
           <label for="edit-student-tuition-basis">수강료 기준</label>
           <select id="edit-student-tuition-basis">
             <option value="">선택</option>
+            <option value="월초">월초</option>
             <option value="1회">1회</option>
             <option value="2회">2회</option>
             <option value="3회">3회</option>
@@ -146,6 +148,45 @@
       <div class="modal-actions">
         <button type="button" class="students-primary-btn" id="student-edit-save-btn">저장</button>
         <button type="button" class="students-secondary-btn" id="student-edit-cancel-btn">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="students-modal" id="student-detail-modal" aria-hidden="true">
+    <div class="students-modal-content students-modal-detail">
+      <div class="students-detail-header-row">
+        <h2 id="student-detail-title">상세 기록</h2>
+      </div>
+
+      <div class="students-detail-cards">
+        <section class="students-detail-card students-detail-card-wide">
+          <h3>수업 기록 (결제일 기준)</h3>
+          <table class="students-detail-table" id="student-detail-payment-class-table">
+            <thead>
+              <tr>
+                <th>결제일</th>
+                <th>수업일</th>
+              </tr>
+            </thead>
+            <tbody id="student-detail-payment-class-body"></tbody>
+          </table>
+        </section>
+
+        <section class="students-detail-card">
+          <h3>기타 이용</h3>
+          <table class="students-detail-table students-detail-table-single" id="student-detail-other-table">
+            <thead>
+              <tr>
+                <th>날짜</th>
+              </tr>
+            </thead>
+            <tbody id="student-detail-other-body"></tbody>
+          </table>
+        </section>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="students-secondary-btn" id="student-detail-close-btn">닫기</button>
       </div>
     </div>
   </div>

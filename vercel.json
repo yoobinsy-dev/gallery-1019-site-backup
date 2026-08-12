@@ -1,4 +1,114 @@
 {
+	"headers": [
+		{
+			"source": "/(.*\\.html)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=0, s-maxage=60, stale-while-revalidate=600"
+				}
+			]
+		},
+		{
+			"source": "/(.*\\.js)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400"
+				}
+			]
+		},
+		{
+			"source": "/(.*\\.css)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400"
+				}
+			]
+		},
+		{
+			"source": "/(.*\\.png)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800"
+				}
+			]
+		},
+		{
+			"source": "/(.*\\.jpg)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800"
+				}
+			]
+		},
+		{
+			"source": "/(.*\\.jpeg)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800"
+				}
+			]
+		},
+		{
+			"source": "/(.*\\.gif)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800"
+				}
+			]
+		},
+		{
+			"source": "/(.*\\.webp)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800"
+				}
+			]
+		},
+		{
+			"source": "/(.*\\.svg)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800"
+				}
+			]
+		},
+		{
+			"source": "/(.*\\.ico)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800"
+				}
+			]
+		},
+		{
+			"source": "/(.*\\.woff)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800"
+				}
+			]
+		},
+		{
+			"source": "/(.*\\.woff2)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800"
+				}
+			]
+		}
+	],
 	"crons": [
 		{
 			"path": "/api/snapshots-cron",

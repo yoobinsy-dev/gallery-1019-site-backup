@@ -3347,6 +3347,8 @@ function addWorkToSalesBuffer(work) {
     manualNumber: work.manualNumber || '',
     category: work.category || '',
     photoName: work.photoName || '',
+    photoUrl: work.photoUrl || '',
+    photoPreviewUrl: work.photoPreviewUrl || '',
     photoDataUrl: work.photoDataUrl || '',
     photoPreviewDataUrl: work.photoPreviewDataUrl || getPhotoPreviewDataUrl(work),
     title: work.title || '',
@@ -3381,6 +3383,8 @@ function addMadeToOrderWorkToSalesBuffer(work) {
     manualNumber: work.manualNumber || '',
     category: work.category || '',
     photoName: work.photoName || '',
+    photoUrl: work.photoUrl || '',
+    photoPreviewUrl: work.photoPreviewUrl || '',
     photoDataUrl: work.photoDataUrl || '',
     photoPreviewDataUrl: work.photoPreviewDataUrl || getPhotoPreviewDataUrl(work),
     title: work.title || '',
@@ -3577,6 +3581,8 @@ function confirmSalesAddModal() {
       manualNumber: item.manualNumber,
       category: item.category || '',
       photoName: item.photoName,
+      photoUrl: item.photoUrl || '',
+      photoPreviewUrl: item.photoPreviewUrl || '',
       photoDataUrl: item.photoDataUrl,
       photoPreviewDataUrl: item.photoPreviewDataUrl || getPhotoPreviewDataUrl(item),
       title: item.title,
@@ -3843,11 +3849,35 @@ function safeCertificateFileName(baseTitle) {
 }
 
 function getPhotoPreviewDataUrl(item) {
+  const pendingPreview = (item?.pendingPhotoPreviewDataUrl || '').toString().trim();
+  if (pendingPreview) return pendingPreview;
+
+  const pendingFull = (item?.pendingPhotoDataUrl || '').toString().trim();
+  if (pendingFull) return pendingFull;
+
+  const previewUrl = (item?.photoPreviewUrl || '').toString().trim();
+  if (previewUrl) return previewUrl;
+
+  const fullUrl = (item?.photoUrl || '').toString().trim();
+  if (fullUrl) return fullUrl;
+
   return (item?.photoPreviewDataUrl || item?.photoDataUrl || '').toString().trim();
 }
 
+function getPhotoDataUrl(item) {
+  const pendingFull = (item?.pendingPhotoDataUrl || '').toString().trim();
+  if (pendingFull) return pendingFull;
+
+  const fullUrl = (item?.photoUrl || '').toString().trim();
+  if (fullUrl) return fullUrl;
+  return (item?.photoDataUrl || '').toString().trim();
+}
+
 function getCertificateImageDataUrl(sold, work) {
-  return getPhotoPreviewDataUrl(work) || getPhotoPreviewDataUrl(sold);
+  return getPhotoPreviewDataUrl(work)
+    || getPhotoDataUrl(work)
+    || getPhotoPreviewDataUrl(sold)
+    || getPhotoDataUrl(sold);
 }
 
 function dataUrlToUint8Array(dataUrl) {
@@ -5056,6 +5086,8 @@ function handleSoldWorkSearchChange(soldId, field, value) {
     sold.category = match.category || '';
     sold.title = match.title || '';
     sold.photoName = match.photoName || '';
+    sold.photoUrl = match.photoUrl || '';
+    sold.photoPreviewUrl = match.photoPreviewUrl || match.photoUrl || '';
     sold.photoDataUrl = match.photoDataUrl || '';
     sold.photoPreviewDataUrl = match.photoPreviewDataUrl || getPhotoPreviewDataUrl(match);
     sold.author = match.author || '';
@@ -5066,6 +5098,8 @@ function handleSoldWorkSearchChange(soldId, field, value) {
     sold.itemType = '작품';
     sold.category = '';
     sold.photoName = '';
+    sold.photoUrl = '';
+    sold.photoPreviewUrl = '';
     sold.photoDataUrl = '';
     sold.photoPreviewDataUrl = '';
     sold.author = '';
@@ -6596,6 +6630,10 @@ function addWorkRow() {
     createdByUserId: getCurrentUserId(),
     manualNumber: '',
     photoName: '',
+    photoUrl: '',
+    photoPreviewUrl: '',
+    photoPath: '',
+    photoPreviewPath: '',
     photoDataUrl: '',
     photoPreviewDataUrl: '',
     photoMimeType: '',
@@ -6648,6 +6686,10 @@ function duplicateWorkRow(workId) {
     createdByUserId: getCurrentUserId(),
     manualNumber: source.manualNumber || '',
     photoName: source.photoName || '',
+    photoUrl: source.photoUrl || '',
+    photoPreviewUrl: source.photoPreviewUrl || '',
+    photoPath: source.photoPath || '',
+    photoPreviewPath: source.photoPreviewPath || '',
     photoDataUrl: source.photoDataUrl || '',
     photoPreviewDataUrl: source.photoPreviewDataUrl || getPhotoPreviewDataUrl(source),
     photoMimeType: source.photoMimeType || '',
@@ -6809,6 +6851,8 @@ function syncWorkToSalesRecords(work) {
     sold.author = work.author || sold.author;
     sold.price = work.price || sold.price;
     sold.photoName = work.photoName || sold.photoName;
+    sold.photoUrl = work.photoUrl || sold.photoUrl;
+    sold.photoPreviewUrl = work.photoPreviewUrl || work.photoUrl || sold.photoPreviewUrl;
     sold.photoDataUrl = work.photoDataUrl || sold.photoDataUrl;
     sold.photoPreviewDataUrl = work.photoPreviewDataUrl || getPhotoPreviewDataUrl(work) || sold.photoPreviewDataUrl;
     changed = true;
@@ -7097,6 +7141,252 @@ function handleWorkChange(workId, field, value) {
 
 const MAX_PHOTO_PREVIEW_DATA_URL_LENGTH = 360000;
 const PHOTO_PREVIEW_MAX_DIMENSION = 1280;
+const PHOTO_UPLOAD_ENDPOINT = '/api/upload';
+const PHOTO_UPLOAD_MAX_RETRIES = 1;
+const pendingPhotoUploadTokens = new Map();
+const TRANSIENT_WORK_PHOTO_FIELDS = ['pendingPhotoDataUrl', 'pendingPhotoPreviewDataUrl'];
+
+function canUseRemoteUploadApi() {
+  return typeof window !== 'undefined'
+    && window.location
+    && !String(window.location.protocol || '').startsWith('file');
+}
+
+function getExtensionFromMimeType(mimeType) {
+  const normalized = (mimeType || '').toString().toLowerCase();
+  if (normalized.includes('jpeg') || normalized.includes('jpg')) return 'jpg';
+  if (normalized.includes('png')) return 'png';
+  if (normalized.includes('webp')) return 'webp';
+  if (normalized.includes('gif')) return 'gif';
+  return 'bin';
+}
+
+function buildPhotoUploadFileName(baseName, suffix, mimeType) {
+  const stem = (baseName || 'work-image')
+    .toString()
+    .trim()
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_');
+  const ext = getExtensionFromMimeType(mimeType);
+  return `${stem || 'work-image'}-${suffix}.${ext}`;
+}
+
+function parseDataUrlMimeType(dataUrl) {
+  const match = String(dataUrl || '').match(/^data:([^;]+);base64,/i);
+  return match ? match[1] : '';
+}
+
+function snapshotWorkPhotoFields(work) {
+  if (!work || typeof work !== 'object') return null;
+
+  return {
+    photoName: work.photoName || '',
+    photoUrl: work.photoUrl || '',
+    photoPreviewUrl: work.photoPreviewUrl || '',
+    photoPath: work.photoPath || '',
+    photoPreviewPath: work.photoPreviewPath || '',
+    photoDataUrl: work.photoDataUrl || '',
+    photoPreviewDataUrl: work.photoPreviewDataUrl || '',
+    photoMimeType: work.photoMimeType || '',
+    photoByteSize: Number.isFinite(work.photoByteSize) ? work.photoByteSize : 0,
+    pendingPhotoDataUrl: work.pendingPhotoDataUrl || '',
+    pendingPhotoPreviewDataUrl: work.pendingPhotoPreviewDataUrl || ''
+  };
+}
+
+function applyWorkPhotoFields(work, snapshot) {
+  if (!work || typeof work !== 'object' || !snapshot) return;
+
+  work.photoName = snapshot.photoName || '';
+  work.photoUrl = snapshot.photoUrl || '';
+  work.photoPreviewUrl = snapshot.photoPreviewUrl || '';
+  work.photoPath = snapshot.photoPath || '';
+  work.photoPreviewPath = snapshot.photoPreviewPath || '';
+  work.photoDataUrl = snapshot.photoDataUrl || '';
+  work.photoPreviewDataUrl = snapshot.photoPreviewDataUrl || '';
+  work.photoMimeType = snapshot.photoMimeType || '';
+  work.photoByteSize = Number.isFinite(snapshot.photoByteSize) ? snapshot.photoByteSize : 0;
+  work.pendingPhotoDataUrl = snapshot.pendingPhotoDataUrl || '';
+  work.pendingPhotoPreviewDataUrl = snapshot.pendingPhotoPreviewDataUrl || '';
+}
+
+function clearPendingWorkPhotoFields(work) {
+  if (!work || typeof work !== 'object') return;
+  TRANSIENT_WORK_PHOTO_FIELDS.forEach((field) => {
+    if (field in work) {
+      work[field] = '';
+    }
+  });
+}
+
+async function verifyUploadedImageFile(uploadedFile) {
+  const url = (uploadedFile?.url || '').toString().trim();
+  if (!url) {
+    return { ok: false, status: 0, contentType: '', isImage: false };
+  }
+
+  try {
+    const response = await fetch(url, { method: 'GET' });
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    return {
+      ok: response.ok && contentType.startsWith('image/'),
+      status: response.status,
+      contentType,
+      isImage: contentType.startsWith('image/')
+    };
+  } catch (error) {
+    return { ok: false, status: 0, contentType: '', isImage: false };
+  }
+}
+
+async function uploadImageDataUrl(dataUrl, fileName, retryCount = 0) {
+  const source = (dataUrl || '').toString().trim();
+  if (!source || !canUseRemoteUploadApi()) return null;
+
+  try {
+    const response = await fetch(PHOTO_UPLOAD_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dataUrl: source,
+        filename: fileName
+      })
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok || !payload?.file?.url) {
+      throw new Error(payload?.error || 'upload-failed');
+    }
+
+    return payload.file;
+  } catch (error) {
+    if (retryCount < PHOTO_UPLOAD_MAX_RETRIES) {
+      return uploadImageDataUrl(source, fileName, retryCount + 1);
+    }
+    return null;
+  }
+}
+
+async function persistWorkPhotoUrls(workId, options = {}) {
+  if (!canUseRemoteUploadApi()) {
+    return { ok: false, reason: 'remote-upload-disabled' };
+  }
+
+  const exhibition = getCurrentExhibition();
+  const work = Array.isArray(exhibition.works)
+    ? exhibition.works.find((item) => item.id === workId)
+    : null;
+  if (!work) {
+    return { ok: false, reason: 'work-not-found' };
+  }
+
+  const replaceExisting = options.replaceExisting !== false;
+  const fullDataUrl = (options.fullDataUrl || work.pendingPhotoDataUrl || work.photoDataUrl || '').toString().trim();
+  const previewDataUrl = (options.previewDataUrl || work.pendingPhotoPreviewDataUrl || work.photoPreviewDataUrl || '').toString().trim();
+  if (!fullDataUrl && !previewDataUrl) {
+    return { ok: false, reason: 'missing-data-url' };
+  }
+
+  const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  pendingPhotoUploadTokens.set(workId, token);
+
+  const baseName = work.photoName || options.fileName || `work-${workId}`;
+  const previewMimeType = parseDataUrlMimeType(previewDataUrl) || parseDataUrlMimeType(fullDataUrl) || 'image/webp';
+  const fullMimeType = parseDataUrlMimeType(fullDataUrl) || previewMimeType;
+
+  const shouldUploadPreview = Boolean(previewDataUrl) && (replaceExisting || !work.photoPreviewUrl);
+  const shouldUploadFull = Boolean(fullDataUrl) && (replaceExisting || !work.photoUrl);
+
+  if (!shouldUploadPreview && !shouldUploadFull) {
+    clearPendingWorkPhotoFields(work);
+    return { ok: true, skipped: true };
+  }
+
+  const previewUpload = shouldUploadPreview
+    ? await uploadImageDataUrl(previewDataUrl, buildPhotoUploadFileName(baseName, 'preview', previewMimeType))
+    : null;
+
+  const fullUpload = shouldUploadFull
+    ? await uploadImageDataUrl(fullDataUrl, buildPhotoUploadFileName(baseName, 'full', fullMimeType))
+    : null;
+
+  if (shouldUploadPreview && !previewUpload?.url) {
+    return { ok: false, reason: 'preview-upload-failed' };
+  }
+
+  if (shouldUploadFull && !fullUpload?.url) {
+    return { ok: false, reason: 'full-upload-failed' };
+  }
+
+  const previewValidation = previewUpload ? await verifyUploadedImageFile(previewUpload) : null;
+  const fullValidation = fullUpload ? await verifyUploadedImageFile(fullUpload) : null;
+
+  if (previewUpload && !previewValidation?.ok) {
+    return {
+      ok: false,
+      reason: 'preview-upload-validation-failed',
+      details: previewValidation || null
+    };
+  }
+
+  if (fullUpload && !fullValidation?.ok) {
+    return {
+      ok: false,
+      reason: 'full-upload-validation-failed',
+      details: fullValidation || null
+    };
+  }
+
+  if (pendingPhotoUploadTokens.get(workId) !== token) {
+    return { ok: false, reason: 'upload-superseded' };
+  }
+
+  const latestExhibition = getCurrentExhibition();
+  const latestWork = Array.isArray(latestExhibition.works)
+    ? latestExhibition.works.find((item) => item.id === workId)
+    : null;
+  if (!latestWork) {
+    return { ok: false, reason: 'latest-work-not-found' };
+  }
+
+  let changed = false;
+  if (previewUpload?.url) {
+    latestWork.photoPreviewUrl = previewUpload.url;
+    latestWork.photoPreviewPath = previewUpload.pathname || '';
+    changed = true;
+  }
+
+  if (fullUpload?.url) {
+    latestWork.photoUrl = fullUpload.url;
+    latestWork.photoPath = fullUpload.pathname || '';
+    changed = true;
+  }
+
+  if (latestWork.photoPreviewDataUrl || latestWork.photoDataUrl || latestWork.pendingPhotoPreviewDataUrl || latestWork.pendingPhotoDataUrl) {
+    latestWork.photoPreviewDataUrl = '';
+    latestWork.photoDataUrl = '';
+    clearPendingWorkPhotoFields(latestWork);
+    changed = true;
+  }
+
+  if (!changed) {
+    return { ok: true, skipped: true };
+  }
+
+  if (exhibitionDetailState.exhibition) {
+    exhibitionDetailState.exhibition.works = latestExhibition.works;
+  }
+  saveExhibition();
+  renderWorkRows();
+
+  return {
+    ok: true,
+    previewUpload,
+    fullUpload,
+    previewValidation,
+    fullValidation
+  };
+}
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -7228,10 +7518,17 @@ async function handleWorkPhotoChange(workId, event) {
 
   ensureWorkEditUndoSnapshot(workId);
 
+  const previousPhotoSnapshot = snapshotWorkPhotoFields(work);
+
   if (!file) {
     work.photoName = '';
+    work.photoUrl = '';
+    work.photoPreviewUrl = '';
+    work.photoPath = '';
+    work.photoPreviewPath = '';
     work.photoDataUrl = '';
     work.photoPreviewDataUrl = '';
+    clearPendingWorkPhotoFields(work);
     work.photoMimeType = '';
     work.photoByteSize = 0;
     if (exhibitionDetailState.exhibition) {
@@ -7245,19 +7542,45 @@ async function handleWorkPhotoChange(workId, event) {
   try {
     const compactPhoto = await buildCompactPhotoPreview(file);
     const lightweightPreview = await buildLightweightPhotoPreview(compactPhoto.dataUrl);
+
     work.photoName = file.name;
-    work.photoDataUrl = compactPhoto.dataUrl;
-    work.photoPreviewDataUrl = lightweightPreview;
+    work.pendingPhotoDataUrl = compactPhoto.dataUrl;
+    work.pendingPhotoPreviewDataUrl = lightweightPreview;
     work.photoMimeType = compactPhoto.mimeType;
     work.photoByteSize = compactPhoto.byteSize;
+
     if (exhibitionDetailState.exhibition) {
       exhibitionDetailState.exhibition.works = exhibition.works;
     }
-    saveExhibition();
     renderWorkRows();
+
+    const persisted = await persistWorkPhotoUrls(workId, {
+      fullDataUrl: compactPhoto.dataUrl,
+      previewDataUrl: lightweightPreview,
+      fileName: file.name,
+      replaceExisting: true
+    });
+
+    if (!persisted?.ok) {
+      if (persisted?.reason === 'upload-superseded') {
+        return;
+      }
+      applyWorkPhotoFields(work, previousPhotoSnapshot);
+      if (exhibitionDetailState.exhibition) {
+        exhibitionDetailState.exhibition.works = exhibition.works;
+      }
+      renderWorkRows();
+      alert('이미지 업로드에 실패했습니다. 기존 이미지 상태로 복원되었습니다. 네트워크를 확인한 뒤 다시 시도해주세요.');
+      return;
+    }
   } catch (error) {
     console.error('Failed to process photo preview:', error);
+    applyWorkPhotoFields(work, previousPhotoSnapshot);
+    if (exhibitionDetailState.exhibition) {
+      exhibitionDetailState.exhibition.works = exhibition.works;
+    }
     renderWorkRows();
+    alert('이미지 처리 중 오류가 발생했습니다. 기존 이미지 상태를 유지합니다.');
   }
 }
 
@@ -8229,6 +8552,24 @@ function filterWorks(works) {
   });
 }
 
+function stripTransientPhotoUploadFieldsFromItem(item) {
+  if (!item || typeof item !== 'object') return;
+  TRANSIENT_WORK_PHOTO_FIELDS.forEach((field) => {
+    if (field in item) {
+      delete item[field];
+    }
+  });
+}
+
+function stripTransientPhotoUploadFieldsFromExhibition(exhibition) {
+  if (!exhibition || typeof exhibition !== 'object') return;
+
+  ['works', 'artWorks', 'goods', 'soldWorks', 'artSoldWorks', 'soldGoods'].forEach((field) => {
+    const list = Array.isArray(exhibition[field]) ? exhibition[field] : [];
+    list.forEach((item) => stripTransientPhotoUploadFieldsFromItem(item));
+  });
+}
+
 function saveExhibition() {
   const exhibitions = JSON.parse(localStorage.getItem('exhibitions')) || [];
   const exhibition = exhibitionDetailState.exhibition || getCurrentExhibition();
@@ -8253,6 +8594,7 @@ function saveExhibition() {
   }
 
   const storageCopy = JSON.parse(JSON.stringify(exhibition));
+  stripTransientPhotoUploadFieldsFromExhibition(storageCopy);
   storageCopy.works = Array.isArray(storageCopy.artWorks) ? storageCopy.artWorks : [];
   storageCopy.soldWorks = Array.isArray(storageCopy.artSoldWorks) ? storageCopy.artSoldWorks : [];
 

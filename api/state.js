@@ -1,6 +1,8 @@
 const { sendJson, methodNotAllowed, readJsonBody } = require('./_lib/http');
-const { getStateMap, getStateMapWithMeta, setStateValue, deleteStateValue } = require('./_lib/state-store');
+const { createHash } = require('crypto');
+const { getStateMap, getStateMetaMap, getStateMapWithMeta, setStateValue, deleteStateValue } = require('./_lib/state-store');
 const { logStateWriteAttempt, recordAlert, maybeTriggerConflictSpikeAlert } = require('./_lib/audit-store');
+const { buildTransferSafeExhibitions, migrateExhibitionImageReferences } = require('./_lib/exhibition-image-refs');
 
 const ALLOWED_KEYS = new Set(['users', 'exhibitions']);
 const HARD_DROP_MIN_PREVIOUS_TOTAL = 20;
@@ -47,6 +49,9 @@ function getInventoryCount(exhibition) {
 function hasPreviewFields(item) {
   if (!item || typeof item !== 'object') return false;
   return Boolean(
+    (typeof item.photoPreviewUrl === 'string' && item.photoPreviewUrl.trim())
+    || (typeof item.photoUrl === 'string' && item.photoUrl.trim())
+    ||
     (typeof item.photoPreviewDataUrl === 'string' && item.photoPreviewDataUrl.trim())
     || (typeof item.photoDataUrl === 'string' && item.photoDataUrl.trim())
   );
@@ -72,6 +77,31 @@ function mergeItemPreviewFields(baseItem, incomingItem) {
   if (!baseItem || typeof baseItem !== 'object') return incomingItem;
 
   const merged = { ...incomingItem };
+
+  if ((!merged.photoPreviewUrl || !String(merged.photoPreviewUrl).trim())
+    && typeof baseItem.photoPreviewUrl === 'string'
+    && baseItem.photoPreviewUrl.trim()) {
+    merged.photoPreviewUrl = baseItem.photoPreviewUrl;
+  }
+
+  if ((!merged.photoUrl || !String(merged.photoUrl).trim())
+    && typeof baseItem.photoUrl === 'string'
+    && baseItem.photoUrl.trim()) {
+    merged.photoUrl = baseItem.photoUrl;
+  }
+
+  if ((!merged.photoPreviewDataUrl || !String(merged.photoPreviewDataUrl).trim())
+    && typeof baseItem.photoPreviewDataUrl === 'string'
+    && baseItem.photoPreviewDataUrl.trim()) {
+    merged.photoPreviewDataUrl = baseItem.photoPreviewDataUrl;
+  }
+
+  if ((!merged.photoDataUrl || !String(merged.photoDataUrl).trim())
+    && typeof baseItem.photoDataUrl === 'string'
+    && baseItem.photoDataUrl.trim()) {
+    merged.photoDataUrl = baseItem.photoDataUrl;
+  }
+
   if (!hasPreviewFields(incomingItem) && hasPreviewFields(baseItem)) {
     if ((!merged.photoPreviewDataUrl || !merged.photoPreviewDataUrl.trim())
       && typeof baseItem.photoPreviewDataUrl === 'string') {
@@ -129,8 +159,11 @@ function hasExplicitInventoryClearMarker(exhibition) {
   );
 }
 
-function detectLargeUnexpectedInventoryDrop(currentValue, incomingValue) {
+function detectLargeUnexpectedInventoryDrop(currentValue, incomingValue, options = {}) {
   if (!Array.isArray(currentValue) || !Array.isArray(incomingValue)) return null;
+
+  const onlyTouchedIds = options.onlyTouchedIds instanceof Set ? options.onlyTouchedIds : null;
+  const treatMissingAsZero = options.treatMissingAsZero !== false;
 
   const incomingById = new Map(
     incomingValue
@@ -141,11 +174,13 @@ function detectLargeUnexpectedInventoryDrop(currentValue, incomingValue) {
   for (const current of currentValue) {
     const id = Number(current?.id);
     if (!Number.isFinite(id) || id <= 0) continue;
+    if (onlyTouchedIds && !onlyTouchedIds.has(id)) continue;
 
     const previousCount = getInventoryCount(current);
     if (previousCount < HARD_DROP_MIN_PREVIOUS_TOTAL) continue;
 
     const incoming = incomingById.get(id);
+    if (!incoming && !treatMissingAsZero) continue;
     const nextCount = getInventoryCount(incoming);
     const dropped = previousCount - nextCount;
 
@@ -292,12 +327,121 @@ function sanitizeRequestedKeys(raw) {
   return parsed.length > 0 ? parsed : ['users', 'exhibitions'];
 }
 
+function buildExhibitionsSummary(exhibitions) {
+  if (!Array.isArray(exhibitions)) return [];
+
+  return exhibitions.map((exhibition) => {
+    if (!exhibition || typeof exhibition !== 'object') return exhibition;
+    return {
+      id: exhibition.id,
+      title: exhibition.title,
+      startDate: exhibition.startDate,
+      endDate: exhibition.endDate,
+      type: exhibition.type,
+      participants: Array.isArray(exhibition.participants) ? exhibition.participants : [],
+      staff: exhibition.staff || { planners: [], artists: [], staffs: [] },
+      active: Boolean(exhibition.active),
+      createdAt: exhibition.createdAt || null,
+      updatedAt: exhibition.updatedAt || null
+    };
+  });
+}
+
+function buildTransferSafeStateData(data, options = {}) {
+  const view = String(options.view || '').trim().toLowerCase();
+  if (!data || typeof data !== 'object') {
+    return {
+      data,
+      stats: null
+    };
+  }
+
+  if (!Array.isArray(data.exhibitions)) {
+    return {
+      data,
+      stats: null
+    };
+  }
+
+  const transferSafe = buildTransferSafeExhibitions(data.exhibitions);
+  const nextData = { ...data, exhibitions: transferSafe.exhibitions };
+  if (view === 'summary') {
+    nextData.exhibitions = buildExhibitionsSummary(nextData.exhibitions);
+  }
+
+  return {
+    data: nextData,
+    stats: transferSafe.stats
+  };
+}
+
+function normalizeStateMeta(keys, rawMeta) {
+  const normalized = {};
+  keys.forEach((key) => {
+    normalized[key] = {
+      updatedAt: rawMeta?.[key]?.updatedAt || null
+    };
+  });
+  return normalized;
+}
+
+function buildStateEtag(keys, meta) {
+  const fingerprint = keys
+    .map((key) => `${key}:${meta?.[key]?.updatedAt || 'null'}`)
+    .join('|');
+  const digest = createHash('sha1').update(fingerprint).digest('hex');
+  return `W/"state-${digest}"`;
+}
+
+function requestHasMatchingEtag(ifNoneMatchHeader, etag) {
+  if (!ifNoneMatchHeader || !etag) return false;
+  const normalized = String(ifNoneMatchHeader)
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return normalized.includes('*') || normalized.includes(etag);
+}
+
 module.exports = async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const keys = sanitizeRequestedKeys(req.query.keys);
-      const { data, meta } = await getStateMapWithMeta(keys);
-      sendJson(res, 200, { ok: true, data, meta });
+      const view = String(req.query.view || '').trim().toLowerCase();
+      const rawMeta = await getStateMetaMap(keys);
+      const meta = normalizeStateMeta(keys, rawMeta);
+      const etag = buildStateEtag(keys, meta);
+
+      res.setHeader('ETag', etag);
+      res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+
+      if (requestHasMatchingEtag(req.headers?.['if-none-match'], etag)) {
+        res.statusCode = 304;
+        res.end();
+        return;
+      }
+
+      const data = await getStateMap(keys);
+      const transferSafe = buildTransferSafeStateData(data, { view });
+      const responsePayload = {
+        ok: true,
+        data: transferSafe.data,
+        meta
+      };
+
+      const responseBytes = Buffer.byteLength(JSON.stringify(responsePayload), 'utf8');
+      res.setHeader('X-State-Response-Bytes', String(responseBytes));
+
+      if (Array.isArray(transferSafe.data?.exhibitions)) {
+        console.log('[api/state:get]', {
+          keys,
+          view: view || 'full',
+          responseBytes,
+          exhibitionCount: transferSafe.data.exhibitions.length,
+          transferStats: transferSafe.stats || null
+        });
+      }
+
+      sendJson(res, 200, responsePayload);
       return;
     }
 
@@ -368,14 +512,54 @@ module.exports = async function handler(req, res) {
 
       let valueToPersist = body.value;
       let mergedOnConflict = false;
+      let imageMigrationStats = null;
 
       if (key === 'exhibitions') {
         const existingMap = await getStateMap(['exhibitions']);
         const currentExhibitions = Array.isArray(existingMap.exhibitions) ? existingMap.exhibitions : [];
+        const syncMode = String(body.syncMode || 'full').trim().toLowerCase() === 'delta' ? 'delta' : 'full';
         const incomingExhibitions = Array.isArray(body.value) ? body.value : [];
         const staleConflict = isStaleComparedToServer(baseUpdatedAt, serverUpdatedAt);
 
-        const blockedDrop = detectLargeUnexpectedInventoryDrop(currentExhibitions, incomingExhibitions);
+        if (syncMode === 'delta' && incomingExhibitions.length === 0) {
+          await logStateWriteAttempt({
+            requestId,
+            stateKey: key,
+            action: 'PUT',
+            decision: 'accepted',
+            reason: 'delta-noop',
+            baseUpdatedAt,
+            serverUpdatedAt,
+            incomingCount: 0,
+            serverCount: currentExhibitions.length,
+            mergedCount: currentExhibitions.length,
+            clientId,
+            details: { syncMode }
+          });
+
+          sendJson(res, 200, {
+            ok: true,
+            meta: {
+              key,
+              updatedAt: serverUpdatedAt || null
+            },
+            mergedOnConflict: false
+          });
+          return;
+        }
+
+        const touchedIds = syncMode === 'delta'
+          ? new Set(
+            incomingExhibitions
+              .map((item) => Number(item?.id))
+              .filter((id) => Number.isFinite(id) && id > 0)
+          )
+          : null;
+
+        const blockedDrop = detectLargeUnexpectedInventoryDrop(currentExhibitions, incomingExhibitions, {
+          onlyTouchedIds: touchedIds,
+          treatMissingAsZero: syncMode !== 'delta'
+        });
         if (blockedDrop) {
           await logStateWriteAttempt({
             requestId,
@@ -389,7 +573,10 @@ module.exports = async function handler(req, res) {
             serverCount: currentExhibitions.length,
             mergedCount: currentExhibitions.length,
             clientId,
-            details: blockedDrop
+            details: {
+              ...blockedDrop,
+              syncMode
+            }
           });
 
           await recordAlert({
@@ -409,8 +596,15 @@ module.exports = async function handler(req, res) {
 
         mergedOnConflict = staleConflict;
         valueToPersist = staleConflict
-          ? mergeExhibitionsStatePreferServerOnConflict(existingMap.exhibitions, body.value)
-          : mergeExhibitionsState(existingMap.exhibitions, body.value);
+            ? mergeExhibitionsStatePreferServerOnConflict(currentExhibitions, incomingExhibitions)
+            : mergeExhibitionsState(currentExhibitions, incomingExhibitions);
+
+        const configuredMaxUploads = Number(process.env.EXHIBITION_IMAGE_MIGRATION_MAX_UPLOADS);
+        const migration = await migrateExhibitionImageReferences(valueToPersist, {
+          maxUploads: Number.isFinite(configuredMaxUploads) ? configuredMaxUploads : 0
+        });
+        valueToPersist = migration.exhibitions;
+        imageMigrationStats = migration.stats;
       }
 
       const updatedAt = await setStateValue(key, valueToPersist);
@@ -426,7 +620,13 @@ module.exports = async function handler(req, res) {
         incomingCount: Array.isArray(body.value) ? body.value.length : null,
         serverCount: key === 'exhibitions' && Array.isArray(valueToPersist) ? valueToPersist.length : null,
         mergedCount: Array.isArray(valueToPersist) ? valueToPersist.length : null,
-        clientId
+        clientId,
+        details: key === 'exhibitions'
+          ? {
+            syncMode: String(body.syncMode || 'full').trim().toLowerCase() === 'delta' ? 'delta' : 'full',
+            imageMigration: imageMigrationStats
+          }
+          : undefined
       });
 
       sendJson(res, 200, {
@@ -435,7 +635,8 @@ module.exports = async function handler(req, res) {
           key,
           updatedAt
         },
-        mergedOnConflict
+        mergedOnConflict,
+        imageMigration: imageMigrationStats
       });
       return;
     }

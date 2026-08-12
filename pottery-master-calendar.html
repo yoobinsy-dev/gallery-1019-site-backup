@@ -218,40 +218,94 @@
   <div class="studio-modal" id="base-modal" aria-hidden="true">
     <div class="studio-modal-content studio-modal-wide">
       <h2>베이스 시간표 수정</h2>
-      <div class="form-row">
-        <label for="base-type">유형</label>
-        <select id="base-type">
-          <option value="">유형 선택</option>
-          <option value="수업시간">수업시간</option>
-          <option value="개인작업 시간">개인작업 시간</option>
-          <option value="이용 불가">이용 불가</option>
-        </select>
+      <div class="base-create-actions">
+        <button type="button" class="studio-primary-btn" id="base-add-block-btn">+ 블록 추가</button>
       </div>
 
-      <div class="form-row" id="base-class-row">
-        <label for="base-class-name">수업명</label>
-        <select id="base-class-name">
-          <option value="">수업명 선택</option>
-          <option value="성인 레귤러">성인 레귤러</option>
-          <option value="성인 비기너">성인 비기너</option>
-          <option value="키즈 프로그램">키즈 프로그램</option>
-          <option value="핸드빌딩 클래스">핸드빌딩 클래스</option>
-          <option value="English-Only Class">English-Only Class</option>
-        </select>
+      <div id="base-create-controls" class="base-create-controls is-hidden">
+        <div class="form-row">
+          <label for="base-type">유형</label>
+          <select id="base-type">
+            <option value="">유형 선택</option>
+            <option value="수업시간">수업시간</option>
+            <option value="개인작업 시간">개인작업 시간</option>
+            <option value="이용 불가">이용 불가</option>
+          </select>
+        </div>
+
+        <div class="form-row" id="base-class-row">
+          <label for="base-class-name">수업명</label>
+          <select id="base-class-name">
+            <option value="">수업명 선택</option>
+            <option value="성인 레귤러">성인 레귤러</option>
+            <option value="성인 비기너">성인 비기너</option>
+            <option value="키즈 프로그램">키즈 프로그램</option>
+            <option value="핸드빌딩 클래스">핸드빌딩 클래스</option>
+            <option value="English-Only Class">English-Only Class</option>
+          </select>
+        </div>
+
+        <div class="form-row" id="base-instructor-row">
+          <label for="base-instructor">강사</label>
+          <select id="base-instructor">
+            <option value="">강사 선택</option>
+          </select>
+        </div>
+
+        <div class="form-row checkbox-row">
+          <label for="base-apply-weekly">매주 적용</label>
+          <input type="checkbox" id="base-apply-weekly">
+        </div>
+
+        <div class="modal-actions" style="justify-content: flex-start; margin-top: 4px;">
+          <button type="button" class="studio-secondary-btn" id="base-cancel-add-block-btn">블록 추가 닫기</button>
+        </div>
       </div>
 
-      <div class="form-row" id="base-instructor-row">
-        <label for="base-instructor">강사</label>
-        <select id="base-instructor">
-          <option value="">강사 선택</option>
-        </select>
+      <div class="base-edit-mode-row">
+        <label class="base-mode-switch" for="base-edit-mode-switch" aria-label="시간표 수정 모드 전환">
+          <input type="checkbox" id="base-edit-mode-switch">
+          <span class="base-mode-track" aria-hidden="true"></span>
+          <span class="base-mode-thumb" aria-hidden="true"></span>
+        </label>
+        <span id="base-edit-mode-label" class="base-edit-mode-label">기본 시간표 수정 모드</span>
+        <span class="base-help-inline">
+          <button type="button" class="base-info-icon" tabindex="0" aria-label="수정 모드 안내">i</button>
+          <span class="base-info-tooltip">
+            <strong>기본 시간표 수정 모드</strong><br>
+            해당 모드에서는 도예공방이 매주 기본으로 사용하는 베이스 시간표가 수정됩니다. 이 모드에서 이뤄지는 모든 수정은 아래 체크박스 선택 여부에 따라 모든 주, 혹은 이번주부터 모든 주에 반영됩니다.<br><br>
+            <strong>1주 시간표 수정 모드</strong><br>
+            해당 모드에서는 도예공방의 베이스 시간표가 1주 단위로 수정됩니다. 이 모드에서 이뤄지는 수정은 화면에 나와 있는 주차에만 반영됩니다.
+          </span>
+        </span>
+      </div>
+
+      <div class="base-from-week-row">
+        <label class="base-fancy-check" for="base-edit-from-current-week">
+          <input type="checkbox" id="base-edit-from-current-week">
+          <span class="base-fancy-check-mark" aria-hidden="true"></span>
+          <span class="base-from-week-label">이번주부터 수정</span>
+        </label>
+        <span class="base-help-inline">
+          <button type="button" class="base-info-icon" tabindex="0" aria-label="이번주부터 수정 안내">i</button>
+          <span class="base-info-tooltip">
+            이 체크박스를 선택하면 이뤄지는 모든 수정이 화면에 나와 있는 주와 그 이후의 주들에만 반영이 됩니다. 과거 주들은 바뀌지 않습니다.
+          </span>
+        </span>
+      </div>
+
+      <div class="base-week-nav" role="group" aria-label="베이스 주간 이동">
+        <button type="button" class="studio-secondary-btn" id="base-go-today-btn">오늘</button>
+        <button type="button" class="studio-secondary-btn" id="base-prev-week-btn">이전 주</button>
+        <strong id="base-week-label">-</strong>
+        <button type="button" class="studio-secondary-btn" id="base-next-week-btn">다음 주</button>
+        <button type="button" class="studio-secondary-btn" id="undo-base-btn">되돌리기</button>
       </div>
 
       <div class="base-drag-hint">추가: 같은 요일 칼럼 안에서 드래그해 30분 구간을 선택하세요. 이동: 블록을 길게 눌러 원하는 시간으로 옮기세요. 수정: 블록을 한 번 클릭하세요.</div>
       <div class="base-editor-grid" id="base-editor-grid"></div>
 
       <div class="modal-actions">
-        <button type="button" class="studio-secondary-btn" id="undo-base-btn">되돌리기</button>
         <button type="button" class="studio-secondary-btn" data-close-modal="base-modal">닫기</button>
       </div>
     </div>
@@ -317,7 +371,19 @@
     </div>
   </div>
 
-  <script src="cloud-sync.js?v=20260807-3"></script>
+  <div class="studio-modal" id="base-event-follow-modal" aria-hidden="true">
+    <div class="studio-modal-content">
+      <h2>이벤트 이동</h2>
+      <p id="base-event-follow-message" style="margin: 0 0 12px; color: #5b677e; font-size: 13px;">해당 베이스 시간표 위에 이벤트가 있습니다. 이벤트도 같이 옮길까요?</p>
+      <div class="modal-actions" style="justify-content: flex-start; flex-wrap: wrap;">
+        <button type="button" class="studio-primary-btn" id="base-event-follow-yes-btn">예, 같이 이동</button>
+        <button type="button" class="studio-secondary-btn" id="base-event-follow-no-btn">아니오, 그대로 두기</button>
+        <button type="button" class="studio-secondary-btn" id="base-event-follow-cancel-btn">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="cloud-sync.js?v=20260811-3"></script>
   <script src="auth.js?v=20260807-1"></script>
   <script src="studio.js?v=20260810-1"></script>
 </body>

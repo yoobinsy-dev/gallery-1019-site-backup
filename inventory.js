@@ -64,7 +64,29 @@ function isInvitedToExhibition(exhibition, userId) {
   return planners.includes(userId) || artists.includes(userId) || staffs.includes(userId);
 }
 
-function loadInventoryExhibitions() {
+function canUseRemoteStateApi() {
+  return typeof window !== 'undefined'
+    && window.location
+    && !String(window.location.protocol || '').startsWith('file');
+}
+
+async function fetchInventoryExhibitionSummaries() {
+  if (!canUseRemoteStateApi()) return null;
+
+  try {
+    const response = await fetch('/api/state?keys=exhibitions&view=summary');
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok || !payload?.data) {
+      return null;
+    }
+
+    return Array.isArray(payload.data.exhibitions) ? payload.data.exhibitions : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function loadInventoryExhibitions() {
   const currentUser = getCurrentUser();
   if (!currentUser) {
     alert('로그인이 필요합니다.');
@@ -88,7 +110,10 @@ function loadInventoryExhibitions() {
     return;
   }
 
-  const exhibitions = JSON.parse(localStorage.getItem('exhibitions')) || [];
+  const fetchedSummaries = await fetchInventoryExhibitionSummaries();
+  const exhibitions = Array.isArray(fetchedSummaries)
+    ? fetchedSummaries
+    : (JSON.parse(localStorage.getItem('exhibitions')) || []);
   const userId = getCurrentUserId(currentUser);
   const visibleExhibitions = isAdmin
     ? exhibitions

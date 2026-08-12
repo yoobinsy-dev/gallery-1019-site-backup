@@ -24,6 +24,10 @@
     baseUndoStack: [],
     events: [],
     baseRules: [],
+    baseRuleTimeline: [],
+    baseWeekOverrides: {},
+    baseEditorWeekStart: getWeekStart(new Date()),
+    baseEditMode: 'base',
     studioUsers: [],
     instructors: [],
     classTeachingLog: [],
@@ -130,6 +134,9 @@
     },
     deleteConfirm: {
       eventId: ''
+    },
+    baseEventFollowPrompt: {
+      pending: null
     }
   };
 
@@ -205,13 +212,61 @@
 
     document.getElementById('open-base-editor-btn').addEventListener('click', () => {
       openModal('base-modal');
+      state.baseEditorWeekStart = getWeekStart(state.weekStart || new Date());
+      state.baseEditMode = 'base';
       document.getElementById('base-type').value = '';
       document.getElementById('base-class-name').value = '';
       document.getElementById('base-instructor').value = '';
+      document.getElementById('base-apply-weekly').checked = false;
+      document.getElementById('base-edit-from-current-week').checked = false;
+      setBaseCreateControlsVisible(false);
       loadStudioInstructors();
       populateInstructorOptions('base-instructor');
       renderBaseEditorGrid({ forceDefaultViewport: true });
+      renderBaseEditorWeekLabel();
+      renderBaseEditModeToggle();
       syncBaseClassNameVisibility();
+      updateUndoButtonState();
+    });
+
+    document.getElementById('base-add-block-btn').addEventListener('click', () => {
+      setBaseCreateControlsVisible(true);
+      document.getElementById('base-type')?.focus();
+    });
+
+    document.getElementById('base-cancel-add-block-btn').addEventListener('click', () => {
+      setBaseCreateControlsVisible(false);
+    });
+
+    document.getElementById('base-prev-week-btn').addEventListener('click', () => {
+      state.baseEditorWeekStart = addDays(getBaseEditorWeekStart(), -7);
+      renderBaseEditorWeekLabel();
+      renderBaseEditModeToggle();
+      renderBaseEditorGrid({ forceDefaultViewport: true });
+      updateUndoButtonState();
+    });
+
+    document.getElementById('base-next-week-btn').addEventListener('click', () => {
+      state.baseEditorWeekStart = addDays(getBaseEditorWeekStart(), 7);
+      renderBaseEditorWeekLabel();
+      renderBaseEditModeToggle();
+      renderBaseEditorGrid({ forceDefaultViewport: true });
+      updateUndoButtonState();
+    });
+
+    document.getElementById('base-go-today-btn').addEventListener('click', () => {
+      state.baseEditorWeekStart = getWeekStart(new Date());
+      renderBaseEditorWeekLabel();
+      renderBaseEditModeToggle();
+      renderBaseEditorGrid({ forceDefaultViewport: true });
+      updateUndoButtonState();
+    });
+
+    document.getElementById('base-edit-mode-switch').addEventListener('change', (event) => {
+      const checked = Boolean(event?.target?.checked);
+      state.baseEditMode = checked ? 'week' : 'base';
+      renderBaseEditModeToggle();
+      renderBaseEditorGrid({ forceDefaultViewport: true });
       updateUndoButtonState();
     });
 
@@ -257,6 +312,9 @@
     document.getElementById('edit-base-type').addEventListener('change', syncEditBaseClassNameVisibility);
     document.getElementById('save-base-edit-btn').addEventListener('click', saveBaseEditFromModal);
     document.getElementById('delete-base-edit-btn').addEventListener('click', deleteBaseEditFromModal);
+    document.getElementById('base-event-follow-yes-btn').addEventListener('click', () => resolveBaseEventFollowPrompt('yes'));
+    document.getElementById('base-event-follow-no-btn').addEventListener('click', () => resolveBaseEventFollowPrompt('no'));
+    document.getElementById('base-event-follow-cancel-btn').addEventListener('click', () => resolveBaseEventFollowPrompt('cancel'));
     document.getElementById('undo-base-btn').addEventListener('click', undoBaseChange);
     document.addEventListener('mouseup', handleBaseEditorGlobalMouseUp);
     document.addEventListener('mousemove', handleBaseEditorGlobalMouseMove);
@@ -283,6 +341,10 @@
     document.querySelectorAll('.studio-modal').forEach((modal) => {
       modal.addEventListener('click', (event) => {
         if (event.target === modal) {
+          if (modal.id === 'base-event-follow-modal') {
+            resolveBaseEventFollowPrompt('cancel');
+            return;
+          }
           closeModal(modal.id);
         }
       });
@@ -295,6 +357,8 @@
     syncViewToggleButtons();
     renderWeekLabel();
     renderCalendar();
+    renderBaseEditorWeekLabel();
+    renderBaseEditModeToggle();
     renderBaseEditorGrid();
     updateUndoButtonState();
   }
@@ -317,6 +381,59 @@
     const start = state.weekStart;
     const end = addDays(start, 6);
     labelEl.textContent = `${formatDateDisplay(start)} ~ ${formatDateDisplay(end)}`;
+  }
+
+  function renderBaseEditorWeekLabel() {
+    const labelEl = document.getElementById('base-week-label');
+    if (!labelEl) return;
+    const start = getBaseEditorWeekStart();
+    const end = addDays(start, 6);
+    labelEl.textContent = `${formatDateDisplay(start)} ~ ${formatDateDisplay(end)}`;
+  }
+
+  function renderBaseEditModeToggle() {
+    const switchEl = document.getElementById('base-edit-mode-switch');
+    const labelEl = document.getElementById('base-edit-mode-label');
+    const gridEl = document.getElementById('base-editor-grid');
+    const fromCurrentCheckbox = document.getElementById('base-edit-from-current-week');
+    const isWeek = state.baseEditMode === 'week';
+
+    if (switchEl) switchEl.checked = isWeek;
+    if (labelEl) {
+      labelEl.textContent = isWeek ? '1주 시간표 수정 모드' : '기본 시간표 수정 모드';
+      labelEl.classList.toggle('is-week', isWeek);
+    }
+    if (gridEl) {
+      gridEl.classList.toggle('is-week-edit-mode', isWeek);
+    }
+    if (fromCurrentCheckbox) {
+      fromCurrentCheckbox.disabled = isWeek;
+      if (isWeek) fromCurrentCheckbox.checked = false;
+      const row = fromCurrentCheckbox.closest('.base-from-week-row');
+      if (row) row.classList.toggle('is-disabled', isWeek);
+    }
+  }
+
+  function setBaseCreateControlsVisible(visible) {
+    const controls = document.getElementById('base-create-controls');
+    const addBtn = document.getElementById('base-add-block-btn');
+    if (!controls || !addBtn) return;
+
+    controls.classList.toggle('is-hidden', !visible);
+    addBtn.style.display = visible ? 'none' : '';
+    if (!visible) {
+      document.getElementById('base-type').value = '';
+      document.getElementById('base-class-name').value = '';
+      document.getElementById('base-instructor').value = '';
+      document.getElementById('base-apply-weekly').checked = false;
+      syncBaseClassNameVisibility();
+    }
+  }
+
+  function isBaseCreateControlsVisible() {
+    const controls = document.getElementById('base-create-controls');
+    if (!controls) return false;
+    return !controls.classList.contains('is-hidden');
   }
 
   function setViewMode(mode) {
@@ -505,7 +622,7 @@
 
       for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
         const date = addDays(state.weekStart, dayIndex);
-        const baseRule = getBaseRuleForSlot(dayIndex, slot);
+        const baseRule = getBaseRuleForSlot(dayIndex, slot, state.weekStart);
         const slotEl = document.createElement('button');
         slotEl.type = 'button';
         slotEl.className = `day-slot ${baseTypeToClass(baseRule ? baseRule.type : '')}`;
@@ -526,7 +643,7 @@
         capacity.innerHTML = '<i></i><i></i><i></i>';
         slotEl.appendChild(capacity);
 
-        if (isBaseLabelStart(dayIndex, slot, baseRule)) {
+        if (isBaseLabelStart(dayIndex, slot, baseRule, state.weekStart)) {
           const baseLabel = document.createElement('span');
           baseLabel.className = 'base-slot-label';
           baseLabel.textContent = getBaseLabelText(baseRule);
@@ -795,7 +912,7 @@
     if (state.masterCreate.mode !== 'personal') return;
     if (state.masterCreate.dayIndex !== dayIndex) return;
 
-    const rule = getBaseRuleForSlot(dayIndex, slot);
+    const rule = getBaseRuleForSlot(dayIndex, slot, state.weekStart);
     const type = String(rule?.type || '');
     if (!type.includes('개인작업')) return;
 
@@ -939,13 +1056,6 @@
         bubble.title = `${event.title || '이용자 없음'}`;
         bubble.innerHTML = `<strong>${escapeHtml(event.title || '이용자 없음')}</strong>`;
 
-        if (isAbsent) {
-          const absentTag = document.createElement('span');
-          absentTag.className = 'event-absent-tag';
-          absentTag.textContent = '결석';
-          bubble.appendChild(absentTag);
-        }
-
         if (event.kind === '수강') {
           const absenceBtn = document.createElement('button');
           absenceBtn.type = 'button';
@@ -953,7 +1063,7 @@
           if (isAbsent) {
             absenceBtn.classList.add('is-clear');
             absenceBtn.setAttribute('aria-label', '결석 해제');
-            absenceBtn.textContent = '결석 해제';
+            absenceBtn.textContent = '결석\n해제';
           } else {
             absenceBtn.setAttribute('aria-label', '결석 처리');
             absenceBtn.textContent = '결석';
@@ -1636,6 +1746,10 @@
       alert('수강 일정은 하나의 수업시간 블록과 정확히 일치해야 합니다.');
       return;
     }
+    if (weeklyRepeat && kind !== '기타' && !isAllDayKind(kind) && !isBaseRangeRepeatingWeekly(eventDate, normalizedStart, normalizedEnd)) {
+      alert('선택한 베이스 블록은 매주 반복되지 않습니다. 매주 반복으로 등록할 수 없습니다.');
+      return;
+    }
 
     state.events.push({
       id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1977,14 +2091,68 @@
 
     const startSlot = timeToSlot(startTime);
     const endSlot = Math.max(startSlot + 1, timeToSlot(endTime));
-    const startRule = getBaseRuleForSlot(dayIndex, startSlot);
-    const endRule = getBaseRuleForSlot(dayIndex, endSlot - 1);
+    const weekStart = getWeekStart(new Date(`${date}T00:00:00`));
+    const startRule = getBaseRuleForSlot(dayIndex, startSlot, weekStart);
+    const endRule = getBaseRuleForSlot(dayIndex, endSlot - 1, weekStart);
     if (!startRule || !endRule) return null;
     if (startRule.id !== endRule.id) return null;
     if (String(startRule.type || '') !== '수업시간') return null;
     if (Number(startRule.startSlot) !== Number(startSlot)) return null;
     if (Number(startRule.endSlot) !== Number(endSlot)) return null;
     return startRule;
+  }
+
+  function isClassBlockRepeatingWeekly(date, startTime, endTime) {
+    const dayIndex = getDayIndexFromDateString(date);
+    if (dayIndex < 0) return false;
+
+    const startSlot = timeToSlot(startTime);
+    const endSlot = Math.max(startSlot + 1, timeToSlot(endTime));
+    const weekRule = getClassBaseRuleForRange(date, startTime, endTime);
+    if (!weekRule) return false;
+
+    const templateRule = (state.baseRules || []).find((rule) => {
+      return String(rule?.type || '') === '수업시간'
+        && Number(rule?.day) === Number(dayIndex)
+        && Number(rule?.startSlot) === Number(startSlot)
+        && Number(rule?.endSlot) === Number(endSlot);
+    });
+    if (!templateRule) return false;
+
+    return String(templateRule.className || '').trim() === String(weekRule.className || '').trim()
+      && String(templateRule.instructor || '').trim() === String(weekRule.instructor || '').trim();
+  }
+
+  function getTemplateBaseRuleForSlot(dayIndex, slot) {
+    return (state.baseRules || []).find((rule) => {
+      return Number(rule?.day) === Number(dayIndex)
+        && Number(rule?.startSlot) <= Number(slot)
+        && Number(rule?.endSlot) > Number(slot);
+    }) || null;
+  }
+
+  function isBaseRangeRepeatingWeekly(date, startTime, endTime) {
+    const dayIndex = getDayIndexFromDateString(date);
+    if (dayIndex < 0) return false;
+
+    const weekStart = getWeekStart(new Date(`${date}T00:00:00`));
+    const startSlot = timeToSlot(startTime);
+    const endSlot = Math.max(startSlot + 1, timeToSlot(endTime));
+
+    for (let slot = startSlot; slot < endSlot; slot += 1) {
+      const weekRule = getBaseRuleForSlot(dayIndex, slot, weekStart);
+      const templateRule = getTemplateBaseRuleForSlot(dayIndex, slot);
+      if (!weekRule || !templateRule) return false;
+      if (String(weekRule.type || '') !== String(templateRule.type || '')) return false;
+
+      if (String(weekRule.type || '') === '수업시간') {
+        const sameClassName = String(weekRule.className || '').trim() === String(templateRule.className || '').trim();
+        const sameInstructor = String(weekRule.instructor || '').trim() === String(templateRule.instructor || '').trim();
+        if (!sameClassName || !sameInstructor) return false;
+      }
+    }
+
+    return true;
   }
 
   function applyClassEventBaseMetadata(eventItem, targetDate) {
@@ -2072,12 +2240,18 @@
       .map((rule) => String(rule?.instructor || '').trim())
       .filter(Boolean);
 
+    const fromOverrideRules = Object.values(state.baseWeekOverrides || {})
+      .flatMap((rules) => (Array.isArray(rules) ? rules : []))
+      .filter((rule) => String(rule?.type || '') === '수업시간')
+      .map((rule) => String(rule?.instructor || '').trim())
+      .filter(Boolean);
+
     const fromEvents = (state.events || [])
       .filter((event) => String(event?.kind || '') === '수강')
       .map((event) => String(event?.instructor || '').trim())
       .filter(Boolean);
 
-    state.instructors = Array.from(new Set([...fromUsers, ...fromBaseRules, ...fromEvents]))
+    state.instructors = Array.from(new Set([...fromUsers, ...fromBaseRules, ...fromOverrideRules, ...fromEvents]))
       .sort((a, b) => a.localeCompare(b, 'ko'));
   }
 
@@ -2327,7 +2501,7 @@
 
       for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
         const dayDate = formatDateInput(addDays(weekStart, dayIndex));
-        const rule = getBaseRuleForSlot(dayIndex, slot);
+        const rule = getBaseRuleForSlot(dayIndex, slot, weekStart);
         const cell = document.createElement('div');
         cell.className = `base-cell event-select-cell ${baseTypeToClass(rule ? rule.type : '')}`;
         cell.dataset.slot = String(slot);
@@ -2337,8 +2511,8 @@
 
         let isBlockStart = false;
         if (rule) {
-          const prevRule = slot > 0 ? getBaseRuleForSlot(dayIndex, slot - 1) : null;
-          const nextRule = slot < SLOTS_PER_DAY - 1 ? getBaseRuleForSlot(dayIndex, slot + 1) : null;
+          const prevRule = slot > 0 ? getBaseRuleForSlot(dayIndex, slot - 1, weekStart) : null;
+          const nextRule = slot < SLOTS_PER_DAY - 1 ? getBaseRuleForSlot(dayIndex, slot + 1, weekStart) : null;
           const isStart = !prevRule || prevRule.id !== rule.id;
           const isEnd = !nextRule || nextRule.id !== rule.id;
 
@@ -2486,12 +2660,6 @@
         bubble.style.left = `${EVENT_SELECTOR_TIME_COL_WIDTH + dayIndex * dayWidth + (item.lane * (dayWidth / 3)) + 1}px`;
         bubble.style.width = `${Math.max(10, (item.need * (dayWidth / 3)) - 2)}px`;
         bubble.innerHTML = `<strong>${escapeHtml(item.title || '이용자 없음')}</strong>`;
-        if (item.absent) {
-          const absentTag = document.createElement('span');
-          absentTag.className = 'event-absent-tag';
-          absentTag.textContent = '결석';
-          bubble.appendChild(absentTag);
-        }
         overlay.appendChild(bubble);
       });
     }
@@ -2533,7 +2701,8 @@
       return;
     }
 
-    const cellRule = getBaseRuleForSlot(dayIndex, slot);
+    const selectorWeekStart = getEventSelectorWeekStartDate() || state.weekStart;
+    const cellRule = getBaseRuleForSlot(dayIndex, slot, selectorWeekStart);
     if (kind === '수강') {
       if (!cellRule || cellRule.type !== '수업시간') return;
       if (!isEventPlacementAllowed(kind, dayIndex, cellRule.startSlot, cellRule.endSlot)) return;
@@ -2709,14 +2878,15 @@
 
   function isEventPlacementAllowed(kind, dayIndex, startSlot, endSlot) {
     if (dayIndex < 0 || endSlot <= startSlot) return false;
+    const weekStart = getEventSelectorWeekStartDate() || state.weekStart;
 
     if (kind === '기타' || isAllDayKind(kind)) {
       return true;
     }
 
     if (kind === '수강') {
-      const startRule = getBaseRuleForSlot(dayIndex, startSlot);
-      const endRule = getBaseRuleForSlot(dayIndex, endSlot - 1);
+      const startRule = getBaseRuleForSlot(dayIndex, startSlot, weekStart);
+      const endRule = getBaseRuleForSlot(dayIndex, endSlot - 1, weekStart);
       if (!startRule || !endRule) return false;
       if (startRule.id !== endRule.id) return false;
       return startRule.type === '수업시간'
@@ -2725,7 +2895,7 @@
     }
 
     for (let slot = startSlot; slot < endSlot; slot += 1) {
-      const rule = getBaseRuleForSlot(dayIndex, slot);
+      const rule = getBaseRuleForSlot(dayIndex, slot, weekStart);
       if (kind === '개인작업') {
         if (!rule || rule.type !== '개인작업 시간') return false;
       } else if (kind === '강사 지도 하 개인작업') {
@@ -2762,10 +2932,21 @@
     head.textContent = '시간';
     grid.appendChild(head);
 
+    const editorWeekStart = getBaseEditorWeekStart();
+    const displayRules = getBaseEditorDisplayRules();
     for (let day = 0; day < 7; day += 1) {
+      const dayDate = addDays(editorWeekStart, day);
       const dayHead = document.createElement('div');
       dayHead.className = 'base-time base-head-cell';
-      dayHead.textContent = DAY_NAMES[day];
+      dayHead.textContent = `${DAY_NAMES[day]} (${formatMonthDate(dayDate)})`;
+      if (isSameCalendarDate(dayDate, new Date())) {
+        dayHead.classList.add('is-today');
+        const badge = document.createElement('em');
+        badge.className = 'today-badge';
+        badge.textContent = '오늘';
+        dayHead.appendChild(document.createTextNode(' '));
+        dayHead.appendChild(badge);
+      }
       grid.appendChild(dayHead);
     }
 
@@ -2776,7 +2957,7 @@
       grid.appendChild(time);
 
       for (let day = 0; day < 7; day += 1) {
-        const rule = getBaseRuleForSlot(day, slot);
+        const rule = getRuleForSlotFromRules(displayRules, day, slot);
         const cell = document.createElement('div');
         cell.className = `base-cell ${baseTypeToClass(rule ? rule.type : '')}`;
         cell.dataset.day = String(day);
@@ -2786,8 +2967,8 @@
         }
 
         if (rule) {
-          const prev = slot > 0 ? getBaseRuleForSlot(day, slot - 1) : null;
-          const next = slot < SLOTS_PER_DAY - 1 ? getBaseRuleForSlot(day, slot + 1) : null;
+          const prev = slot > 0 ? getRuleForSlotFromRules(displayRules, day, slot - 1) : null;
+          const next = slot < SLOTS_PER_DAY - 1 ? getRuleForSlotFromRules(displayRules, day, slot + 1) : null;
           const isStart = !prev || prev.id !== rule.id;
           const isEnd = !next || next.id !== rule.id;
 
@@ -2852,6 +3033,11 @@
       return;
     }
 
+    if (!isBaseCreateControlsVisible()) {
+      alert('+ 블록 추가를 눌러 블록 유형을 선택한 뒤 드래그로 추가해주세요.');
+      return;
+    }
+
     startBaseDrag(day, slot);
   }
 
@@ -2894,7 +3080,7 @@
     clearMoveTimer();
     if (!hadTimer) return;
 
-    const rule = getBaseRuleForSlot(day, slot);
+    const rule = getRuleForSlotFromRules(getBaseEditorDisplayRules(), day, slot);
     if (rule) {
       openBaseEditModal(rule);
     }
@@ -3037,20 +3223,47 @@
       return;
     }
 
-    const rule = state.baseRules.find((item) => item.id === move.ruleId);
-    if (!rule) {
-      resetMoveState();
-      return;
-    }
+    const ruleId = String(move.ruleId || '');
+    const nextDay = Number(move.dayIndex);
+    const nextStart = Number(move.previewStartSlot);
+    const nextEnd = Number(move.previewEndSlot);
 
-    pushBaseUndoState();
-    rule.day = move.dayIndex;
-    rule.startSlot = move.previewStartSlot;
-    rule.endSlot = move.previewEndSlot;
+    const weekStart = getBaseEditorWeekStart();
+    const scope = getBaseEditScope();
+    executeBaseChangeWithScopeAndEventPrompt(
+      scope,
+      () => {
+        const dayShift = nextDay - move.originDay;
+        const slotShift = nextStart - move.originStartSlot;
+        const affectedEvents = collectBaseRangeEventOccurrences(move.originDay, move.originStartSlot, move.originStartSlot + move.duration, weekStart);
+        const movePlan = buildBaseEventMovePlan(affectedEvents, dayShift, slotShift);
+        return {
+          ruleId,
+          nextDay,
+          nextStart,
+          nextEnd,
+          weekStart,
+          affectedEvents,
+          askEventFollow: dayShift !== 0 || slotShift !== 0,
+          movePlan
+        };
+      },
+      (payload) => {
+        const targetRules = payload.scope === 'all'
+          ? getEditableBaseRulesForAllMode(payload.weekStart)
+          : getRulesByScope(payload.scope || getBaseEditScope(), payload.weekStart);
+        const rule = targetRules.find((item) => item.id === payload.ruleId);
+        if (!rule) return;
+        rule.day = payload.nextDay;
+        rule.startSlot = payload.nextStart;
+        rule.endSlot = payload.nextEnd;
+        if (payload.moveEvents) {
+          applyBaseEventMovePlan(payload.movePlan);
+        }
+      }
+    );
 
-    saveState();
     resetMoveState();
-    renderAll();
   }
 
   function resetMoveState() {
@@ -3180,19 +3393,45 @@
       return;
     }
 
-    const rule = state.baseRules.find((item) => item.id === state.resizeBase.ruleId);
-    if (!rule) {
-      resetBaseResizeState();
-      return;
-    }
+    const ruleId = String(state.resizeBase.ruleId || '');
+    const nextStart = Number(state.resizeBase.previewStartSlot);
+    const nextEnd = Number(state.resizeBase.previewEndSlot);
 
-    pushBaseUndoState();
-    rule.startSlot = state.resizeBase.previewStartSlot;
-    rule.endSlot = state.resizeBase.previewEndSlot;
+    const weekStart = getBaseEditorWeekStart();
+    const scope = getBaseEditScope();
+    executeBaseChangeWithScopeAndEventPrompt(
+      scope,
+      () => {
+        const dayShift = 0;
+        const slotShift = nextStart - state.resizeBase.originStartSlot;
+        const affectedEvents = collectBaseRangeEventOccurrences(state.resizeBase.dayIndex, state.resizeBase.originStartSlot, state.resizeBase.originEndSlot, weekStart);
+        const movePlan = buildBaseEventMovePlan(affectedEvents, dayShift, slotShift);
+        return {
+          ruleId,
+          day: state.resizeBase.dayIndex,
+          nextStart,
+          nextEnd,
+          weekStart,
+          affectedEvents,
+          askEventFollow: slotShift !== 0,
+          movePlan
+        };
+      },
+      (payload) => {
+        const targetRules = payload.scope === 'all'
+          ? getEditableBaseRulesForAllMode(payload.weekStart)
+          : getRulesByScope(payload.scope || getBaseEditScope(), payload.weekStart);
+        const rule = targetRules.find((item) => item.id === payload.ruleId);
+        if (!rule) return;
+        rule.startSlot = payload.nextStart;
+        rule.endSlot = payload.nextEnd;
+        if (payload.moveEvents) {
+          applyBaseEventMovePlan(payload.movePlan);
+        }
+      }
+    );
 
-    saveState();
     resetBaseResizeState();
-    renderAll();
   }
 
   function resetBaseResizeState() {
@@ -3341,7 +3580,10 @@
 
     const start = Math.min(state.dragBase.startSlot, state.dragBase.endSlot);
     const end = Math.max(state.dragBase.startSlot, state.dragBase.endSlot) + 1;
-    applyBaseRule(state.dragBase.dayIndex, start, end);
+    const applied = applyBaseRule(state.dragBase.dayIndex, start, end);
+    if (!applied) {
+      return;
+    }
     cancelBaseDrag();
   }
 
@@ -3403,48 +3645,411 @@
     state.dragBase.ghostEl = null;
   }
 
-  function applyBaseRule(day, startSlot, endSlot) {
-    const type = document.getElementById('base-type').value;
-    const className = document.getElementById('base-class-name').value;
-    const instructor = String(document.getElementById('base-instructor')?.value || '').trim();
+  function getBaseEditorWeekStart() {
+    return getWeekStart(state.baseEditorWeekStart || state.weekStart || new Date());
+  }
 
-    if (!type) {
-      alert('유형을 먼저 선택해주세요.');
-      return;
-    }
+  function getBaseWeekKey(weekStartDate) {
+    return formatDateInput(getWeekStart(weekStartDate || new Date()));
+  }
 
-    if (type === '수업시간' && !className) {
-      alert('수업시간은 수업명을 입력해주세요.');
-      return;
-    }
-    if (type === '수업시간' && !instructor) {
-      alert('수업시간은 강사를 선택해주세요.');
-      return;
-    }
-
-    pushBaseUndoState();
-    state.baseRules.push({
-      id: `base-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      day,
-      startSlot,
-      endSlot,
-      type,
-      className: type === '수업시간' ? className : '',
-      instructor: type === '수업시간' ? instructor : ''
+  function cloneBaseWeekOverrides(overrides) {
+    const result = {};
+    Object.entries(overrides || {}).forEach(([key, rules]) => {
+      if (!Array.isArray(rules)) return;
+      result[key] = cloneBaseRules(rules);
     });
+    return result;
+  }
 
+  function cloneBaseRuleTimeline(timeline) {
+    return (timeline || []).map((entry) => ({
+      weekKey: String(entry?.weekKey || ''),
+      rules: cloneBaseRules(entry?.rules)
+    })).filter((entry) => entry.weekKey);
+  }
+
+  function normalizeBaseRule(rule) {
+    return {
+      ...rule,
+      day: Number(rule?.day || 0),
+      startSlot: Number(rule?.startSlot || 0),
+      endSlot: Number(rule?.endSlot || 1),
+      className: String(rule?.className || '').trim(),
+      instructor: String(rule?.instructor || '').trim()
+    };
+  }
+
+  function getRulesForWeek(weekStartDate) {
+    const weekKey = getBaseWeekKey(weekStartDate || state.weekStart);
+    const override = state.baseWeekOverrides[weekKey];
+    if (Array.isArray(override)) return override;
+    return getTemplateRulesForWeek(weekStartDate || state.weekStart);
+  }
+
+  function hasWeekOverride(weekStartDate) {
+    const weekKey = getBaseWeekKey(weekStartDate || state.weekStart);
+    return Array.isArray(state.baseWeekOverrides[weekKey]);
+  }
+
+  function ensureWeekOverrideRules(weekStartDate) {
+    const weekKey = getBaseWeekKey(weekStartDate || state.weekStart);
+    if (!Array.isArray(state.baseWeekOverrides[weekKey])) {
+      state.baseWeekOverrides[weekKey] = cloneBaseRules(state.baseRules);
+    }
+    return state.baseWeekOverrides[weekKey];
+  }
+
+  function getRulesByScope(scope, weekStartDate) {
+    if (scope === 'all') return getTemplateRulesForWeek(weekStartDate || getBaseEditorWeekStart());
+    return ensureWeekOverrideRules(weekStartDate || getBaseEditorWeekStart());
+  }
+
+  function getBaseEditScope() {
+    return state.baseEditMode === 'week' ? 'week' : 'all';
+  }
+
+  function isEditFromCurrentWeekEnabled() {
+    const checkbox = document.getElementById('base-edit-from-current-week');
+    return state.baseEditMode === 'base' && Boolean(checkbox?.checked);
+  }
+
+  function getTemplateRulesFromSnapshotForWeekKey(weekKey, snapshot) {
+    const timeline = Array.isArray(snapshot?.baseRuleTimeline) ? snapshot.baseRuleTimeline : [];
+    let resolved = null;
+    timeline.forEach((entry) => {
+      const key = String(entry?.weekKey || '');
+      if (!key || key > weekKey) return;
+      if (!resolved || key > resolved.weekKey) {
+        resolved = { weekKey: key, rules: entry.rules };
+      }
+    });
+    if (resolved) return cloneBaseRules(resolved.rules);
+    return cloneBaseRules(snapshot?.baseRules);
+  }
+
+  function getTemplateRulesForWeek(weekStartDate) {
+    const weekKey = getBaseWeekKey(weekStartDate || state.weekStart);
+    let resolved = null;
+    (state.baseRuleTimeline || []).forEach((entry) => {
+      const key = String(entry?.weekKey || '');
+      if (!key || key > weekKey) return;
+      if (!resolved || key > resolved.weekKey) {
+        resolved = { weekKey: key, rules: entry.rules };
+      }
+    });
+    if (resolved) return resolved.rules;
+    return state.baseRules;
+  }
+
+  function setTemplateRulesForWeekFrom(weekStartDate, nextRules) {
+    const weekKey = getBaseWeekKey(weekStartDate || state.weekStart);
+    const timeline = cloneBaseRuleTimeline(state.baseRuleTimeline)
+      .filter((entry) => String(entry.weekKey || '') !== weekKey);
+    timeline.push({ weekKey, rules: cloneBaseRules(nextRules) });
+    timeline.sort((a, b) => String(a.weekKey).localeCompare(String(b.weekKey)));
+    state.baseRuleTimeline = timeline;
+  }
+
+  function normalizeTemplateTimeline() {
+    const timeline = cloneBaseRuleTimeline(state.baseRuleTimeline)
+      .sort((a, b) => String(a.weekKey).localeCompare(String(b.weekKey)));
+    const normalized = [];
+    let previousRules = cloneBaseRules(state.baseRules);
+    timeline.forEach((entry) => {
+      if (!areRuleSetsEquivalent(entry.rules, previousRules)) {
+        normalized.push({
+          weekKey: String(entry.weekKey),
+          rules: cloneBaseRules(entry.rules)
+        });
+        previousRules = cloneBaseRules(entry.rules);
+      }
+    });
+    state.baseRuleTimeline = normalized;
+  }
+
+  function reconcileWeekOverridesAfterTemplateChange(templateSnapshot, startWeekKey) {
+    Object.entries(state.baseWeekOverrides || {}).forEach(([weekKey, rules]) => {
+      if (!Array.isArray(rules)) return;
+      if (startWeekKey && weekKey < startWeekKey) return;
+      const previousTemplate = getTemplateRulesFromSnapshotForWeekKey(weekKey, templateSnapshot);
+      if (areRuleSetsEquivalent(rules, previousTemplate)) {
+        delete state.baseWeekOverrides[weekKey];
+      }
+    });
+  }
+
+  function getRuleComparableSignature(rule) {
+    const day = Number(rule?.day || 0);
+    const startSlot = Number(rule?.startSlot || 0);
+    const endSlot = Number(rule?.endSlot || 1);
+    const type = String(rule?.type || '');
+    const className = String(rule?.className || '').trim();
+    const instructor = String(rule?.instructor || '').trim();
+    return `${day}|${startSlot}|${endSlot}|${type}|${className}|${instructor}`;
+  }
+
+  function areRuleSetsEquivalent(left, right) {
+    const a = Array.isArray(left) ? left : [];
+    const b = Array.isArray(right) ? right : [];
+    if (a.length !== b.length) return false;
+    const aSig = a.map((rule) => getRuleComparableSignature(rule)).sort();
+    const bSig = b.map((rule) => getRuleComparableSignature(rule)).sort();
+    for (let i = 0; i < aSig.length; i += 1) {
+      if (aSig[i] !== bSig[i]) return false;
+    }
+    return true;
+  }
+
+  function requestBaseEventFollowChoice(affectedCount, onResolve) {
+    state.baseEventFollowPrompt.pending = onResolve;
+    const message = document.getElementById('base-event-follow-message');
+    if (message) {
+      if (affectedCount > 1) {
+        message.textContent = `해당 베이스 시간표 위에 이벤트 ${affectedCount}건이 있습니다. 이벤트도 같이 옮길까요?`;
+      } else {
+        message.textContent = '해당 베이스 시간표 위에 이벤트가 있습니다. 이벤트도 같이 옮길까요?';
+      }
+    }
+    openModal('base-event-follow-modal');
+  }
+
+  function resolveBaseEventFollowPrompt(choice) {
+    const pending = state.baseEventFollowPrompt.pending;
+    state.baseEventFollowPrompt.pending = null;
+    closeModal('base-event-follow-modal');
+    if (typeof pending === 'function') {
+      pending(choice);
+    }
+  }
+
+  function executeBaseChangeWithScopeAndEventPrompt(scopeOrResolver, buildPayload, applyChange) {
+    const resolvedScope = scopeOrResolver;
+    const payload = buildPayload(resolvedScope);
+    const affectedEvents = Array.isArray(payload?.affectedEvents) ? payload.affectedEvents : [];
+    const askEventFollow = Boolean(payload?.askEventFollow) && resolvedScope === 'week';
+
+    const commit = (moveEvents) => {
+      const templateSnapshot = resolvedScope === 'all'
+        ? {
+            baseRules: cloneBaseRules(state.baseRules),
+            baseRuleTimeline: cloneBaseRuleTimeline(state.baseRuleTimeline)
+          }
+        : null;
+      const fromCurrent = resolvedScope === 'all' && isEditFromCurrentWeekEnabled();
+      const startWeekKey = fromCurrent ? getBaseWeekKey(getBaseEditorWeekStart()) : null;
+      pushBaseUndoState();
+      applyChange({ ...payload, scope: resolvedScope, moveEvents: Boolean(moveEvents) });
+      if (templateSnapshot) {
+        reconcileWeekOverridesAfterTemplateChange(templateSnapshot, startWeekKey);
+        normalizeTemplateTimeline();
+      }
+      saveState();
+      renderAll();
+    };
+
+    if (!askEventFollow || affectedEvents.length === 0) {
+      commit(false);
+      return;
+    }
+
+    requestBaseEventFollowChoice(affectedEvents.length, (choice) => {
+      if (choice === 'cancel') return;
+      commit(choice === 'yes');
+    });
+  }
+
+  function withBaseScope(scopeOrResolver, mutationFn) {
+    const scope = scopeOrResolver;
+    const templateSnapshot = scope === 'all'
+      ? {
+          baseRules: cloneBaseRules(state.baseRules),
+          baseRuleTimeline: cloneBaseRuleTimeline(state.baseRuleTimeline)
+        }
+      : null;
+    const fromCurrent = scope === 'all' && isEditFromCurrentWeekEnabled();
+    const startWeekKey = fromCurrent ? getBaseWeekKey(getBaseEditorWeekStart()) : null;
+    pushBaseUndoState();
+    mutationFn(scope);
+    if (templateSnapshot) {
+      reconcileWeekOverridesAfterTemplateChange(templateSnapshot, startWeekKey);
+      normalizeTemplateTimeline();
+    }
     saveState();
     renderAll();
   }
 
-  function getBaseRuleForSlot(day, slot) {
+  function getEditableBaseRulesForAllMode(weekStartDate) {
+    const editorWeekStart = getWeekStart(weekStartDate || getBaseEditorWeekStart());
+    const seedRules = cloneBaseRules(getTemplateRulesForWeek(editorWeekStart));
+    if (isEditFromCurrentWeekEnabled()) {
+      setTemplateRulesForWeekFrom(editorWeekStart, seedRules);
+      return getRulesByScope('all', editorWeekStart);
+    }
+    state.baseRules = seedRules;
+    state.baseRuleTimeline = [];
+    return state.baseRules;
+  }
+
+  function resetBaseApplyWeeklyCheckbox() {
+    const checkbox = document.getElementById('base-apply-weekly');
+    if (checkbox) checkbox.checked = false;
+  }
+
+  function rangesOverlap(startA, endA, startB, endB) {
+    return Math.max(startA, startB) < Math.min(endA, endB);
+  }
+
+  function collectBaseRangeEventOccurrences(day, startSlot, endSlot, weekStartDate) {
+    if (!Number.isInteger(day) || endSlot <= startSlot) return [];
+    const date = formatDateInput(addDays(getWeekStart(weekStartDate || new Date()), day));
+    const events = getEventsForDate(date);
+    const seen = new Set();
+    const affected = [];
+
+    events.forEach((eventItem) => {
+      if (!eventItem || isAllDayKind(eventItem.kind)) return;
+      const eventStart = timeToSlot(eventItem.start);
+      const eventEnd = Math.max(eventStart + 1, timeToSlot(eventItem.end));
+      if (!rangesOverlap(startSlot, endSlot, eventStart, eventEnd)) return;
+      const key = `${String(eventItem.id || '')}|${date}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      affected.push({ eventId: String(eventItem.id || ''), occurrenceDate: date });
+    });
+
+    return affected;
+  }
+
+  function buildBaseEventMovePlan(affectedEvents, dayShift, slotShift) {
+    if (!Array.isArray(affectedEvents) || affectedEvents.length === 0) return [];
+    return affectedEvents.map((item) => ({
+      eventId: String(item.eventId || ''),
+      occurrenceDate: String(item.occurrenceDate || ''),
+      dayShift: Number(dayShift || 0),
+      slotShift: Number(slotShift || 0)
+    })).filter((item) => item.eventId && item.occurrenceDate);
+  }
+
+  function applyBaseEventMovePlan(movePlan) {
+    (movePlan || []).forEach((plan) => {
+      const eventItem = state.events.find((item) => item && String(item.id || '') === String(plan.eventId || ''));
+      if (!eventItem) return;
+
+      const occurrenceDate = String(plan.occurrenceDate || '');
+      const currentOccurrenceDate = new Date(`${occurrenceDate}T00:00:00`);
+      if (Number.isNaN(currentOccurrenceDate.getTime())) return;
+
+      const nextDate = formatDateInput(addDays(currentOccurrenceDate, Number(plan.dayShift || 0)));
+      const startSlot = timeToSlot(eventItem.start);
+      const endSlot = Math.max(startSlot + 1, timeToSlot(eventItem.end));
+      const duration = Math.max(1, endSlot - startSlot);
+      const shiftedStart = Math.max(0, Math.min(SLOTS_PER_DAY - duration, startSlot + Number(plan.slotShift || 0)));
+      const shiftedEnd = shiftedStart + duration;
+      const nextStart = slotToTime(shiftedStart);
+      const nextEnd = slotToTime(shiftedEnd);
+
+      if (eventItem.repeatWeekly) {
+        const skipDates = Array.isArray(eventItem.repeatSkipDates) ? eventItem.repeatSkipDates.slice() : [];
+        if (!skipDates.includes(occurrenceDate)) {
+          skipDates.push(occurrenceDate);
+          skipDates.sort();
+        }
+        eventItem.repeatSkipDates = skipDates;
+
+        const movedOccurrence = {
+          id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          kind: eventItem.kind,
+          title: eventItem.title,
+          date: nextDate,
+          endDate: eventItem.endDate || '',
+          start: nextStart,
+          end: nextEnd,
+          classType: eventItem.classType || '',
+          instructor: eventItem.instructor || '',
+          baseRuleId: eventItem.baseRuleId || '',
+          capacity: Math.max(1, Math.min(3, Number(eventItem.capacity || 1))),
+          repeatWeekly: false,
+          repeatEndDate: '',
+          repeatSkipDates: []
+        };
+        if (String(movedOccurrence.kind || '') === '수강') {
+          applyClassEventBaseMetadata(movedOccurrence, nextDate);
+        }
+        state.events.push(movedOccurrence);
+        return;
+      }
+
+      eventItem.date = nextDate;
+      eventItem.start = nextStart;
+      eventItem.end = nextEnd;
+      if (String(eventItem.kind || '') === '수강') {
+        applyClassEventBaseMetadata(eventItem, nextDate);
+      }
+    });
+  }
+
+  function applyBaseRule(day, startSlot, endSlot) {
+    const type = document.getElementById('base-type').value;
+    const className = document.getElementById('base-class-name').value;
+    const instructor = String(document.getElementById('base-instructor')?.value || '').trim();
+    if (!type) {
+      alert('유형을 먼저 선택해주세요.');
+      return false;
+    }
+
+    if (type === '수업시간' && !className) {
+      alert('수업시간은 수업명을 입력해주세요.');
+      return false;
+    }
+    if (type === '수업시간' && !instructor) {
+      alert('수업시간은 강사를 선택해주세요.');
+      return false;
+    }
+
+    const scope = getBaseEditScope();
+    withBaseScope(scope, (resolvedScope) => {
+      let targetRules = null;
+      if (resolvedScope === 'all') {
+        targetRules = getEditableBaseRulesForAllMode(getBaseEditorWeekStart());
+      } else {
+        targetRules = getRulesByScope(resolvedScope, getBaseEditorWeekStart());
+      }
+      targetRules.push({
+        id: `base-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        day,
+        startSlot,
+        endSlot,
+        type,
+        className: type === '수업시간' ? className : '',
+        instructor: type === '수업시간' ? instructor : ''
+      });
+    });
+
+    resetBaseApplyWeeklyCheckbox();
+    return true;
+  }
+
+  function getRuleForSlotFromRules(rules, day, slot) {
     let resolved = null;
-    state.baseRules.forEach((rule) => {
+    (rules || []).forEach((rule) => {
       if (rule.day === day && slot >= rule.startSlot && slot < rule.endSlot) {
         resolved = rule;
       }
     });
     return resolved;
+  }
+
+  function getBaseEditorDisplayRules() {
+    if (getBaseEditScope() === 'all') {
+      return getTemplateRulesForWeek(getBaseEditorWeekStart());
+    }
+    return getRulesForWeek(getBaseEditorWeekStart());
+  }
+
+  function getBaseRuleForSlot(day, slot, weekStartDate) {
+    const rules = getRulesForWeek(weekStartDate || state.weekStart);
+    return getRuleForSlotFromRules(rules, day, slot);
   }
 
   function getBaseLabelText(rule) {
@@ -3457,18 +4062,18 @@
     return rule.type;
   }
 
-  function isBaseLabelStart(day, slot, rule) {
+  function isBaseLabelStart(day, slot, rule, weekStartDate) {
     if (!rule) return false;
     if (slot === 0) return true;
 
-    const prevRule = getBaseRuleForSlot(day, slot - 1);
+    const prevRule = getBaseRuleForSlot(day, slot - 1, weekStartDate || state.weekStart);
     if (!prevRule) return true;
     if (prevRule.id !== rule.id) return true;
     return false;
   }
 
-  function getBaseTypeForSlot(day, slot) {
-    const rule = getBaseRuleForSlot(day, slot);
+  function getBaseTypeForSlot(day, slot, weekStartDate) {
+    const rule = getBaseRuleForSlot(day, slot, weekStartDate || state.weekStart);
     return rule ? rule.type : '';
   }
 
@@ -3588,8 +4193,8 @@
   }
 
   function saveBaseEditFromModal() {
-    const rule = state.baseRules.find((item) => item.id === state.editBaseRuleId);
-    if (!rule) {
+    const editRuleId = String(state.editBaseRuleId || '');
+    if (!editRuleId) {
       closeModal('base-edit-modal');
       return;
     }
@@ -3622,29 +4227,87 @@
       return;
     }
 
-    pushBaseUndoState();
-    rule.type = type;
-    rule.className = type === '수업시간' ? className : '';
-    rule.instructor = type === '수업시간' ? instructor : '';
-    rule.day = day;
-    rule.startSlot = startSlot;
-    rule.endSlot = endSlot;
+    const weekStart = getBaseEditorWeekStart();
+    const baseWeekRules = getRulesForWeek(weekStart);
+    const baseRule = baseWeekRules.find((item) => item.id === editRuleId);
+    const oldDay = Number(baseRule?.day ?? day);
+    const oldStart = Number(baseRule?.startSlot ?? startSlot);
+    const oldEnd = Number(baseRule?.endSlot ?? endSlot);
 
-    saveState();
+    const scope = getBaseEditScope();
+    executeBaseChangeWithScopeAndEventPrompt(
+      scope,
+      () => {
+        const dayShift = day - oldDay;
+        const slotShift = startSlot - oldStart;
+        const affectedEvents = collectBaseRangeEventOccurrences(oldDay, oldStart, oldEnd, weekStart);
+        const movePlan = buildBaseEventMovePlan(affectedEvents, dayShift, slotShift);
+        return {
+          ruleId: editRuleId,
+          day,
+          startSlot,
+          endSlot,
+          type,
+          className,
+          instructor,
+          weekStart,
+          affectedEvents,
+          askEventFollow: dayShift !== 0 || slotShift !== 0,
+          movePlan
+        };
+      },
+      (payload) => {
+        const targetRules = payload.scope === 'all'
+          ? getEditableBaseRulesForAllMode(payload.weekStart)
+          : getRulesByScope(payload.scope || getBaseEditScope(), payload.weekStart);
+        let rule = targetRules.find((item) => item.id === payload.ruleId);
+        if (!rule) {
+          rule = {
+            id: payload.ruleId,
+            day: payload.day,
+            startSlot: payload.startSlot,
+            endSlot: payload.endSlot,
+            type: payload.type,
+            className: '',
+            instructor: ''
+          };
+          targetRules.push(rule);
+        }
+
+        rule.type = payload.type;
+        rule.className = payload.type === '수업시간' ? payload.className : '';
+        rule.instructor = payload.type === '수업시간' ? payload.instructor : '';
+        rule.day = payload.day;
+        rule.startSlot = payload.startSlot;
+        rule.endSlot = payload.endSlot;
+        if (payload.moveEvents) {
+          applyBaseEventMovePlan(payload.movePlan);
+        }
+      }
+    );
+
     closeModal('base-edit-modal');
-    renderAll();
   }
 
   function deleteBaseEditFromModal() {
-    if (!state.editBaseRuleId) return;
+    const editRuleId = String(state.editBaseRuleId || '');
+    if (!editRuleId) return;
     if (!confirm('이 베이스 블록을 삭제하시겠습니까?')) {
       return;
     }
-    pushBaseUndoState();
-    state.baseRules = state.baseRules.filter((item) => item.id !== state.editBaseRuleId);
-    saveState();
+    const scope = getBaseEditScope();
+    withBaseScope(scope, (resolvedScope) => {
+      const targetRules = resolvedScope === 'all'
+        ? getEditableBaseRulesForAllMode(getBaseEditorWeekStart())
+        : getRulesByScope(resolvedScope, getBaseEditorWeekStart());
+      const next = targetRules.filter((item) => item.id !== editRuleId);
+      targetRules.length = 0;
+      next.forEach((item) => targetRules.push(item));
+      if (resolvedScope !== 'all') {
+        state.baseWeekOverrides[getBaseWeekKey(getBaseEditorWeekStart())] = next;
+      }
+    });
     closeModal('base-edit-modal');
-    renderAll();
   }
 
   function cloneBaseRules(rules) {
@@ -3652,7 +4315,11 @@
   }
 
   function pushBaseUndoState() {
-    state.baseUndoStack.push(cloneBaseRules(state.baseRules));
+    state.baseUndoStack.push({
+      baseRules: cloneBaseRules(state.baseRules),
+      baseRuleTimeline: cloneBaseRuleTimeline(state.baseRuleTimeline),
+      baseWeekOverrides: cloneBaseWeekOverrides(state.baseWeekOverrides)
+    });
     if (state.baseUndoStack.length > 100) {
       state.baseUndoStack.shift();
     }
@@ -3662,7 +4329,15 @@
   function undoBaseChange() {
     if (state.baseUndoStack.length === 0) return;
     const previous = state.baseUndoStack.pop();
-    state.baseRules = cloneBaseRules(previous);
+    if (Array.isArray(previous)) {
+      state.baseRules = cloneBaseRules(previous);
+      state.baseRuleTimeline = [];
+      state.baseWeekOverrides = {};
+    } else {
+      state.baseRules = cloneBaseRules(previous?.baseRules);
+      state.baseRuleTimeline = cloneBaseRuleTimeline(previous?.baseRuleTimeline);
+      state.baseWeekOverrides = cloneBaseWeekOverrides(previous?.baseWeekOverrides);
+    }
     saveState();
     renderAll();
   }
@@ -3693,6 +4368,8 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       events: state.events,
       baseRules: state.baseRules,
+      baseRuleTimeline: state.baseRuleTimeline,
+      baseWeekOverrides: state.baseWeekOverrides,
       studioUsers: state.studioUsers,
       instructors: state.instructors,
       classTeachingLog: state.classTeachingLog
@@ -3719,21 +4396,31 @@
           }))
         : [];
       state.baseRules = Array.isArray(parsed.baseRules)
-        ? parsed.baseRules.map((rule) => ({
-            ...rule,
-            day: Number(rule?.day || 0),
-            startSlot: Number(rule?.startSlot || 0),
-            endSlot: Number(rule?.endSlot || 1),
-            className: String(rule?.className || '').trim(),
-            instructor: String(rule?.instructor || '').trim()
-          }))
+        ? parsed.baseRules.map((rule) => normalizeBaseRule(rule))
         : [];
+      state.baseRuleTimeline = Array.isArray(parsed.baseRuleTimeline)
+        ? parsed.baseRuleTimeline
+            .map((entry) => ({
+              weekKey: String(entry?.weekKey || '').trim(),
+              rules: Array.isArray(entry?.rules) ? entry.rules.map((rule) => normalizeBaseRule(rule)) : []
+            }))
+            .filter((entry) => entry.weekKey)
+        : [];
+      state.baseWeekOverrides = {};
+      if (parsed.baseWeekOverrides && typeof parsed.baseWeekOverrides === 'object') {
+        Object.entries(parsed.baseWeekOverrides).forEach(([weekKey, rules]) => {
+          if (!Array.isArray(rules)) return;
+          state.baseWeekOverrides[weekKey] = rules.map((rule) => normalizeBaseRule(rule));
+        });
+      }
       state.studioUsers = Array.isArray(parsed.studioUsers) ? parsed.studioUsers : [];
       state.instructors = Array.isArray(parsed.instructors) ? parsed.instructors : [];
       state.classTeachingLog = Array.isArray(parsed.classTeachingLog) ? parsed.classTeachingLog : [];
     } catch (error) {
       state.events = [];
       state.baseRules = [];
+      state.baseRuleTimeline = [];
+      state.baseWeekOverrides = {};
       state.studioUsers = [];
       state.instructors = [];
       state.classTeachingLog = [];

@@ -1,27 +1,34 @@
 (function () {
   const SYNCED_KEYS = new Set(['users', 'exhibitions']);
-  const PUSH_DEBOUNCE_MS = 500;
+  const PUSH_DEBOUNCE_MS = 1500;
   const META_KEY = '__sync_updated_at__';
   const SESSION_META_KEY = '__sync_updated_at_session__';
   const REMOTE_META_KEY = '__sync_remote_updated_at__';
   const SESSION_REMOTE_META_KEY = '__sync_remote_updated_at_session__';
   const CLIENT_ID_KEY = '__cloud_sync_client_id__';
+  const STATE_PULL_ETAG_KEY = '__cloud_sync_state_pull_etags__';
   const READY_EVENT = 'cloud-sync:ready';
   const STATE_APPLIED_EVENT = 'cloud-sync:state-applied';
   const REMOTE_DROP_MIN_PREVIOUS_TOTAL = 20;
   const REMOTE_DROP_MIN_ABSOLUTE = 15;
   const REMOTE_DROP_RATIO = 0.7;
   const PREVIEW_DATA_URL_SAFE_LENGTH = 280000;
+  const EXHIBITION_IMAGE_LIST_FIELDS = ['artWorks', 'goods', 'artSoldWorks', 'soldGoods', 'works', 'soldWorks'];
 
   const originalSetItem = Storage.prototype.setItem;
   const originalRemoveItem = Storage.prototype.removeItem;
   const pendingTimers = new Map();
+  const lastSyncedStateSignatures = new Map();
+
+  const activeSyncKeys = resolveActiveSyncKeys();
+  const activeSyncKeySet = new Set(activeSyncKeys);
 
   let applyingRemoteState = false;
   let resolveCloudSyncReady = null;
 
   const cloudSyncStatus = {
     ready: false,
+    activeKeys: activeSyncKeys.slice(),
     remoteReachable: false,
     hadRemoteData: {
       users: false,
@@ -52,6 +59,208 @@
         detail: cloudSyncStatus
       }));
     }
+  }
+
+  function getCurrentPageName() {
+    if (typeof window === 'undefined' || !window.location) {
+      return '';
+    }
+
+    const pathname = String(window.location.pathname || '').trim();
+    if (!pathname) return '';
+    const segments = pathname.split('/').filter(Boolean);
+    return segments.length > 0 ? segments[segments.length - 1].toLowerCase() : '';
+  }
+
+  function resolveActiveSyncKeys() {
+    const page = getCurrentPageName();
+    if (!page) {
+      return Array.from(SYNCED_KEYS);
+    }
+
+    if (page === 'login.html' || page === 'users.html' || page === 'pottery-master-calendar.html') {
+      return ['users'];
+    }
+
+    if (page === 'gallery-lounge.html') {
+      return [];
+    }
+
+    if (page === 'inventory.html') {
+      return [];
+    }
+
+    if (page === 'exhibitions.html') {
+      return ['exhibitions'];
+    }
+
+    if (page === 'exhibition-detail.html') {
+      return ['users', 'exhibitions'];
+    }
+
+    return Array.from(SYNCED_KEYS);
+  }
+
+  function isKeyEnabled(key) {
+    return activeSyncKeySet.has(String(key || '').trim());
+  }
+
+  function getRequestedSyncKeys() {
+    return activeSyncKeys.slice();
+  }
+
+  function getExhibitionId(exhibition) {
+    const id = Number(exhibition?.id);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  }
+
+  function safeStringify(value) {
+    try {
+      return JSON.stringify(value);
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function buildStateSignature(value) {
+    if (typeof value === 'string') {
+      return `str:${value}`;
+    }
+    return `json:${safeStringify(value)}`;
+  }
+
+  function isSameValue(a, b) {
+    return safeStringify(a) === safeStringify(b);
+  }
+
+  function normalizeHttpUrl(value) {
+    const normalized = typeof value === 'string' ? value.trim() : '';
+    if (!normalized) return '';
+    const lower = normalized.toLowerCase();
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      return normalized;
+    }
+    return '';
+  }
+
+  function isDataUrl(value) {
+    return /^data:[^;]+;base64,/i.test(typeof value === 'string' ? value.trim() : '');
+  }
+
+  function toTransferSafeImageItem(item) {
+    if (!item || typeof item !== 'object') return item;
+
+    const next = { ...item };
+    const fullUrl = normalizeHttpUrl(next.photoUrl) || normalizeHttpUrl(next.photoDataUrl);
+    const previewUrl = normalizeHttpUrl(next.photoPreviewUrl) || normalizeHttpUrl(next.photoPreviewDataUrl);
+
+    if (fullUrl && !normalizeHttpUrl(next.photoUrl)) {
+      next.photoUrl = fullUrl;
+    }
+    if (previewUrl && !normalizeHttpUrl(next.photoPreviewUrl)) {
+      next.photoPreviewUrl = previewUrl;
+    }
+
+    return next;
+  }
+
+  function buildTransferSafeExhibitionsPayload(exhibitions) {
+    if (!Array.isArray(exhibitions)) return exhibitions;
+
+    let cloned;
+    try {
+      cloned = JSON.parse(JSON.stringify(exhibitions));
+    } catch (error) {
+      return exhibitions;
+    }
+
+    cloned.forEach((exhibition) => {
+      if (!exhibition || typeof exhibition !== 'object') return;
+      EXHIBITION_IMAGE_LIST_FIELDS.forEach((field) => {
+        const list = exhibition[field];
+        if (!Array.isArray(list)) return;
+        exhibition[field] = list.map((item) => toTransferSafeImageItem(item));
+      });
+    });
+
+    return cloned;
+  }
+
+  function buildExhibitionsDelta(previousExhibitions, nextExhibitions) {
+    if (!Array.isArray(previousExhibitions) || !Array.isArray(nextExhibitions)) {
+      return {
+        changed: Array.isArray(nextExhibitions) ? nextExhibitions : [],
+        removedIds: []
+      };
+    }
+
+    const previousById = new Map();
+    previousExhibitions.forEach((item) => {
+      const id = getExhibitionId(item);
+      if (id !== null) {
+        previousById.set(id, item);
+      }
+    });
+
+    const nextById = new Map();
+    const changed = [];
+    nextExhibitions.forEach((item) => {
+      const id = getExhibitionId(item);
+      if (id === null) {
+        changed.push(item);
+        return;
+      }
+
+      nextById.set(id, item);
+      const previous = previousById.get(id);
+      if (!previous || !isSameValue(previous, item)) {
+        changed.push(item);
+      }
+    });
+
+    const removedIds = [];
+    previousById.forEach((_, id) => {
+      if (!nextById.has(id)) {
+        removedIds.push(id);
+      }
+    });
+
+    return {
+      changed,
+      removedIds
+    };
+  }
+
+  function queuePushWithBaseline(key, nextValue, baselineValue) {
+    const normalizedKey = String(key || '').trim();
+    if (!normalizedKey) return;
+
+    if (normalizedKey === 'exhibitions' && Array.isArray(nextValue) && Array.isArray(baselineValue)) {
+      const transferSafeNext = buildTransferSafeExhibitionsPayload(nextValue);
+      const transferSafeBaseline = buildTransferSafeExhibitionsPayload(baselineValue);
+      const stateSignature = buildStateSignature(transferSafeNext);
+      const delta = buildExhibitionsDelta(transferSafeBaseline, transferSafeNext);
+      if (delta.removedIds.length > 0) {
+        // Deletions are less frequent and safer to transmit as full payload.
+        schedulePush(normalizedKey, transferSafeNext, { stateSignature, syncMode: 'full' });
+        return;
+      }
+
+      if (delta.changed.length === 0) {
+        return;
+      }
+
+      if (delta.changed.length < nextValue.length) {
+        schedulePush(normalizedKey, delta.changed, { stateSignature, syncMode: 'delta' });
+        return;
+      }
+
+      schedulePush(normalizedKey, transferSafeNext, { stateSignature, syncMode: 'full' });
+      return;
+    }
+
+    const stateSignature = buildStateSignature(nextValue);
+    schedulePush(normalizedKey, nextValue, { stateSignature, syncMode: 'full' });
   }
 
   function getSyncMeta() {
@@ -169,7 +378,7 @@
   }
 
   function markKnownRemoteVersion(key, updatedAtIso) {
-    if (!SYNCED_KEYS.has(key)) return;
+    if (!SYNCED_KEYS.has(key) || !isKeyEnabled(key)) return;
     const meta = getRemoteSyncMeta();
     const previous = meta[key];
     if (getEpochMs(updatedAtIso) < getEpochMs(previous)) {
@@ -184,6 +393,9 @@
     return list.some((item) => {
       if (!item || typeof item !== 'object') return false;
       return Boolean(
+        normalizeHttpUrl(item.photoPreviewUrl)
+          || normalizeHttpUrl(item.photoUrl)
+          ||
         (typeof item.photoPreviewDataUrl === 'string' && item.photoPreviewDataUrl.length > 0)
           || (typeof item.photoDataUrl === 'string' && item.photoDataUrl.length > 0)
       );
@@ -206,6 +418,9 @@
   function hasPhotoPreview(item) {
     if (!item || typeof item !== 'object') return false;
     return Boolean(
+      normalizeHttpUrl(item.photoPreviewUrl)
+      || normalizeHttpUrl(item.photoUrl)
+      ||
       (typeof item.photoPreviewDataUrl === 'string' && item.photoPreviewDataUrl.length > 0)
       || (typeof item.photoDataUrl === 'string' && item.photoDataUrl.length > 0)
     );
@@ -232,6 +447,16 @@
     if (!hasPhotoPreview(localItem)) return remoteItem;
 
     const merged = { ...remoteItem };
+    if ((!normalizeHttpUrl(merged.photoPreviewUrl))
+      && normalizeHttpUrl(localItem?.photoPreviewUrl)) {
+      merged.photoPreviewUrl = localItem.photoPreviewUrl;
+    }
+
+    if ((!normalizeHttpUrl(merged.photoUrl))
+      && normalizeHttpUrl(localItem?.photoUrl)) {
+      merged.photoUrl = localItem.photoUrl;
+    }
+
     if ((!merged.photoPreviewDataUrl || merged.photoPreviewDataUrl.length === 0)
       && typeof localItem.photoPreviewDataUrl === 'string'
       && localItem.photoPreviewDataUrl.length > 0) {
@@ -388,7 +613,7 @@
   }
 
   function markLocalUpdate(key, updatedAtIso) {
-    if (!SYNCED_KEYS.has(key)) return;
+    if (!SYNCED_KEYS.has(key) || !isKeyEnabled(key)) return;
     const meta = getSyncMeta();
     meta[key] = updatedAtIso || new Date().toISOString();
     setSyncMeta(meta);
@@ -396,6 +621,44 @@
 
   function canUseRemoteState() {
     return typeof window !== 'undefined' && window.location && !window.location.protocol.startsWith('file');
+  }
+
+  function getPullEtags() {
+    if (typeof sessionStorage === 'undefined') {
+      return {};
+    }
+
+    try {
+      const raw = sessionStorage.getItem(STATE_PULL_ETAG_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function setPullEtags(etags) {
+    if (typeof sessionStorage === 'undefined') {
+      return;
+    }
+
+    try {
+      sessionStorage.setItem(STATE_PULL_ETAG_KEY, JSON.stringify(etags || {}));
+    } catch (error) {
+      // Ignore storage failures.
+    }
+  }
+
+  function getPullEtagForKeys(keySignature) {
+    const etags = getPullEtags();
+    return String(etags[keySignature] || '').trim();
+  }
+
+  function setPullEtagForKeys(keySignature, etag) {
+    if (!keySignature || !etag) return;
+    const etags = getPullEtags();
+    etags[keySignature] = etag;
+    setPullEtags(etags);
   }
 
   function createClientId() {
@@ -423,9 +686,16 @@
     }
   }
 
-  function schedulePush(key, value) {
+  function schedulePush(key, value, options = {}) {
     if (!canUseRemoteState()) return;
-    if (!SYNCED_KEYS.has(key)) return;
+    if (!SYNCED_KEYS.has(key) || !isKeyEnabled(key)) return;
+
+    const stateSignature = typeof options.stateSignature === 'string' ? options.stateSignature : buildStateSignature(value);
+    if (stateSignature && stateSignature === lastSyncedStateSignatures.get(key)) {
+      return;
+    }
+
+    const syncMode = options.syncMode === 'delta' ? 'delta' : 'full';
 
     const existing = pendingTimers.get(key);
     if (existing) {
@@ -444,6 +714,9 @@
 
         const remoteMeta = getRemoteSyncMeta();
         const baseUpdatedAt = remoteMeta[key] || null;
+        const valueForTransfer = key === 'exhibitions' && Array.isArray(value)
+          ? buildTransferSafeExhibitionsPayload(value)
+          : value;
 
         const response = await fetch('/api/state', {
           method: 'PUT',
@@ -451,7 +724,7 @@
             'Content-Type': 'application/json',
             'x-cloud-client-id': getClientId()
           },
-          body: JSON.stringify({ key, value, baseUpdatedAt })
+          body: JSON.stringify({ key, value: valueForTransfer, baseUpdatedAt, syncMode })
         });
 
         if (!response.ok) {
@@ -466,6 +739,7 @@
         if (typeof serverUpdatedAt === 'string' && serverUpdatedAt) {
           markKnownRemoteVersion(key, serverUpdatedAt);
           markLocalUpdate(key, serverUpdatedAt);
+          lastSyncedStateSignatures.set(key, stateSignature);
         }
       } catch (error) {
         console.error('Cloud sync push failed for key:', key, error);
@@ -476,35 +750,51 @@
   }
 
   Storage.prototype.setItem = function patchedSetItem(key, value) {
+    const previousRaw = this.getItem(key);
     originalSetItem.call(this, key, value);
 
-    if (SYNCED_KEYS.has(key) && !applyingRemoteState) {
+    if (previousRaw === value) {
+      return;
+    }
+
+    if (SYNCED_KEYS.has(key) && isKeyEnabled(key) && !applyingRemoteState) {
       markLocalUpdate(key);
     }
 
-    if (applyingRemoteState || !SYNCED_KEYS.has(key)) {
+    if (applyingRemoteState || !SYNCED_KEYS.has(key) || !isKeyEnabled(key)) {
       return;
+    }
+
+    if (key === 'exhibitions') {
+      const nextParsed = parseJsonSafe(value);
+      const previousParsed = parseJsonSafe(previousRaw);
+
+      if (Array.isArray(nextParsed)) {
+        queuePushWithBaseline(key, nextParsed, Array.isArray(previousParsed) ? previousParsed : []);
+        return;
+      }
     }
 
     try {
       const parsedValue = JSON.parse(value);
-      schedulePush(key, parsedValue);
+      schedulePush(key, parsedValue, { stateSignature: buildStateSignature(parsedValue), syncMode: 'full' });
     } catch (error) {
-      schedulePush(key, value);
+      schedulePush(key, value, { stateSignature: buildStateSignature(value), syncMode: 'full' });
     }
   };
 
   Storage.prototype.removeItem = function patchedRemoveItem(key) {
     originalRemoveItem.call(this, key);
 
-    if (SYNCED_KEYS.has(key) && !applyingRemoteState) {
+    if (SYNCED_KEYS.has(key) && isKeyEnabled(key) && !applyingRemoteState) {
       markLocalUpdate(key);
     }
 
-    if (applyingRemoteState || !SYNCED_KEYS.has(key)) {
+    if (applyingRemoteState || !SYNCED_KEYS.has(key) || !isKeyEnabled(key)) {
       return;
     }
 
+    lastSyncedStateSignatures.delete(key);
     schedulePush(key, null);
   };
 
@@ -514,10 +804,34 @@
       return;
     }
 
+    const requestedKeys = getRequestedSyncKeys();
+    if (requestedKeys.length === 0) {
+      finalizeCloudSyncReady();
+      return;
+    }
+
     try {
-      const response = await fetch('/api/state?keys=users,exhibitions');
+      const keySignature = requestedKeys.slice().sort().join(',');
+      const previousEtag = getPullEtagForKeys(keySignature);
+      const headers = {};
+      if (previousEtag) {
+        headers['If-None-Match'] = previousEtag;
+      }
+
+      const response = await fetch(`/api/state?keys=${encodeURIComponent(requestedKeys.join(','))}`, {
+        headers
+      });
+      if (response.status === 304) {
+        cloudSyncStatus.remoteReachable = true;
+        return;
+      }
       if (!response.ok) return;
       cloudSyncStatus.remoteReachable = true;
+
+      const responseEtag = String(response.headers?.get('ETag') || '').trim();
+      if (responseEtag) {
+        setPullEtagForKeys(keySignature, responseEtag);
+      }
 
       const payload = await response.json();
       if (!payload || !payload.ok || !payload.data) return;
@@ -528,7 +842,7 @@
       const appliedRemoteKeys = [];
       applyingRemoteState = true;
 
-      ['users', 'exhibitions'].forEach((key) => {
+      requestedKeys.forEach((key) => {
         const remoteValue = remoteData[key];
         cloudSyncStatus.hadRemoteData[key] = typeof remoteValue !== 'undefined';
         const localRaw = localStorage.getItem(key);
@@ -570,9 +884,12 @@
 
           if (key === 'exhibitions' && parsedLocal && isSuspiciousRemoteExhibitionsDrop(parsedLocal, remoteValue)) {
             try {
-              schedulePush(key, JSON.parse(localRaw));
+              queuePushWithBaseline(key, JSON.parse(localRaw), remoteValue);
             } catch (error) {
-              schedulePush(key, parsedLocal || localRaw);
+              schedulePush(key, parsedLocal || localRaw, {
+                stateSignature: buildStateSignature(parsedLocal || localRaw),
+                syncMode: 'full'
+              });
             }
             return;
           }
@@ -592,18 +909,24 @@
 
           // Local is newer/equal; push local back to server to converge.
           try {
-            schedulePush(key, JSON.parse(localRaw));
+            queuePushWithBaseline(key, JSON.parse(localRaw), remoteValue);
           } catch (error) {
-            schedulePush(key, localRaw);
+            schedulePush(key, localRaw, {
+              stateSignature: buildStateSignature(localRaw),
+              syncMode: 'full'
+            });
           }
           return;
         }
 
         if (localRaw) {
           try {
-            schedulePush(key, JSON.parse(localRaw));
+            queuePushWithBaseline(key, JSON.parse(localRaw), []);
           } catch (error) {
-            schedulePush(key, localRaw);
+            schedulePush(key, localRaw, {
+              stateSignature: buildStateSignature(localRaw),
+              syncMode: 'full'
+            });
           }
         }
       });

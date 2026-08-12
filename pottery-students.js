@@ -10,11 +10,14 @@
     calendar: {
       events: [],
       baseRules: [],
+      baseRuleTimeline: [],
+      baseWeekOverrides: {},
       studioUsers: [],
       classTeachingLog: []
     },
     pendingStudent: null,
     editingStudentId: '',
+    detailStudentId: '',
     slotPicker: {
       weekStart: getWeekStart(new Date()),
       selected: null
@@ -74,6 +77,7 @@
     document.getElementById('slot-save-later-btn')?.addEventListener('click', saveStudentWithoutSlot);
     document.getElementById('student-edit-save-btn')?.addEventListener('click', saveStudentEdit);
     document.getElementById('student-edit-cancel-btn')?.addEventListener('click', closeEditModal);
+    document.getElementById('student-detail-close-btn')?.addEventListener('click', closeDetailModal);
 
     const addTuitionInput = document.getElementById('student-tuition');
     if (addTuitionInput) {
@@ -106,6 +110,15 @@
         }
       });
     }
+
+    const detailModal = document.getElementById('student-detail-modal');
+    if (detailModal) {
+      detailModal.addEventListener('click', (event) => {
+        if (event.target === detailModal) {
+          closeDetailModal();
+        }
+      });
+    }
   }
 
   function startStudentAddFlow() {
@@ -132,6 +145,7 @@
       tuition: parseCurrencyInput(tuitionInput?.value || ''),
       tuitionBasis,
       mostRecentPaymentDate: paymentDate,
+      paymentHistory: paymentDate ? [paymentDate] : [],
       carryOverBeforePayment: 0,
       paymentCycleCredits: purchasedCount
     };
@@ -159,6 +173,10 @@
 
     const slot = state.slotPicker.selected;
     const repeatWeekly = Boolean(document.getElementById('slot-repeat-weekly')?.checked);
+    if (repeatWeekly && !isClassBlockRepeatingWeekly(slot.date, slot.start, slot.end)) {
+      alert('선택한 수업 블록은 매주 반복되는 베이스 블록이 아닙니다. 매주 반복으로 등록할 수 없습니다.');
+      return;
+    }
     const student = {
       id: `stu-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: state.pendingStudent.name,
@@ -169,6 +187,7 @@
       tuition: state.pendingStudent.tuition,
       tuitionBasis: state.pendingStudent.tuitionBasis,
       mostRecentPaymentDate: state.pendingStudent.mostRecentPaymentDate,
+      paymentHistory: Array.isArray(state.pendingStudent.paymentHistory) ? state.pendingStudent.paymentHistory.slice() : [],
       carryOverBeforePayment: state.pendingStudent.carryOverBeforePayment,
       paymentCycleCredits: state.pendingStudent.paymentCycleCredits
     };
@@ -212,6 +231,7 @@
       tuition: state.pendingStudent.tuition,
       tuitionBasis: state.pendingStudent.tuitionBasis,
       mostRecentPaymentDate: state.pendingStudent.mostRecentPaymentDate,
+      paymentHistory: Array.isArray(state.pendingStudent.paymentHistory) ? state.pendingStudent.paymentHistory.slice() : [],
       carryOverBeforePayment: state.pendingStudent.carryOverBeforePayment,
       paymentCycleCredits: state.pendingStudent.paymentCycleCredits
     };
@@ -275,7 +295,7 @@
 
       for (let day = 0; day < 7; day += 1) {
         const date = formatDateInput(addDays(weekStart, day));
-        const rule = getBaseRuleForSlot(day, slot);
+        const rule = getBaseRuleForSlot(day, slot, weekStart);
         const cell = document.createElement('div');
         cell.className = 'slot-cell';
 
@@ -294,8 +314,8 @@
             cell.classList.add('selected');
           }
 
-          const prevRule = slot > 0 ? getBaseRuleForSlot(day, slot - 1) : null;
-          const nextRule = slot < SLOTS_PER_DAY - 1 ? getBaseRuleForSlot(day, slot + 1) : null;
+          const prevRule = slot > 0 ? getBaseRuleForSlot(day, slot - 1, weekStart) : null;
+          const nextRule = slot < SLOTS_PER_DAY - 1 ? getBaseRuleForSlot(day, slot + 1, weekStart) : null;
           const isBlockStart = !prevRule || prevRule.id !== rule.id;
           const isBlockEnd = !nextRule || nextRule.id !== rule.id;
           if (isBlockStart) cell.classList.add('block-start');
@@ -380,8 +400,13 @@
 
     state.students.forEach((student, index) => {
       const stats = getStudentClassStats(student.name);
-      const completedSincePayment = getCompletedClassCountSince(student.name, student.mostRecentPaymentDate);
-      const remainingCount = getRemainingClassCount(student, completedSincePayment);
+      const isMonthly = isMonthlyStartBasis(student?.tuitionBasis);
+      const completedSincePayment = isMonthly
+        ? 0
+        : getCompletedClassCountSince(student.name, student.mostRecentPaymentDate);
+      const remainingCount = isMonthly
+        ? null
+        : getRemainingClassCount(student, completedSincePayment);
       const recentClassDate = stats.mostRecentClassDate || '';
       const currentInstructor = getStudentCurrentInstructor(student);
 
@@ -405,15 +430,21 @@
       const remainingTd = document.createElement('td');
       const remainingBadge = document.createElement('span');
       remainingBadge.className = 'remaining-badge';
-      if (remainingCount < 0) {
+      if (!isMonthly && remainingCount < 0) {
         remainingBadge.classList.add('negative');
       }
-      remainingBadge.textContent = String(remainingCount);
+      remainingBadge.textContent = isMonthly ? '-' : String(remainingCount);
       remainingTd.appendChild(remainingBadge);
       tr.appendChild(remainingTd);
 
       const actionTd = document.createElement('td');
       actionTd.className = 'action-cell';
+
+      const detailBtn = document.createElement('button');
+      detailBtn.type = 'button';
+      detailBtn.className = 'row-action-btn detail';
+      detailBtn.textContent = '상세';
+      detailBtn.addEventListener('click', () => openDetailModal(student.id));
 
       const editBtn = document.createElement('button');
       editBtn.type = 'button';
@@ -427,6 +458,7 @@
       deleteBtn.textContent = '삭제';
       deleteBtn.addEventListener('click', () => deleteStudent(student.id));
 
+      actionTd.appendChild(detailBtn);
       actionTd.appendChild(editBtn);
       actionTd.appendChild(deleteBtn);
       tr.appendChild(actionTd);
@@ -472,6 +504,35 @@
     state.editingStudentId = '';
   }
 
+  function openDetailModal(studentId) {
+    const student = state.students.find((item) => item && item.id === studentId);
+    if (!student) return;
+
+    state.detailStudentId = String(studentId);
+    loadCalendarState();
+
+    const title = document.getElementById('student-detail-title');
+    if (title) {
+      title.textContent = `${student.name || '-'} 상세 기록`;
+    }
+
+    renderDetailPaymentClassTable(student);
+    renderDetailOtherUsageTable(student);
+
+    const modal = document.getElementById('student-detail-modal');
+    if (!modal) return;
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeDetailModal() {
+    const modal = document.getElementById('student-detail-modal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    state.detailStudentId = '';
+  }
+
   function saveStudentEdit() {
     const student = state.students.find((item) => item && item.id === state.editingStudentId);
     if (!student) {
@@ -494,9 +555,25 @@
     student.tuition = parseCurrencyInput(document.getElementById('edit-student-tuition')?.value || '');
     student.tuitionBasis = String(document.getElementById('edit-student-tuition-basis')?.value || '');
     student.mostRecentPaymentDate = String(document.getElementById('edit-student-recent-payment')?.value || '');
+    if (!Array.isArray(student.paymentHistory)) {
+      student.paymentHistory = [];
+    }
+    if (previousPaymentDate && !student.paymentHistory.includes(previousPaymentDate)) {
+      student.paymentHistory.push(previousPaymentDate);
+    }
+    if (student.mostRecentPaymentDate && !student.paymentHistory.includes(student.mostRecentPaymentDate)) {
+      student.paymentHistory.push(student.mostRecentPaymentDate);
+    }
+    student.paymentHistory = student.paymentHistory
+      .map((d) => String(d || '').trim())
+      .filter(Boolean)
+      .sort((a, b) => b.localeCompare(a));
 
     const paymentChanged = previousPaymentDate !== student.mostRecentPaymentDate;
-    if (paymentChanged && student.mostRecentPaymentDate) {
+    if (isMonthlyStartBasis(student.tuitionBasis)) {
+      student.carryOverBeforePayment = 0;
+      student.paymentCycleCredits = 0;
+    } else if (paymentChanged && student.mostRecentPaymentDate) {
       student.carryOverBeforePayment = previousRemaining;
       student.paymentCycleCredits = basisToCount(student.tuitionBasis);
     } else {
@@ -552,6 +629,10 @@
     return Number.isFinite(value) ? value : 0;
   }
 
+  function isMonthlyStartBasis(basis) {
+    return String(basis || '').trim() === '월초';
+  }
+
   function getRemainingClassCount(student, completedSincePayment) {
     const carry = Number(student?.carryOverBeforePayment || 0);
     const cycleCredits = Number(
@@ -566,6 +647,360 @@
     const safeUsed = Number.isFinite(used) ? used : 0;
 
     return safeCarry + safeCycle - safeUsed;
+  }
+
+  function renderDetailPaymentClassTable(student) {
+    const tbody = document.getElementById('student-detail-payment-class-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const classRecords = collectStudentEventOccurrences(student?.name, ['수강'], { pastOnly: true });
+    const paymentDates = getStudentPaymentHistory(student);
+
+    if (!classRecords.length && !paymentDates.length) {
+      const row = document.createElement('tr');
+      row.className = 'students-detail-row-empty';
+      row.innerHTML = '<td colspan="2">수업/결제 기록이 없습니다.</td>';
+      tbody.appendChild(row);
+      return;
+    }
+
+    const grouped = buildPaymentClassGroups(student, paymentDates, classRecords);
+    const groups = grouped.groups;
+    groups.forEach((group) => {
+      const classItems = Array.isArray(group.classRecords) ? group.classRecords : [];
+      const spanCount = Math.max(1, classItems.length);
+
+      for (let index = 0; index < spanCount; index += 1) {
+        const row = document.createElement('tr');
+
+        if (index === 0) {
+          const paymentCell = document.createElement('td');
+          paymentCell.rowSpan = spanCount;
+          paymentCell.textContent = group.paymentDate || '-';
+          row.appendChild(paymentCell);
+        }
+
+        const classCell = document.createElement('td');
+        if (classItems.length) {
+          const record = classItems[index];
+          const dayIndex = getDayIndexFromDateString(record.date);
+          const dayName = dayIndex >= 0 && dayIndex < DAY_NAMES.length ? DAY_NAMES[dayIndex] : '-';
+          const classLabel = String(record.classType || '수강').trim();
+          classCell.textContent = `${record.date} (${dayName}) ${record.start}~${record.end} · ${classLabel}`;
+
+          if (record.absent) {
+            classCell.classList.add('students-detail-class-absent');
+            const tag = document.createElement('span');
+            tag.className = 'students-absent-tag';
+            tag.textContent = '결석';
+            classCell.appendChild(tag);
+          }
+        } else {
+          classCell.textContent = '-';
+        }
+
+        row.appendChild(classCell);
+        tbody.appendChild(row);
+      }
+    });
+
+    const unassigned = Array.isArray(grouped.unassigned) ? grouped.unassigned : [];
+    if (unassigned.length) {
+      unassigned.forEach((record, index) => {
+        const row = document.createElement('tr');
+        if (index === 0) {
+          const paymentCell = document.createElement('td');
+          paymentCell.rowSpan = unassigned.length;
+          paymentCell.textContent = '결제기록 없음';
+          row.appendChild(paymentCell);
+        }
+
+        const classCell = document.createElement('td');
+        const dayIndex = getDayIndexFromDateString(record.date);
+        const dayName = dayIndex >= 0 && dayIndex < DAY_NAMES.length ? DAY_NAMES[dayIndex] : '-';
+        const classLabel = String(record.classType || '수강').trim();
+        classCell.textContent = `${record.date} (${dayName}) ${record.start}~${record.end} · ${classLabel}`;
+        if (record.absent) {
+          classCell.classList.add('students-detail-class-absent');
+          const tag = document.createElement('span');
+          tag.className = 'students-absent-tag';
+          tag.textContent = '결석';
+          classCell.appendChild(tag);
+        }
+
+        row.appendChild(classCell);
+        tbody.appendChild(row);
+      });
+    }
+  }
+
+  function renderDetailOtherUsageTable(student) {
+    const tbody = document.getElementById('student-detail-other-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const records = collectStudentEventOccurrences(student?.name, ['개인작업', '강사 지도 하 개인작업'], { pastOnly: true });
+    if (!records.length) {
+      const row = document.createElement('tr');
+      row.className = 'students-detail-row-empty';
+      row.innerHTML = '<td>기타 이용 기록이 없습니다.</td>';
+      tbody.appendChild(row);
+      return;
+    }
+
+    records.forEach((record) => {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      const dayIndex = getDayIndexFromDateString(record.date);
+      const dayName = dayIndex >= 0 && dayIndex < DAY_NAMES.length ? DAY_NAMES[dayIndex] : '-';
+      cell.textContent = `${record.date} (${dayName}) ${record.start}~${record.end} · ${record.kind}`;
+      row.appendChild(cell);
+      tbody.appendChild(row);
+    });
+  }
+
+  function getStudentPaymentCycleSize(student) {
+    const direct = Number(student?.paymentCycleCredits);
+    const fromBasis = basisToCount(student?.tuitionBasis);
+    const safeDirect = Number.isFinite(direct) && direct > 0 ? Math.floor(direct) : 0;
+    const safeBasis = Number.isFinite(fromBasis) && fromBasis > 0 ? Math.floor(fromBasis) : 0;
+    return Math.max(1, safeDirect, safeBasis);
+  }
+
+  function buildPaymentClassGroups(student, paymentDates, classRecords) {
+    if (isMonthlyStartBasis(student?.tuitionBasis)) {
+      return buildMonthlyStartPaymentClassGroups(paymentDates, classRecords);
+    }
+
+    const sortedPaymentsAsc = (Array.isArray(paymentDates) ? paymentDates : [])
+      .map((d) => String(d || '').trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+
+    const workingClasses = (Array.isArray(classRecords) ? classRecords : [])
+      .map((record) => ({ ...record, __assignedPayment: false }))
+      .sort((a, b) => {
+        const ak = `${a.date} ${a.start}`;
+        const bk = `${b.date} ${b.start}`;
+        return ak.localeCompare(bk);
+      });
+
+    const cycleSize = getStudentPaymentCycleSize(student);
+
+    const groupsAsc = [];
+    sortedPaymentsAsc.forEach((paymentDate, index) => {
+      const nextPaymentDate = sortedPaymentsAsc[index + 1] || '';
+      const assigned = [];
+      let paidCount = 0;
+
+      const assignRecord = (record) => {
+        if (!record) return;
+        record.__assignedPayment = true;
+        assigned.push(record);
+        if (!record.absent) {
+          paidCount += 1;
+        }
+      };
+
+      // Primary pass: classes in this payment window [paymentDate, nextPaymentDate)
+      for (let i = 0; i < workingClasses.length; i += 1) {
+        const record = workingClasses[i];
+        const classDate = String(record?.date || '');
+        if (!classDate || record.__assignedPayment) continue;
+        if (classDate < paymentDate) continue;
+        if (nextPaymentDate && classDate >= nextPaymentDate) continue;
+        assignRecord(record);
+        if (paidCount >= cycleSize) break;
+      }
+
+      // Fallback pass: if still short, take earliest unassigned classes on/after paymentDate.
+      if (paidCount < cycleSize) {
+        for (let i = 0; i < workingClasses.length; i += 1) {
+          const record = workingClasses[i];
+          const classDate = String(record?.date || '');
+          if (!classDate || record.__assignedPayment) continue;
+          if (classDate < paymentDate) continue;
+          assignRecord(record);
+          if (paidCount >= cycleSize) break;
+        }
+      }
+
+      groupsAsc.push({
+        paymentDate,
+        classRecords: assigned
+      });
+    });
+
+    const groups = groupsAsc.slice().sort((a, b) => String(b.paymentDate || '').localeCompare(String(a.paymentDate || '')));
+    return {
+      groups,
+      unassigned: workingClasses.filter((record) => !record.__assignedPayment)
+    };
+  }
+
+  function buildMonthlyStartPaymentClassGroups(paymentDates, classRecords) {
+    const sortedPaymentsAsc = (Array.isArray(paymentDates) ? paymentDates : [])
+      .map((d) => String(d || '').trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+
+    const monthToPaymentDate = new Map();
+    const paymentEntries = [];
+
+    sortedPaymentsAsc.forEach((paymentDate) => {
+      const parsed = new Date(`${paymentDate}T00:00:00`);
+      if (Number.isNaN(parsed.getTime())) return;
+
+      const currentMonthKey = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}`;
+      let targetMonthKey = currentMonthKey;
+
+      // Early payment rule: payment after 23rd can cover next month
+      // only when payment for current month already exists.
+      if (parsed.getDate() >= 24 && monthToPaymentDate.has(currentMonthKey)) {
+        const nextMonth = new Date(parsed.getFullYear(), parsed.getMonth() + 1, 1);
+        targetMonthKey = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}`;
+      }
+
+      if (!monthToPaymentDate.has(targetMonthKey)) {
+        monthToPaymentDate.set(targetMonthKey, paymentDate);
+      }
+
+      paymentEntries.push({
+        paymentDate,
+        targetMonthKey
+      });
+    });
+
+    const groupsByPaymentDate = new Map();
+    paymentEntries.forEach((entry) => {
+      if (!groupsByPaymentDate.has(entry.paymentDate)) {
+        groupsByPaymentDate.set(entry.paymentDate, []);
+      }
+    });
+
+    const sortedClassesDesc = (Array.isArray(classRecords) ? classRecords : [])
+      .slice()
+      .sort((a, b) => {
+        const ak = `${a.date} ${a.start}`;
+        const bk = `${b.date} ${b.start}`;
+        return bk.localeCompare(ak);
+      });
+
+    const unassigned = [];
+    sortedClassesDesc.forEach((record) => {
+      const classDate = String(record?.date || '').trim();
+      if (!classDate) return;
+      const classMonthKey = classDate.slice(0, 7);
+
+      const paymentDate = monthToPaymentDate.get(classMonthKey);
+      if (!paymentDate) {
+        unassigned.push(record);
+        return;
+      }
+
+      const bucket = groupsByPaymentDate.get(paymentDate);
+      if (!bucket) {
+        unassigned.push(record);
+        return;
+      }
+
+      bucket.push(record);
+    });
+
+    const groups = Array.from(groupsByPaymentDate.entries())
+      .map(([paymentDate, records]) => ({
+        paymentDate,
+        classRecords: records
+      }))
+      .sort((a, b) => String(b.paymentDate || '').localeCompare(String(a.paymentDate || '')));
+
+    return {
+      groups,
+      unassigned
+    };
+  }
+
+  function getStudentPaymentHistory(student) {
+    const history = Array.isArray(student?.paymentHistory) ? student.paymentHistory.slice() : [];
+    const recent = String(student?.mostRecentPaymentDate || '').trim();
+    if (recent && !history.includes(recent)) {
+      history.push(recent);
+    }
+    return history
+      .map((d) => String(d || '').trim())
+      .filter(Boolean)
+      .sort((a, b) => b.localeCompare(a));
+  }
+
+  function collectStudentEventOccurrences(studentName, targetKinds, options = {}) {
+    const name = String(studentName || '').trim();
+    if (!name) return [];
+
+    const kindSet = new Set((Array.isArray(targetKinds) ? targetKinds : []).map((kind) => String(kind || '').trim()));
+    if (!kindSet.size) return [];
+
+    const now = new Date();
+    const pastOnly = Boolean(options.pastOnly);
+    const records = [];
+
+    const pushOccurrence = (event, dateKey) => {
+      const endAt = getOccurrenceEndDateTime(dateKey, event.start, event.end);
+      if (!endAt) return;
+      if (pastOnly && endAt > now) return;
+
+      records.push({
+        date: String(dateKey || ''),
+        start: String(event.start || ''),
+        end: String(event.end || ''),
+        kind: String(event.kind || ''),
+        classType: String(event.classType || ''),
+        absent: isEventAbsentOnDate(event, dateKey)
+      });
+    };
+
+    state.calendar.events.forEach((event) => {
+      if (!event || !event.date) return;
+      if (String(event.title || '').trim() !== name) return;
+      if (!kindSet.has(String(event.kind || '').trim())) return;
+      if (isAllDayKind(event.kind)) return;
+
+      if (!event.repeatWeekly) {
+        pushOccurrence(event, String(event.date || ''));
+        return;
+      }
+
+      const baseDate = new Date(`${event.date}T00:00:00`);
+      if (Number.isNaN(baseDate.getTime())) return;
+
+      const skipDates = Array.isArray(event.repeatSkipDates) ? event.repeatSkipDates : [];
+      let horizon = null;
+      if (event.repeatEndDate) {
+        horizon = new Date(`${event.repeatEndDate}T00:00:00`);
+        if (Number.isNaN(horizon.getTime())) return;
+      } else if (pastOnly) {
+        horizon = new Date(now);
+      } else {
+        horizon = addDays(now, 365);
+      }
+
+      let cursor = new Date(baseDate);
+      while (cursor <= horizon) {
+        const key = formatDateInput(cursor);
+        if (!skipDates.includes(key)) {
+          pushOccurrence(event, key);
+        }
+        cursor = addDays(cursor, 7);
+      }
+    });
+
+    records.sort((a, b) => {
+      const ak = `${a.date} ${a.start}`;
+      const bk = `${b.date} ${b.start}`;
+      return bk.localeCompare(ak);
+    });
+
+    return records;
   }
 
   function getStudentCurrentInstructor(student) {
@@ -612,8 +1047,9 @@
 
     const startSlot = timeToSlot(event.start);
     const endSlot = Math.max(startSlot + 1, timeToSlot(event.end));
-    const startRule = getBaseRuleForSlot(day, startSlot);
-    const endRule = getBaseRuleForSlot(day, endSlot - 1);
+    const weekStart = getWeekStart(new Date(`${event.date}T00:00:00`));
+    const startRule = getBaseRuleForSlot(day, startSlot, weekStart);
+    const endRule = getBaseRuleForSlot(day, endSlot - 1, weekStart);
     if (!startRule || !endRule) return null;
     if (startRule.id !== endRule.id) return null;
     if (String(startRule.type || '') !== '수업시간') return null;
@@ -635,6 +1071,15 @@
     const num = Number(parseCurrencyInput(value));
     if (!Number.isFinite(num)) return '';
     return `${num.toLocaleString('ko-KR')}원`;
+  }
+
+  function escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   function isEventAbsentOnDate(event, dateKey) {
@@ -775,11 +1220,24 @@
       const parsed = JSON.parse(localStorage.getItem(CALENDAR_STORAGE_KEY) || '{}');
       state.calendar.events = Array.isArray(parsed.events) ? parsed.events : [];
       state.calendar.baseRules = Array.isArray(parsed.baseRules) ? parsed.baseRules : [];
+      state.calendar.baseRuleTimeline = Array.isArray(parsed.baseRuleTimeline)
+        ? parsed.baseRuleTimeline
+            .map((entry) => ({
+              weekKey: String(entry?.weekKey || '').trim(),
+              rules: Array.isArray(entry?.rules) ? entry.rules : []
+            }))
+            .filter((entry) => entry.weekKey)
+        : [];
+      state.calendar.baseWeekOverrides = parsed.baseWeekOverrides && typeof parsed.baseWeekOverrides === 'object'
+        ? parsed.baseWeekOverrides
+        : {};
       state.calendar.studioUsers = Array.isArray(parsed.studioUsers) ? parsed.studioUsers : [];
       state.calendar.classTeachingLog = Array.isArray(parsed.classTeachingLog) ? parsed.classTeachingLog : [];
     } catch (error) {
       state.calendar.events = [];
       state.calendar.baseRules = [];
+      state.calendar.baseRuleTimeline = [];
+      state.calendar.baseWeekOverrides = {};
       state.calendar.studioUsers = [];
       state.calendar.classTeachingLog = [];
     }
@@ -792,6 +1250,8 @@
         ...parsed,
         events: state.calendar.events,
         baseRules: state.calendar.baseRules,
+        baseRuleTimeline: state.calendar.baseRuleTimeline,
+        baseWeekOverrides: state.calendar.baseWeekOverrides,
         studioUsers: state.calendar.studioUsers,
         classTeachingLog: state.calendar.classTeachingLog
       };
@@ -800,18 +1260,72 @@
       localStorage.setItem(CALENDAR_STORAGE_KEY, JSON.stringify({
         events: state.calendar.events,
         baseRules: state.calendar.baseRules,
+        baseRuleTimeline: state.calendar.baseRuleTimeline,
+        baseWeekOverrides: state.calendar.baseWeekOverrides,
         studioUsers: state.calendar.studioUsers,
         classTeachingLog: state.calendar.classTeachingLog
       }));
     }
   }
 
-  function getBaseRuleForSlot(day, slot) {
-    return state.calendar.baseRules.find((rule) => {
+  function getWeekKey(date) {
+    return formatDateInput(getWeekStart(date || new Date()));
+  }
+
+  function getTemplateRulesForWeek(weekStartDate) {
+    const weekKey = getWeekKey(weekStartDate || new Date());
+    let resolved = null;
+    (state.calendar.baseRuleTimeline || []).forEach((entry) => {
+      const key = String(entry?.weekKey || '');
+      if (!key || key > weekKey) return;
+      if (!resolved || key > resolved.weekKey) {
+        resolved = { weekKey: key, rules: Array.isArray(entry?.rules) ? entry.rules : [] };
+      }
+    });
+    return resolved ? resolved.rules : state.calendar.baseRules;
+  }
+
+  function getRulesForWeek(weekStartDate) {
+    const weekKey = getWeekKey(weekStartDate || new Date());
+    const overrideRules = state.calendar.baseWeekOverrides?.[weekKey];
+    return Array.isArray(overrideRules) ? overrideRules : getTemplateRulesForWeek(weekStartDate || new Date());
+  }
+
+  function getBaseRuleForSlot(day, slot, weekStartDate) {
+    const rules = getRulesForWeek(weekStartDate);
+    return rules.find((rule) => {
       return Number(rule.day) === Number(day)
         && Number(rule.startSlot) <= Number(slot)
         && Number(rule.endSlot) > Number(slot);
     }) || null;
+  }
+
+  function isClassBlockRepeatingWeekly(date, startTime, endTime) {
+    const day = getDayIndexFromDateString(date);
+    if (day < 0) return false;
+
+    const weekStart = getWeekStart(new Date(`${date}T00:00:00`));
+    const startSlot = timeToSlot(startTime);
+    const endSlot = Math.max(startSlot + 1, timeToSlot(endTime));
+
+    const weekStartRule = getBaseRuleForSlot(day, startSlot, weekStart);
+    const weekEndRule = getBaseRuleForSlot(day, endSlot - 1, weekStart);
+    if (!weekStartRule || !weekEndRule) return false;
+    if (weekStartRule.id !== weekEndRule.id) return false;
+    if (String(weekStartRule.type || '') !== '수업시간') return false;
+    if (Number(weekStartRule.startSlot) !== Number(startSlot)) return false;
+    if (Number(weekStartRule.endSlot) !== Number(endSlot)) return false;
+
+    const templateRule = (state.calendar.baseRules || []).find((rule) => {
+      return String(rule?.type || '') === '수업시간'
+        && Number(rule?.day) === Number(day)
+        && Number(rule?.startSlot) === Number(startSlot)
+        && Number(rule?.endSlot) === Number(endSlot);
+    });
+    if (!templateRule) return false;
+
+    return String(templateRule.className || '').trim() === String(weekStartRule.className || '').trim()
+      && String(templateRule.instructor || '').trim() === String(weekStartRule.instructor || '').trim();
   }
 
   function buildDailyOccupancyMap(date) {
@@ -979,6 +1493,9 @@
         ? parsed.map((student) => ({
             ...student,
             instructor: String(student?.instructor || '').trim(),
+            paymentHistory: Array.isArray(student?.paymentHistory)
+              ? student.paymentHistory.map((d) => String(d || '').trim()).filter(Boolean)
+              : (student?.mostRecentPaymentDate ? [String(student.mostRecentPaymentDate).trim()] : []),
             carryOverBeforePayment: Number(student.carryOverBeforePayment ?? 0),
             paymentCycleCredits: Number(
               student.paymentCycleCredits

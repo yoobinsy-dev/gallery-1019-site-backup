@@ -1,4 +1,4 @@
-const { sendJson, methodNotAllowed, readJsonBody } = require('./_lib/http');
+const { createWeakEtag, sendCachedJson, sendJson, methodNotAllowed, readJsonBody, writeCacheHeaders } = require('./_lib/http');
 const {
   createSnapshot,
   listSnapshots,
@@ -6,12 +6,19 @@ const {
   getSnapshotById
 } = require('./_lib/snapshot-store');
 
+const PRIVATE_REVALIDATE_CACHE_CONTROL = 'private, max-age=0, must-revalidate';
+
 module.exports = async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const limit = req.query && req.query.limit ? Number(req.query.limit) : 30;
       const snapshots = await listSnapshots(limit);
-      sendJson(res, 200, { ok: true, snapshots });
+      const payload = { ok: true, snapshots };
+      const etag = createWeakEtag(payload, `snapshots-${limit}`);
+      sendCachedJson(req, res, 200, payload, {
+        cacheControl: PRIVATE_REVALIDATE_CACHE_CONTROL,
+        etag
+      });
       return;
     }
 
@@ -71,6 +78,7 @@ module.exports = async function handler(req, res) {
 
     methodNotAllowed(res, ['GET', 'POST']);
   } catch (error) {
+    writeCacheHeaders(res, 'no-store');
     sendJson(res, 500, { ok: false, error: error.message || 'Server error' });
   }
 };

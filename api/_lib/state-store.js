@@ -57,6 +57,27 @@ async function getStateMapWithMeta(keys) {
   return { data, meta };
 }
 
+async function getStateMetaMap(keys) {
+  await ensureTable();
+  if (!Array.isArray(keys) || keys.length === 0) {
+    return {};
+  }
+
+  const result = await query(
+    'SELECT state_key, updated_at FROM app_state WHERE state_key = ANY($1::text[])',
+    [keys]
+  );
+
+  const meta = {};
+  result.rows.forEach((row) => {
+    meta[row.state_key] = {
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null
+    };
+  });
+
+  return meta;
+}
+
 async function setStateValue(key, value) {
   await ensureTable();
   const result = await query(
@@ -81,6 +102,7 @@ async function deleteStateValue(key) {
 
 module.exports = {
   getStateMap,
+  getStateMetaMap,
   getStateMapWithMeta,
   setStateValue,
   deleteStateValue

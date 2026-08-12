@@ -4,19 +4,136 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>도예공방 10.19 - 재료 주문</title>
-  <link rel="stylesheet" href="pottery-section.css?v=20260809-1">
+  <link rel="stylesheet" href="pottery-material-orders.css?v=20260811-1">
 </head>
 <body>
-  <a class="section-back-link" href="pottery-workshop.html" aria-label="도예공방 메뉴로 돌아가기">← 메뉴로</a>
+  <a class="orders-back-link" href="pottery-workshop.html" aria-label="도예공방 메뉴로 돌아가기">← 메뉴로</a>
 
-  <main class="section-wrap">
-    <section class="section-card">
+  <main class="orders-wrap">
+    <header class="orders-header">
       <h1>재료 주문</h1>
-      <p>재료 주문 화면은 다음 단계에서 구현됩니다. 이 페이지를 시작점으로 주문서, 입고 상태, 거래처별 내역 기능을 연결할 수 있습니다.</p>
+      <p>월별 재료 주문 기록을 확인하고 바로 수정할 수 있습니다.</p>
+    </header>
+
+    <section class="orders-table-panel">
+      <div class="orders-month-nav" aria-label="월 선택">
+        <button type="button" id="month-prev-btn" class="month-nav-btn" aria-label="이전 달">◀</button>
+        <strong id="month-label">-</strong>
+        <button type="button" id="month-next-btn" class="month-nav-btn" aria-label="다음 달">▶</button>
+        <button type="button" id="month-current-btn" class="month-current-btn">이번 달</button>
+      </div>
+
+      <div class="orders-bulk-action-row">
+        <button type="button" id="order-add-btn" class="orders-bulk-btn">+ 재료 주문 추가</button>
+        <div class="orders-bulk-action-group">
+          <button type="button" id="order-select-all-btn" class="orders-bulk-btn orders-bulk-btn-secondary">전체 선택</button>
+          <button type="button" id="order-delete-all-btn" class="orders-bulk-btn orders-bulk-btn-danger">전체 삭제</button>
+          <button type="button" id="order-delete-selected-btn" class="orders-bulk-btn orders-bulk-btn-danger" style="display:none;">선택된 항목만 삭제</button>
+          <button type="button" id="order-edit-selected-btn" class="orders-bulk-btn orders-bulk-btn-secondary" style="display:none;">선택된 항목 수정</button>
+          <button type="button" id="order-save-all-btn" class="orders-bulk-btn orders-bulk-btn-secondary" style="display:none;">전체 저장</button>
+          <button type="button" id="order-merge-cells-btn" class="orders-bulk-btn orders-bulk-btn-secondary">셀 합치기</button>
+          <button type="button" id="order-undo-btn" class="orders-bulk-btn orders-bulk-btn-secondary">되돌리기</button>
+        </div>
+        <button type="button" id="order-export-btn" class="orders-bulk-btn orders-bulk-btn-secondary">엑셀 파일로 다운 받기</button>
+      </div>
+
+      <div class="orders-table-wrap">
+        <table class="orders-table">
+          <thead>
+            <tr>
+              <th class="orders-checkbox-col"><input type="checkbox" id="select-all-orders" aria-label="전체 선택"></th>
+              <th>번호</th>
+              <th>날짜</th>
+              <th>분류</th>
+              <th>상품</th>
+              <th class="orders-col-qty">수량</th>
+              <th>가격</th>
+              <th>할인</th>
+              <th>배송비</th>
+              <th class="orders-col-total">합계</th>
+              <th>상태</th>
+              <th>작업</th>
+            </tr>
+          </thead>
+          <tbody id="material-orders-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="orders-bulk-action-row orders-bulk-action-row-bottom">
+        <button type="button" id="order-add-btn-bottom" class="orders-bulk-btn">+ 재료 주문 추가</button>
+        <div class="orders-bulk-action-group">
+          <button type="button" id="order-select-all-btn-bottom" class="orders-bulk-btn orders-bulk-btn-secondary">전체 선택</button>
+          <button type="button" id="order-delete-all-btn-bottom" class="orders-bulk-btn orders-bulk-btn-danger">전체 삭제</button>
+          <button type="button" id="order-delete-selected-btn-bottom" class="orders-bulk-btn orders-bulk-btn-danger" style="display:none;">선택된 항목만 삭제</button>
+          <button type="button" id="order-edit-selected-btn-bottom" class="orders-bulk-btn orders-bulk-btn-secondary" style="display:none;">선택된 항목 수정</button>
+          <button type="button" id="order-save-all-btn-bottom" class="orders-bulk-btn orders-bulk-btn-secondary" style="display:none;">전체 저장</button>
+          <button type="button" id="order-merge-cells-btn-bottom" class="orders-bulk-btn orders-bulk-btn-secondary">셀 합치기</button>
+          <button type="button" id="order-undo-btn-bottom" class="orders-bulk-btn orders-bulk-btn-secondary">되돌리기</button>
+        </div>
+        <button type="button" id="order-export-btn-bottom" class="orders-bulk-btn orders-bulk-btn-secondary">엑셀 파일로 다운 받기</button>
+      </div>
     </section>
   </main>
 
+  <div class="orders-modal" id="material-order-modal" aria-hidden="true">
+    <div class="orders-modal-content" role="dialog" aria-modal="true" aria-label="재료 주문 추가">
+      <h2>재료 주문 추가</h2>
+      <p class="orders-modal-note">날짜, 상품, 수량은 필수입니다.</p>
+      <p class="orders-modal-note orders-modal-sub-note">상품은 여러 줄로 입력할 수 있습니다.</p>
+
+      <form id="material-order-form" class="orders-form" autocomplete="off">
+        <div class="orders-form-field">
+          <label for="material-order-date">날짜</label>
+          <input id="material-order-date" type="date" required>
+        </div>
+
+        <div class="orders-lines-header-row">
+          <h3>주문 항목</h3>
+          <div class="orders-lines-bulk-action-group">
+            <button type="button" id="add-order-line-btn" class="orders-secondary-btn">행추가</button>
+            <button type="button" id="line-select-all-btn" class="orders-secondary-btn">전체 선택</button>
+            <button type="button" id="line-delete-all-btn" class="orders-secondary-btn orders-secondary-danger">전체 삭제</button>
+            <button type="button" id="line-delete-selected-btn" class="orders-secondary-btn orders-secondary-danger" style="display:none;">선택된 항목만 삭제</button>
+            <button type="button" id="line-merge-cells-btn" class="orders-secondary-btn">셀 합치기</button>
+            <button type="button" id="line-undo-btn" class="orders-secondary-btn">되돌리기</button>
+          </div>
+        </div>
+
+        <div class="orders-lines-table-wrap">
+          <table class="orders-lines-table">
+            <thead>
+              <tr>
+                <th class="orders-checkbox-col"><input type="checkbox" id="select-all-order-lines" aria-label="전체 선택"></th>
+                <th class="orders-lines-action-head" aria-label="행 삭제"></th>
+                <th><span class="orders-lines-head-main">분류</span></th>
+                <th><span class="orders-lines-head-main">상품</span></th>
+                <th class="orders-col-qty"><span class="orders-lines-head-main">수량</span></th>
+                <th><span class="orders-lines-head-main">가격</span></th>
+                <th class="orders-th-merge">
+                  <span class="orders-th-title orders-lines-head-main">할인</span>
+                  <label class="orders-th-check"><input type="checkbox" id="line-order-discount-toggle"> <span class="orders-th-check-note">모든 항목에 적용</span></label>
+                </th>
+                <th class="orders-th-merge">
+                  <span class="orders-th-title orders-lines-head-main">배송비</span>
+                  <label class="orders-th-check"><input type="checkbox" id="line-order-shipping-toggle"> <span class="orders-th-check-note">모든 항목에 적용</span></label>
+                </th>
+                <th class="orders-col-total"><span class="orders-lines-head-main">합계</span></th>
+              </tr>
+            </thead>
+            <tbody id="material-order-lines"></tbody>
+          </table>
+        </div>
+
+        <div class="orders-modal-actions">
+          <button type="submit" class="orders-primary-btn">저장</button>
+          <button type="button" id="close-order-modal-btn" class="orders-secondary-btn">취소</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="auth.js?v=20260807-1"></script>
   <script src="pottery-landing.js?v=20260809-1"></script>
+  <script src="pottery-material-orders.js?v=20260811-1"></script>
 </body>
 </html>

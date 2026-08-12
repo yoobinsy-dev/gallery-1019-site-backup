@@ -1,0 +1,14 @@
+HTTP/2 200 
+age: 0
+cache-control: public, max-age=0, must-revalidate
+cdn-cache-control: public, s-maxage=6, stale-while-revalidate=54
+content-type: application/json; charset=utf-8
+date: Tue, 11 Aug 2026 12:15:32 GMT
+etag: W/"state-d1a0341b3070309ea6c0b677c6be69ca52a2ebe3"
+server: Vercel
+strict-transport-security: max-age=63072000; includeSubDomains; preload
+vary: Accept-Encoding
+x-vercel-cache: MISS
+x-vercel-id: icn1::iad1::ldx2w-1786450531908-db18abb59b7c
+content-length: 4384673
+

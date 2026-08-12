@@ -21,6 +21,8 @@ function isAuthorizedCron(req) {
 }
 
 module.exports = async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+
   if (req.method !== 'GET') {
     methodNotAllowed(res, ['GET']);
     return;

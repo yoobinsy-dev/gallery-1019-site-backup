@@ -1,4 +1,4 @@
-const { sendJson, methodNotAllowed, readJsonBody } = require('./_lib/http');
+const { createWeakEtag, sendCachedJson, sendJson, methodNotAllowed, readJsonBody, writeCacheHeaders } = require('./_lib/http');
 const {
   createExhibitionSnapshotNow,
   listExhibitionSnapshots,
@@ -6,6 +6,8 @@ const {
   undoLastExhibitionRestore,
   getLatestUndoPoint
 } = require('./_lib/exhibition-snapshot-store');
+
+const PRIVATE_REVALIDATE_CACHE_CONTROL = 'private, max-age=0, must-revalidate';
 
 module.exports = async function handler(req, res) {
   try {
@@ -23,7 +25,7 @@ module.exports = async function handler(req, res) {
         getLatestUndoPoint(exhibitionId)
       ]);
 
-      sendJson(res, 200, {
+      const payload = {
         ok: true,
         snapshots,
         canUndo: Boolean(latestUndoPoint),
@@ -34,6 +36,12 @@ module.exports = async function handler(req, res) {
             note: latestUndoPoint.note
           }
           : null
+      };
+
+      const etag = createWeakEtag(payload, `exhibition-snapshots-${exhibitionId}-${limit}`);
+      sendCachedJson(req, res, 200, payload, {
+        cacheControl: PRIVATE_REVALIDATE_CACHE_CONTROL,
+        etag
       });
       return;
     }
@@ -92,6 +100,7 @@ module.exports = async function handler(req, res) {
 
     methodNotAllowed(res, ['GET', 'POST']);
   } catch (error) {
+    writeCacheHeaders(res, 'no-store');
     sendJson(res, 500, { ok: false, error: error.message || 'Server error' });
   }
 };
