@@ -659,11 +659,6 @@
           finalizeMasterCreate();
         });
 
-        const capacity = document.createElement('span');
-        capacity.className = 'capacity-markers';
-        capacity.innerHTML = '<i></i><i></i><i></i>';
-        slotEl.appendChild(capacity);
-
         if (isBaseLabelStart(dayIndex, slot, baseRule, state.weekStart)) {
           const baseLabel = document.createElement('span');
           baseLabel.className = 'base-slot-label';
