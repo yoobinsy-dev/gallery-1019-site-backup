@@ -54,7 +54,7 @@ module.exports = async function handler(req, res) {
           snapshotType: 'manual',
           source: 'manual-api',
           note,
-          dedupeByKstDate: false
+          dedupeByKstDate: true
         });
 
         sendJson(res, 200, {
