@@ -91,6 +91,43 @@ body {
   line-height: 1.2;
 }
 
+.pottery-card.is-locked {
+  opacity: 0.62;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 8px 16px rgba(72, 45, 24, 0.12);
+  position: relative;
+}
+
+.pottery-card.is-locked:hover {
+  transform: none;
+  box-shadow: 0 8px 16px rgba(72, 45, 24, 0.12);
+}
+
+.pottery-card.is-locked::after {
+  content: attr(data-locked-message);
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 14px;
+  background: rgba(35, 39, 49, 0.95);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 6px 8px;
+  border-radius: 8px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.pottery-card.is-locked:hover::after,
+.pottery-card.is-locked:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .pottery-card-primary {
   grid-column: span 2;
   background:

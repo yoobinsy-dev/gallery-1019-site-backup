@@ -21,16 +21,100 @@
     slotPicker: {
       weekStart: getWeekStart(new Date()),
       selected: null
+    },
+    access: {
+      userName: '',
+      studioRole: ''
     }
   };
 
   document.addEventListener('DOMContentLoaded', () => {
+    if (!enforceStudentsAccess()) return;
     loadStudents();
     loadCalendarState();
     bindEvents();
     renderStudents();
     startHourlyAutoRecompute();
   });
+
+  function normalizeSiteAccess(access) {
+    const raw = String(access || '').trim().toLowerCase();
+    if (raw === 'both' || raw === 'all') return 'both';
+    if (raw === 'pottery' || raw === 'studio') return 'pottery';
+    if (raw === 'gallery') return 'gallery';
+    return '';
+  }
+
+  function normalizeStudioRole(role) {
+    const value = String(role || '').trim();
+    const allowed = ['어드민', '강사', '수강생', '작가'];
+    return allowed.includes(value) ? value : '';
+  }
+
+  function getEffectiveStudioRole(user) {
+    const direct = normalizeStudioRole(user?.studioRole);
+    if (direct) return direct;
+
+    const accountType = String(user?.accountType || '').trim();
+    const access = normalizeSiteAccess(user?.siteAccess);
+    if ((access === 'pottery' || access === 'both') && accountType === '어드민') return '어드민';
+    if (accountType === '강사') return '강사';
+    if (accountType === '작가') return '작가';
+    if (accountType === '수강생') return '수강생';
+    return '';
+  }
+
+  function isInstructorRole() {
+    return String(state.access.studioRole || '') === '강사';
+  }
+
+  function enforceStudentsAccess() {
+    const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+    if (!currentUser) {
+      alert('로그인이 필요합니다.');
+      window.location.href = 'login.html';
+      return false;
+    }
+
+    const siteAccess = normalizeSiteAccess(currentUser?.siteAccess);
+    if (siteAccess !== 'pottery' && siteAccess !== 'both') {
+      alert('도예공방 10.19 접근 권한이 없습니다.');
+      window.location.href = 'index.html';
+      return false;
+    }
+
+    const role = getEffectiveStudioRole(currentUser);
+    if (role !== '어드민' && role !== '강사') {
+      alert('계정 등급으로 인해 선택 불가능');
+      window.location.href = 'pottery-workshop.html';
+      return false;
+    }
+
+    state.access.userName = String(currentUser?.name || currentUser?.username || '').trim();
+    state.access.studioRole = role;
+
+    if (role === '강사') {
+      document.title = '도예공방 10.19 - 나의 수강생 관리';
+      const h1 = document.querySelector('.students-header h1');
+      if (h1) h1.textContent = '나의 수강생 관리';
+    }
+
+    return true;
+  }
+
+  function getVisibleStudents() {
+    if (!isInstructorRole()) return state.students;
+    const instructorName = String(state.access.userName || '').trim();
+    return state.students.filter((student) => {
+      return getStudentCurrentInstructor(student) === instructorName;
+    });
+  }
+
+  function canManageStudent(student) {
+    if (!student) return false;
+    if (!isInstructorRole()) return true;
+    return getStudentCurrentInstructor(student) === String(state.access.userName || '').trim();
+  }
 
   function startHourlyAutoRecompute() {
     const run = () => {
@@ -172,6 +256,10 @@
     }
 
     const slot = state.slotPicker.selected;
+    if (isInstructorRole() && String(slot.instructor || '').trim() !== String(state.access.userName || '').trim()) {
+      alert('계정 등급으로 인해 선택 불가능');
+      return;
+    }
     const repeatWeekly = Boolean(document.getElementById('slot-repeat-weekly')?.checked);
     if (repeatWeekly && !isClassBlockRepeatingWeekly(slot.date, slot.start, slot.end)) {
       alert('선택한 수업 블록은 매주 반복되는 베이스 블록이 아닙니다. 매주 반복으로 등록할 수 없습니다.');
@@ -220,6 +308,10 @@
 
   function saveStudentWithoutSlot() {
     if (!state.pendingStudent) return;
+    if (isInstructorRole()) {
+      alert('계정 등급으로 인해 선택 불가능');
+      return;
+    }
 
     const student = {
       id: `stu-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -300,11 +392,17 @@
         cell.className = 'slot-cell';
 
         if (rule && rule.type === '수업시간') {
+          const isInstructorOwned = !isInstructorRole()
+            || String(rule.instructor || '').trim() === String(state.access.userName || '').trim();
           const occupancy = buildDailyOccupancyMap(date);
           const blockCapacity = getBlockCapacity(rule, occupancy);
           const isFull = blockCapacity >= 3;
           cell.classList.add('class-slot');
           if (isFull) cell.classList.add('full');
+          if (!isInstructorOwned) {
+            cell.classList.add('full');
+            cell.setAttribute('title', '계정 등급으로 인해 선택 불가능');
+          }
 
           const selected = state.slotPicker.selected
             && state.slotPicker.selected.date === date
@@ -333,6 +431,10 @@
           }
 
           cell.addEventListener('click', () => {
+            if (!isInstructorOwned) {
+              alert('계정 등급으로 인해 선택 불가능');
+              return;
+            }
             if (isFull) {
               alert('이 수업시간은 현재 정원이 가득 찼습니다.');
               return;
@@ -391,14 +493,16 @@
     const tbody = document.getElementById('students-tbody');
     if (!tbody) return;
 
-    if (!state.students.length) {
+    const visibleStudents = getVisibleStudents();
+
+    if (!visibleStudents.length) {
       tbody.innerHTML = '<tr class="empty-row"><td colspan="11">수강생을 추가하면 여기에 표시됩니다.</td></tr>';
       return;
     }
 
     tbody.innerHTML = '';
 
-    state.students.forEach((student, index) => {
+    visibleStudents.forEach((student, index) => {
       const stats = getStudentClassStats(student.name);
       const isMonthly = isMonthlyStartBasis(student?.tuitionBasis);
       const completedSincePayment = isMonthly
@@ -479,6 +583,7 @@
   function openEditModal(studentId) {
     const student = state.students.find((item) => item && item.id === studentId);
     if (!student) return;
+    if (!canManageStudent(student)) return;
 
     state.editingStudentId = String(studentId);
 
@@ -507,6 +612,7 @@
   function openDetailModal(studentId) {
     const student = state.students.find((item) => item && item.id === studentId);
     if (!student) return;
+    if (!canManageStudent(student)) return;
 
     state.detailStudentId = String(studentId);
     loadCalendarState();
@@ -536,6 +642,10 @@
   function saveStudentEdit() {
     const student = state.students.find((item) => item && item.id === state.editingStudentId);
     if (!student) {
+      closeEditModal();
+      return;
+    }
+    if (!canManageStudent(student)) {
       closeEditModal();
       return;
     }
@@ -606,6 +716,7 @@
   function deleteStudent(studentId) {
     const student = state.students.find((item) => item && item.id === studentId);
     if (!student) return;
+    if (!canManageStudent(student)) return;
     if (!confirm('이 수강생을 삭제하시겠습니까?')) return;
 
     state.students = state.students.filter((item) => item.id !== studentId);

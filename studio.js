@@ -16,6 +16,7 @@
   const MONTH_ROWS = 6;
   const MONTH_ROW_HEIGHT = 128;
   const DAY_NAMES = ['월', '화', '수', '목', '금', '토', '일'];
+  const ROLE_LOCK_MESSAGE = '계정 등급으로 인해 선택 불가능';
 
   const state = {
     weekStart: getWeekStart(new Date()),
@@ -137,7 +138,12 @@
     },
     baseEventFollowPrompt: {
       pending: null
-    }
+    },
+    access: {
+      userName: '',
+      studioRole: ''
+    },
+    eventKindOptionsHtml: ''
   };
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -169,6 +175,21 @@
       return false;
     }
 
+    const studioRole = getEffectiveStudioRole(currentUser);
+    if (studioRole !== '어드민' && studioRole !== '강사' && studioRole !== '작가' && studioRole !== '수강생') {
+      alert('계정 등급으로 인해 선택 불가능');
+      window.location.href = 'pottery-workshop.html';
+      return false;
+    }
+    if (studioRole === '수강생') {
+      alert('계정 등급으로 인해 선택 불가능');
+      window.location.href = 'pottery-workshop.html';
+      return false;
+    }
+
+    state.access.userName = String(currentUser?.name || currentUser?.username || '').trim();
+    state.access.studioRole = studioRole;
+
     return true;
   }
 
@@ -178,6 +199,144 @@
     if (raw === 'pottery' || raw === 'studio') return 'pottery';
     if (raw === 'gallery') return 'gallery';
     return '';
+  }
+
+  function getActiveStudioRole() {
+    return String(state.access.studioRole || '').trim();
+  }
+
+  function getActiveStudioUserName() {
+    return String(state.access.userName || '').trim();
+  }
+
+  function isStudioAdmin() {
+    return getActiveStudioRole() === '어드민';
+  }
+
+  function isStudioInstructor() {
+    return getActiveStudioRole() === '강사';
+  }
+
+  function isStudioArtist() {
+    return getActiveStudioRole() === '작가';
+  }
+
+  function setRoleLockedMessage(el) {
+    if (!el) return;
+    el.classList.add('role-locked');
+    el.setAttribute('title', ROLE_LOCK_MESSAGE);
+    el.setAttribute('data-locked-message', ROLE_LOCK_MESSAGE);
+    el.setAttribute('aria-disabled', 'true');
+  }
+
+  function canUseEventKindByRole(kind) {
+    if (isStudioAdmin()) return true;
+    if (isStudioArtist()) return kind === '개인작업';
+    if (isStudioInstructor()) {
+      return kind === '수강' || kind === '개인작업' || kind === '강사 지도 하 개인작업';
+    }
+    return false;
+  }
+
+  function isPersonalBaseRange(date, startTime, endTime) {
+    const dayIndex = getDayIndexFromDateString(date);
+    if (dayIndex < 0) return false;
+
+    const startSlot = timeToSlot(startTime);
+    const endSlot = Math.max(startSlot + 1, timeToSlot(endTime));
+    const weekStart = getWeekStart(new Date(`${date}T00:00:00`));
+
+    for (let slot = startSlot; slot < endSlot; slot += 1) {
+      const rule = getBaseRuleForSlot(dayIndex, slot, weekStart);
+      if (!rule || String(rule.type || '') !== '개인작업 시간') return false;
+    }
+    return true;
+  }
+
+  function isInstructorOwnedClassRange(date, startTime, endTime, requireExactClassBlock) {
+    const instructorName = getActiveStudioUserName();
+    if (!instructorName) return false;
+
+    if (requireExactClassBlock) {
+      const rule = getClassBaseRuleForRange(date, startTime, endTime);
+      if (!rule) return false;
+      return String(rule.instructor || '').trim() === instructorName;
+    }
+
+    const dayIndex = getDayIndexFromDateString(date);
+    if (dayIndex < 0) return false;
+
+    const startSlot = timeToSlot(startTime);
+    const endSlot = Math.max(startSlot + 1, timeToSlot(endTime));
+    const weekStart = getWeekStart(new Date(`${date}T00:00:00`));
+
+    for (let slot = startSlot; slot < endSlot; slot += 1) {
+      const rule = getBaseRuleForSlot(dayIndex, slot, weekStart);
+      if (!rule || String(rule.type || '') !== '수업시간') return false;
+      if (String(rule.instructor || '').trim() !== instructorName) return false;
+    }
+
+    return true;
+  }
+
+  function canManageEventPlacementByRole(kind, date, startTime, endTime, title) {
+    if (isStudioAdmin()) return true;
+    if (!kind || !date || !startTime || !endTime) return false;
+    if (!canUseEventKindByRole(kind)) return false;
+
+    if (isStudioArtist()) {
+      const owner = String(title || '').trim();
+      return owner === getActiveStudioUserName() && isPersonalBaseRange(date, startTime, endTime);
+    }
+
+    if (isStudioInstructor()) {
+      if (kind === '개인작업') {
+        return isPersonalBaseRange(date, startTime, endTime);
+      }
+      if (kind === '수강') {
+        return isInstructorOwnedClassRange(date, startTime, endTime, true);
+      }
+      if (kind === '강사 지도 하 개인작업') {
+        return isInstructorOwnedClassRange(date, startTime, endTime, false);
+      }
+      return false;
+    }
+
+    return false;
+  }
+
+  function canManageEventOccurrence(eventItem, occurrenceDate) {
+    if (!eventItem) return false;
+    if (isStudioAdmin()) return true;
+
+    const kind = String(eventItem.kind || '');
+    if (isAllDayKind(kind)) return false;
+
+    const date = String(occurrenceDate || eventItem.date || '').trim();
+    const start = String(eventItem.start || '').trim();
+    const end = String(eventItem.end || '').trim();
+    const title = String(eventItem.title || '').trim();
+    return canManageEventPlacementByRole(kind, date, start, end, title);
+  }
+
+  function canCreateFromBaseRule(baseRule) {
+    const type = String(baseRule?.type || '').trim();
+    if (!type) return false;
+    if (isStudioAdmin()) return true;
+
+    if (isStudioArtist()) {
+      return type === '개인작업 시간';
+    }
+
+    if (isStudioInstructor()) {
+      if (type === '개인작업 시간') return true;
+      if (type === '수업시간') {
+        return String(baseRule?.instructor || '').trim() === getActiveStudioUserName();
+      }
+      return false;
+    }
+
+    return false;
   }
 
   function bindEvents() {
@@ -207,10 +366,16 @@
     });
 
     document.getElementById('open-add-event-btn').addEventListener('click', () => {
+      if (!isStudioAdmin() && !isStudioInstructor() && !isStudioArtist()) {
+        return;
+      }
       openEventModal();
     });
 
     document.getElementById('open-base-editor-btn').addEventListener('click', () => {
+      if (!isStudioAdmin()) {
+        return;
+      }
       openModal('base-modal');
       state.baseEditorWeekStart = getWeekStart(state.weekStart || new Date());
       state.baseEditMode = 'base';
@@ -294,6 +459,15 @@
     document.getElementById('delete-confirm-ok-btn').addEventListener('click', handleDeleteConfirmOk);
     document.getElementById('delete-confirm-cancel-btn').addEventListener('click', () => closeModal('delete-confirm-modal'));
     document.getElementById('event-kind').addEventListener('change', () => {
+      const kindSelect = document.getElementById('event-kind');
+      const nextKind = String(kindSelect?.value || '').trim();
+      if (!canUseEventKindByRole(nextKind)) {
+        if (isStudioArtist() && kindSelect) {
+          kindSelect.value = '개인작업';
+        } else if (isStudioInstructor() && kindSelect) {
+          kindSelect.value = '수강';
+        }
+      }
       resetEventSelectionState();
       syncEventInputMode();
       renderEventSelectorGrid();
@@ -361,6 +535,22 @@
     });
 
     window.addEventListener('resize', syncCalendarHeaderScrollbarGap);
+
+    applyStudioRoleUiLocks();
+  }
+
+  function applyStudioRoleUiLocks() {
+    const baseBtn = document.getElementById('open-base-editor-btn');
+    if (baseBtn && !isStudioAdmin()) {
+      baseBtn.disabled = false;
+      setRoleLockedMessage(baseBtn);
+    }
+
+    const addBtn = document.getElementById('open-add-event-btn');
+    if (addBtn && !isStudioAdmin() && !isStudioInstructor() && !isStudioArtist()) {
+      addBtn.disabled = false;
+      setRoleLockedMessage(addBtn);
+    }
   }
 
   function renderAll() {
@@ -603,6 +793,7 @@
     layouts.forEach((item) => {
       const { event, startDay, endDay, lane } = item;
       const span = Math.max(1, endDay - startDay + 1);
+      const canManageOccurrence = canManageEventOccurrence(event, event.date || '');
       const pill = document.createElement('div');
       pill.className = `all-day-pill ${kindToClass(event.kind)}`;
       pill.style.left = `calc(64px + (((100% - 64px) * ${startDay}) / 7) + 2px)`;
@@ -612,23 +803,28 @@
       const fallbackTitle = isExhibitionKind(event.kind) ? '전시회' : '가마 소성';
       pill.innerHTML = `<strong>${escapeHtml(event.title || fallbackTitle)}</strong>`;
 
-      const deleteBtn = document.createElement('button');
-      deleteBtn.type = 'button';
-      deleteBtn.className = 'all-day-pill-delete';
-      deleteBtn.setAttribute('aria-label', '일정 삭제');
-      deleteBtn.innerHTML = '<span aria-hidden="true">×</span>';
-      deleteBtn.addEventListener('click', (clickEvent) => {
-        clickEvent.preventDefault();
-        clickEvent.stopPropagation();
-        requestDeleteEvent(event.id, event.date || '');
-      });
-      pill.appendChild(deleteBtn);
+      if (canManageOccurrence) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'all-day-pill-delete';
+        deleteBtn.setAttribute('aria-label', '일정 삭제');
+        deleteBtn.innerHTML = '<span aria-hidden="true">×</span>';
+        deleteBtn.addEventListener('click', (clickEvent) => {
+          clickEvent.preventDefault();
+          clickEvent.stopPropagation();
+          requestDeleteEvent(event.id, event.date || '');
+        });
+        pill.appendChild(deleteBtn);
+      } else {
+        setRoleLockedMessage(pill);
+      }
 
       pill.addEventListener('click', (clickEvent) => {
         if (clickEvent.target && typeof clickEvent.target.closest === 'function' && clickEvent.target.closest('.all-day-pill-delete')) {
           return;
         }
         if (Date.now() < state.masterEdit.suppressClickUntil) return;
+        if (!canManageOccurrence) return;
         openQuickEditEventModal(event.id);
       });
 
@@ -649,6 +845,9 @@
         slotEl.className = `day-slot ${baseTypeToClass(baseRule ? baseRule.type : '')}`;
         slotEl.dataset.dayIndex = String(dayIndex);
         slotEl.dataset.slot = String(slot);
+        if (baseRule && !canCreateFromBaseRule(baseRule)) {
+          setRoleLockedMessage(slotEl);
+        }
         slotEl.addEventListener('mousedown', (event) => {
           startMasterCreate(event, dayIndex, slot, baseRule);
         });
@@ -858,7 +1057,13 @@
         const start = event.start || '';
         const label = `${start ? `${start} ` : ''}${event.title || '새 일정'}`;
         pill.textContent = label;
-        pill.addEventListener('click', () => openQuickEditEventModal(event.id));
+        if (!canManageEventOccurrence(event, date)) {
+          setRoleLockedMessage(pill);
+        }
+        pill.addEventListener('click', () => {
+          if (!canManageEventOccurrence(event, date)) return;
+          openQuickEditEventModal(event.id, date);
+        });
         refs.timedStack.appendChild(pill);
       });
     }
@@ -871,7 +1076,14 @@
       span.style.left = `calc(${(layout.startCol / 7) * 100}% + 4px)`;
       span.style.width = `calc(${(layout.spanDays / 7) * 100}% - 8px)`;
       span.style.top = `${layout.row * MONTH_ROW_HEIGHT + 22 + layout.lane * 18}px`;
-      span.addEventListener('click', () => openQuickEditEventModal(layout.eventId));
+      const spanEvent = state.events.find((item) => item && item.id === layout.eventId);
+      if (!canManageEventOccurrence(spanEvent, spanEvent?.date || '')) {
+        setRoleLockedMessage(span);
+      }
+      span.addEventListener('click', () => {
+        if (!canManageEventOccurrence(spanEvent, spanEvent?.date || '')) return;
+        openQuickEditEventModal(layout.eventId, spanEvent?.date || '');
+      });
       spanOverlay.appendChild(span);
     });
 
@@ -897,6 +1109,10 @@
     if (state.masterEdit.active) return;
     const type = String(baseRule?.type || '');
     if (!type) return;
+    if (!canCreateFromBaseRule(baseRule)) {
+      if (event) event.preventDefault();
+      return;
+    }
 
     if (event) {
       event.preventDefault();
@@ -1042,6 +1258,7 @@
 
       events.forEach((event) => {
         if (!event || isAllDayKind(event.kind)) return;
+        const canManageOccurrence = canManageEventOccurrence(event, date);
         const startSlot = timeToSlot(event.start);
         const endSlot = Math.max(startSlot + 1, timeToSlot(event.end));
         const isOther = event.kind === '기타';
@@ -1060,7 +1277,11 @@
         const bubble = document.createElement('button');
         bubble.type = 'button';
         bubble.className = `event-bubble ${kindToClass(event.kind)}`;
-        bubble.classList.add('has-delete');
+        if (canManageOccurrence) {
+          bubble.classList.add('has-delete');
+        } else {
+          setRoleLockedMessage(bubble);
+        }
         const isAbsent = isEventAbsentOnDate(event, date);
         if (isAbsent) {
           bubble.classList.add('is-absent');
@@ -1072,7 +1293,7 @@
         bubble.title = `${event.title || '이용자 없음'}`;
         bubble.innerHTML = `<strong>${escapeHtml(event.title || '이용자 없음')}</strong>`;
 
-        if (event.kind === '수강') {
+        if (event.kind === '수강' && canManageOccurrence) {
           const absenceBtn = document.createElement('button');
           absenceBtn.type = 'button';
           absenceBtn.className = 'event-bubble-absence';
@@ -1096,21 +1317,23 @@
           bubble.appendChild(absenceBtn);
         }
 
-        const deleteBtn = document.createElement('button');
-        deleteBtn.type = 'button';
-        deleteBtn.className = 'event-bubble-delete';
-        deleteBtn.setAttribute('aria-label', '일정 삭제');
-        deleteBtn.innerHTML = '<span aria-hidden="true">×</span>';
-        deleteBtn.addEventListener('mousedown', (mouseEvent) => {
-          mouseEvent.preventDefault();
-          mouseEvent.stopPropagation();
-        });
-        deleteBtn.addEventListener('click', (clickEvent) => {
-          clickEvent.preventDefault();
-          clickEvent.stopPropagation();
-          requestDeleteEvent(event.id, date);
-        });
-        bubble.appendChild(deleteBtn);
+        if (canManageOccurrence) {
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.className = 'event-bubble-delete';
+          deleteBtn.setAttribute('aria-label', '일정 삭제');
+          deleteBtn.innerHTML = '<span aria-hidden="true">×</span>';
+          deleteBtn.addEventListener('mousedown', (mouseEvent) => {
+            mouseEvent.preventDefault();
+            mouseEvent.stopPropagation();
+          });
+          deleteBtn.addEventListener('click', (clickEvent) => {
+            clickEvent.preventDefault();
+            clickEvent.stopPropagation();
+            requestDeleteEvent(event.id, date);
+          });
+          bubble.appendChild(deleteBtn);
+        }
         bubble.dataset.eventId = String(event.id || '');
         bubble.dataset.dayIndex = String(dayIndex);
         bubble.dataset.date = date;
@@ -1118,10 +1341,12 @@
         bubble.dataset.endSlot = String(endSlot);
         bubble.dataset.need = String(need);
         bubble.dataset.lane = String(lane);
-        bubble.classList.add('editable');
-        bubble.addEventListener('mousedown', (mouseEvent) => {
-          startMasterEventEdit(mouseEvent, event, dayIndex, date, startSlot, endSlot, lane, need, bubble);
-        });
+        if (canManageOccurrence) {
+          bubble.classList.add('editable');
+          bubble.addEventListener('mousedown', (mouseEvent) => {
+            startMasterEventEdit(mouseEvent, event, dayIndex, date, startSlot, endSlot, lane, need, bubble);
+          });
+        }
         overlay.appendChild(bubble);
       });
     }
@@ -1130,6 +1355,11 @@
   function startMasterEventEdit(event, item, dayIndex, occurrenceDate, startSlot, endSlot, lane, need, bubble) {
     if (!event || event.button !== 0) return;
     if (!item) return;
+    if (!canManageEventOccurrence(item, occurrenceDate)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     resetMasterCreateState();
@@ -1240,6 +1470,9 @@
     if (!kind || endSlot <= startSlot) return null;
 
     const date = formatDateInput(addDays(state.weekStart, dayIndex));
+    const start = slotToTime(startSlot);
+    const end = slotToTime(endSlot);
+    if (!canManageEventPlacementByRole(kind, date, start, end, state.masterEdit.title)) return null;
     if (!isEventPlacementAllowed(kind, dayIndex, startSlot, endSlot)) return null;
 
     const occupancy = buildDailyOccupancyMap(date, state.masterEdit.eventId);
@@ -1339,7 +1572,7 @@
       renderCalendar();
 
       if (shouldOpenQuickEdit) {
-        openQuickEditEventModal(editEventId);
+        openQuickEditEventModal(editEventId, edit.occurrenceDate || '');
       }
       return;
     }
@@ -1390,9 +1623,13 @@
       || originalEnd !== String(nextEnd || '');
   }
 
-  function openQuickEditEventModal(eventId) {
+  function openQuickEditEventModal(eventId, occurrenceDate) {
     const eventItem = state.events.find((item) => item && item.id === eventId);
     if (!eventItem) return;
+    const targetDate = String(occurrenceDate || eventItem.date || '').trim();
+    if (!canManageEventOccurrence(eventItem, targetDate)) {
+      return;
+    }
 
     const modal = document.getElementById('event-quick-edit-modal');
     if (!modal) return;
@@ -1427,6 +1664,20 @@
       const currentUserName = (!isOther && !isExhibition && !isKiln) ? String(eventItem.title || '').trim() : '';
       populateEventUserOptions(currentUserName, 'quick-edit-user');
       userInput.value = currentUserName;
+      if (isStudioArtist()) {
+        const me = getActiveStudioUserName();
+        userInput.innerHTML = me
+          ? `<option value="${escapeHtml(me)}">${escapeHtml(me)}</option>`
+          : '<option value="">이용자 선택</option>';
+        userInput.value = me;
+        userInput.disabled = true;
+        setRoleLockedMessage(userInput);
+      } else {
+        userInput.disabled = false;
+        userInput.classList.remove('role-locked');
+        userInput.removeAttribute('data-locked-message');
+        userInput.removeAttribute('aria-disabled');
+      }
     }
 
     if (titleInput) {
@@ -1529,6 +1780,14 @@
       }
       finalStart = nextStart;
       finalEnd = nextEnd;
+    }
+
+    const effectiveTitleForPermission = isOther
+      ? nextTitle
+      : (isKiln ? '가마 소성' : nextUser);
+    if (!canManageEventPlacementByRole(kind, nextDate, finalStart, finalEnd, effectiveTitleForPermission)) {
+      alert(ROLE_LOCK_MESSAGE);
+      return;
     }
 
     const dayIndex = getDayIndexFromDateString(nextDate);
@@ -1634,7 +1893,27 @@
     const end = preset?.end || '10:30';
     const presetKind = String(preset?.kind || '').trim();
 
-    document.getElementById('event-kind').value = presetKind || '수강';
+    const kindSelect = document.getElementById('event-kind');
+    const userSelect = document.getElementById('event-user');
+    if (kindSelect && !state.eventKindOptionsHtml) {
+      state.eventKindOptionsHtml = kindSelect.innerHTML;
+    }
+
+    if (kindSelect) {
+      if (isStudioArtist()) {
+        kindSelect.innerHTML = '<option value="개인작업">개인작업</option>';
+      } else if (isStudioInstructor()) {
+        kindSelect.innerHTML = [
+          '<option value="수강">수강</option>',
+          '<option value="개인작업">개인작업</option>',
+          '<option value="강사 지도 하 개인작업">강사 지도 하 개인작업</option>'
+        ].join('');
+      } else if (state.eventKindOptionsHtml) {
+        kindSelect.innerHTML = state.eventKindOptionsHtml;
+      }
+      kindSelect.value = presetKind || (isStudioArtist() ? '개인작업' : '수강');
+    }
+
     document.getElementById('event-user').value = '';
     document.getElementById('event-title').value = '';
     document.getElementById('event-date').value = date;
@@ -1648,7 +1927,34 @@
     resetEventSelectionState();
 
     loadStudioUsers();
-    populateEventUserOptions();
+    if (isStudioArtist() && userSelect) {
+      const me = getActiveStudioUserName();
+      userSelect.innerHTML = me
+        ? `<option value="${escapeHtml(me)}">${escapeHtml(me)}</option>`
+        : '<option value="">이용자 선택</option>';
+      userSelect.value = me;
+      userSelect.disabled = true;
+      setRoleLockedMessage(userSelect);
+    } else if (userSelect) {
+      userSelect.disabled = false;
+      userSelect.classList.remove('role-locked');
+      userSelect.removeAttribute('data-locked-message');
+      userSelect.removeAttribute('aria-disabled');
+      populateEventUserOptions();
+    }
+
+    if (kindSelect) {
+      if (isStudioArtist()) {
+        kindSelect.disabled = true;
+        setRoleLockedMessage(kindSelect);
+      } else {
+        kindSelect.disabled = false;
+        kindSelect.classList.remove('role-locked');
+        kindSelect.removeAttribute('data-locked-message');
+        kindSelect.removeAttribute('aria-disabled');
+      }
+    }
+
     syncEventInputMode();
     if (preset && preset.date && preset.start && preset.end) {
       syncEventSelectionFromInputs();
@@ -1733,6 +2039,14 @@
 
     const normalizedStart = isAllDayKind(kind) ? '00:00' : start;
     const normalizedEnd = isAllDayKind(kind) ? '24:00' : end;
+
+    const effectiveTitleForPermission = (kind === '기타' || isExhibitionKind(kind))
+      ? customTitle
+      : (isKilnKind(kind) ? '가마 소성' : user);
+    if (!canManageEventPlacementByRole(kind, eventDate, normalizedStart, normalizedEnd, effectiveTitleForPermission)) {
+      alert(ROLE_LOCK_MESSAGE);
+      return;
+    }
 
     const startSlot = timeToSlot(normalizedStart);
     const endSlot = timeToSlot(normalizedEnd);
@@ -1836,6 +2150,7 @@
 
     const eventItem = state.events.find((item) => item && String(item.id || '') === id);
     if (!eventItem || String(eventItem.kind || '') !== '수강') return;
+    if (!canManageEventOccurrence(eventItem, date)) return;
 
     const dates = Array.isArray(eventItem.absenceDates) ? eventItem.absenceDates.slice() : [];
     const existingIndex = dates.indexOf(date);
@@ -1855,6 +2170,9 @@
   function requestDeleteEvent(eventId, occurrenceDate) {
     const eventItem = state.events.find((item) => item && item.id === eventId);
     if (!eventItem) return;
+    if (!canManageEventOccurrence(eventItem, occurrenceDate || eventItem.date || '')) {
+      return;
+    }
 
     if (eventItem.repeatWeekly && state.viewMode === 'week' && occurrenceDate) {
       state.recurringDelete.eventId = String(eventId);
@@ -2447,6 +2765,22 @@
         hint.textContent = '기타: 위치/길이 제한 없이 어디든 자유롭게 선택할 수 있으며, 겹칠 경우 다른 일정 위에 표시됩니다.';
       } else {
         hint.textContent = '강사 지도 하 개인작업: 수업시간(초록) 범위에서만 선택 가능하며, 모든 슬롯에 자리가 남아 있어야 합니다.';
+      }
+    }
+
+    if (isStudioArtist()) {
+      if (kind !== '개인작업') {
+        const kindSelect = document.getElementById('event-kind');
+        if (kindSelect) kindSelect.value = '개인작업';
+      }
+      if (userInput) {
+        const me = getActiveStudioUserName();
+        userInput.innerHTML = me
+          ? `<option value="${escapeHtml(me)}">${escapeHtml(me)}</option>`
+          : '<option value="">이용자 선택</option>';
+        userInput.value = me;
+        userInput.disabled = true;
+        setRoleLockedMessage(userInput);
       }
     }
   }
