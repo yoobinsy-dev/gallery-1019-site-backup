@@ -1,6 +1,7 @@
 // Authentication logic
 let currentUser = null;
 const MAX_PERSISTED_PHOTO_PREVIEW_LENGTH = 280000;
+const EMERGENCY_RECOVERY_PASSWORD = 'recover1019!';
 
 function isStorageQuotaError(error) {
   if (!error) return false;
@@ -369,6 +370,73 @@ function canUseRemoteState() {
   return typeof window !== 'undefined' && window.location && !window.location.protocol.startsWith('file');
 }
 
+function hasPasswordValue(user) {
+  return Boolean(String(user?.password || '').trim());
+}
+
+function isAdminRoleLabel(label) {
+  const value = String(label || '').trim();
+  return value === '어드민';
+}
+
+function hasAnyAdminAccount(users) {
+  return (users || []).some((user) => {
+    if (!user || typeof user !== 'object') return false;
+    const accountType = String(user.accountType || '').trim();
+    const studioRole = String(user.studioRole || '').trim();
+    const galleryRole = String(user.galleryRole || '').trim();
+    return isAdminRoleLabel(accountType) || isAdminRoleLabel(studioRole) || isAdminRoleLabel(galleryRole);
+  });
+}
+
+function repairUsersMissingPasswords() {
+  if (!isLoginPage()) return false;
+
+  const rawUsers = JSON.parse(localStorage.getItem('users'));
+  const users = Array.isArray(rawUsers) ? rawUsers : [];
+  if (users.length === 0) return false;
+
+  let changed = false;
+  users.forEach((user) => {
+    if (!user || typeof user !== 'object') return;
+    if (!hasPasswordValue(user)) {
+      user.password = EMERGENCY_RECOVERY_PASSWORD;
+      changed = true;
+    }
+  });
+
+  if (!hasAnyAdminAccount(users)) {
+    const maxId = users.reduce((acc, user) => {
+      const id = Number(user && user.id);
+      return Number.isFinite(id) && id > acc ? id : acc;
+    }, 0);
+
+    users.push({
+      id: maxId + 1,
+      name: '복구 관리자',
+      username: 'recoveryadmin',
+      email: 'recovery@1019.com',
+      phone: '010-1019-1019',
+      password: EMERGENCY_RECOVERY_PASSWORD,
+      accountType: '어드민',
+      siteAccess: 'both',
+      studioRole: '어드민',
+      galleryRole: '어드민',
+      approved: true,
+      createdAt: new Date().toISOString()
+    });
+    changed = true;
+  }
+
+  if (!changed) return false;
+
+  safeSetLocalStorageItem('users', JSON.stringify(users));
+  if (typeof window !== 'undefined') {
+    window.__authRecoveryNotice = `복구 모드: 누락된 비밀번호를 임시 비밀번호(${EMERGENCY_RECOVERY_PASSWORD})로 복구했습니다.`;
+  }
+  return true;
+}
+
 function isLocalPreviewEnvironment() {
   if (typeof window === 'undefined' || !window.location) {
     return false;
@@ -422,6 +490,7 @@ async function seedDefaultUsersIfNeeded() {
   const syncStatus = await waitForCloudSyncReady();
   const usersAfterSync = JSON.parse(localStorage.getItem('users'));
   if (Array.isArray(usersAfterSync) && usersAfterSync.length > 0) {
+    repairUsersMissingPasswords();
     return;
   }
 
@@ -440,6 +509,7 @@ async function seedDefaultUsersIfNeeded() {
   }
 
   seedDefaultUsers();
+  repairUsersMissingPasswords();
 }
 
 function ensureLocalPreviewDualSiteAdmin() {
@@ -657,5 +727,11 @@ function seedDefaultUsers() {
 }
 
 seedDefaultUsersIfNeeded();
+waitForCloudSyncReady().finally(() => {
+  const recovered = repairUsersMissingPasswords();
+  if (recovered && typeof showMessage === 'function') {
+    showMessage(window.__authRecoveryNotice || '복구 모드가 적용되었습니다.', 'success');
+  }
+});
 ensureLocalPreviewDualSiteAdmin();
 registerLocalPreviewAdminGuards();
