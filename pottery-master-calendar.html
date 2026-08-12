@@ -231,8 +231,46 @@
   <div class="studio-modal" id="base-modal" aria-hidden="true">
     <div class="studio-modal-content studio-modal-wide">
       <h2>베이스 시간표 수정</h2>
-      <div class="base-create-actions">
+      <div class="base-edit-mode-row">
+        <label class="base-mode-switch" for="base-edit-mode-switch" aria-label="시간표 수정 모드 전환">
+          <input type="checkbox" id="base-edit-mode-switch">
+          <span class="base-mode-track" aria-hidden="true"></span>
+          <span class="base-mode-thumb" aria-hidden="true"></span>
+        </label>
+        <span id="base-edit-mode-label" class="base-edit-mode-label">기본 시간표 수정 모드</span>
+        <span class="base-help-inline">
+          <button type="button" class="base-info-icon" tabindex="0" aria-label="수정 모드 안내">i</button>
+          <span class="base-info-tooltip">
+            <strong>기본 시간표 수정 모드</strong><br>
+            해당 모드에서는 도예공방이 매주 기본으로 사용하는 베이스 시간표가 수정됩니다. 이 모드에서 이뤄지는 모든 수정은 아래 체크박스 선택 여부에 따라 모든 주, 혹은 이번주부터 모든 주에 반영됩니다.<br><br>
+            <strong>1주 시간표 수정 모드</strong><br>
+            해당 모드에서는 도예공방의 베이스 시간표가 1주 단위로 수정됩니다. 이 모드에서 이뤄지는 수정은 화면에 나와 있는 주차에만 반영됩니다.
+          </span>
+        </span>
+      </div>
+      <p id="base-override-week-hint" class="base-override-week-hint" aria-live="polite" hidden>이 주차의 시간표는 베이스 시간표와 다르기 때문에 1주 수정 모드만 가능합니다.</p>
+
+      <div class="base-from-week-row">
+        <label class="base-fancy-check" for="base-edit-from-current-week">
+          <input type="checkbox" id="base-edit-from-current-week">
+          <span class="base-fancy-check-mark" aria-hidden="true"></span>
+          <span class="base-from-week-label">이번주부터 수정</span>
+        </label>
+        <span class="base-help-inline">
+          <button type="button" class="base-info-icon" tabindex="0" aria-label="이번주부터 수정 안내">i</button>
+          <span class="base-info-tooltip">
+            이 체크박스를 선택하면 이뤄지는 모든 수정이 화면에 나와 있는 주와 그 이후의 주들에만 반영이 됩니다. 과거 주들은 바뀌지 않습니다.
+          </span>
+        </span>
+      </div>
+
+      <div class="base-week-nav" role="group" aria-label="베이스 주간 이동">
         <button type="button" class="studio-primary-btn" id="base-add-block-btn">+ 블록 추가</button>
+        <button type="button" class="studio-secondary-btn" id="base-go-today-btn">오늘</button>
+        <button type="button" class="studio-secondary-btn" id="base-prev-week-btn">이전 주</button>
+        <strong id="base-week-label">-</strong>
+        <button type="button" class="studio-secondary-btn" id="base-next-week-btn">다음 주</button>
+        <button type="button" class="studio-secondary-btn" id="undo-base-btn">되돌리기</button>
       </div>
 
       <div id="base-create-controls" class="base-create-controls is-hidden">
@@ -273,47 +311,6 @@
         <div class="modal-actions" style="justify-content: flex-start; margin-top: 4px;">
           <button type="button" class="studio-secondary-btn" id="base-cancel-add-block-btn">블록 추가 닫기</button>
         </div>
-      </div>
-
-      <div class="base-edit-mode-row">
-        <label class="base-mode-switch" for="base-edit-mode-switch" aria-label="시간표 수정 모드 전환">
-          <input type="checkbox" id="base-edit-mode-switch">
-          <span class="base-mode-track" aria-hidden="true"></span>
-          <span class="base-mode-thumb" aria-hidden="true"></span>
-        </label>
-        <span id="base-edit-mode-label" class="base-edit-mode-label">기본 시간표 수정 모드</span>
-        <span class="base-help-inline">
-          <button type="button" class="base-info-icon" tabindex="0" aria-label="수정 모드 안내">i</button>
-          <span class="base-info-tooltip">
-            <strong>기본 시간표 수정 모드</strong><br>
-            해당 모드에서는 도예공방이 매주 기본으로 사용하는 베이스 시간표가 수정됩니다. 이 모드에서 이뤄지는 모든 수정은 아래 체크박스 선택 여부에 따라 모든 주, 혹은 이번주부터 모든 주에 반영됩니다.<br><br>
-            <strong>1주 시간표 수정 모드</strong><br>
-            해당 모드에서는 도예공방의 베이스 시간표가 1주 단위로 수정됩니다. 이 모드에서 이뤄지는 수정은 화면에 나와 있는 주차에만 반영됩니다.
-          </span>
-        </span>
-      </div>
-      <p id="base-override-week-hint" class="base-override-week-hint" aria-live="polite" hidden>이 주차의 시간표는 베이스 시간표와 다르기 때문에 1주 수정 모드만 가능합니다.</p>
-
-      <div class="base-from-week-row">
-        <label class="base-fancy-check" for="base-edit-from-current-week">
-          <input type="checkbox" id="base-edit-from-current-week">
-          <span class="base-fancy-check-mark" aria-hidden="true"></span>
-          <span class="base-from-week-label">이번주부터 수정</span>
-        </label>
-        <span class="base-help-inline">
-          <button type="button" class="base-info-icon" tabindex="0" aria-label="이번주부터 수정 안내">i</button>
-          <span class="base-info-tooltip">
-            이 체크박스를 선택하면 이뤄지는 모든 수정이 화면에 나와 있는 주와 그 이후의 주들에만 반영이 됩니다. 과거 주들은 바뀌지 않습니다.
-          </span>
-        </span>
-      </div>
-
-      <div class="base-week-nav" role="group" aria-label="베이스 주간 이동">
-        <button type="button" class="studio-secondary-btn" id="base-go-today-btn">오늘</button>
-        <button type="button" class="studio-secondary-btn" id="base-prev-week-btn">이전 주</button>
-        <strong id="base-week-label">-</strong>
-        <button type="button" class="studio-secondary-btn" id="base-next-week-btn">다음 주</button>
-        <button type="button" class="studio-secondary-btn" id="undo-base-btn">되돌리기</button>
       </div>
 
       <div class="base-drag-hint">추가: 같은 요일 칼럼 안에서 드래그해 30분 구간을 선택하세요. 이동: 블록을 길게 눌러 원하는 시간으로 옮기세요. 수정: 블록을 한 번 클릭하세요.</div>
