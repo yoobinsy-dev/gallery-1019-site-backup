@@ -178,18 +178,20 @@ function ensureProfileEditStyles() {
     }
 
     .edit-account-btn {
-      background: #f3f4f6;
-      border: 1px solid #d1d5db;
-      color: #111827;
-      border-radius: 8px;
-      padding: 6px 10px;
+      padding: 6px 12px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
       font-size: 12px;
       font-weight: 600;
-      cursor: pointer;
+      transition: all 0.2s ease;
     }
 
     .edit-account-btn:hover {
-      background: #e5e7eb;
+      background: #1d4ed8;
+      transform: translateY(-1px);
     }
 
     .profile-edit-overlay {
