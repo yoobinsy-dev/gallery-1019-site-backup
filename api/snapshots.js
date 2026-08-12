@@ -8,6 +8,23 @@ const {
 
 const PRIVATE_REVALIDATE_CACHE_CONTROL = 'private, max-age=0, must-revalidate';
 
+function isAuthorizedSnapshotMutation(req) {
+  const expectedSecret = process.env.SNAPSHOT_ADMIN_SECRET || process.env.STATE_ADMIN_SECRET || process.env.CRON_SECRET;
+  if (!expectedSecret) return false;
+
+  const provided = typeof req.query?.secret === 'string' ? req.query.secret.trim() : '';
+  const fromHeader = typeof req.headers?.['x-admin-secret'] === 'string'
+    ? req.headers['x-admin-secret'].trim()
+    : '';
+  const authHeader = typeof req.headers?.authorization === 'string' ? req.headers.authorization.trim() : '';
+  const bearerPrefix = 'bearer ';
+  const bearerSecret = authHeader.toLowerCase().startsWith(bearerPrefix)
+    ? authHeader.slice(bearerPrefix.length).trim()
+    : '';
+
+  return provided === expectedSecret || fromHeader === expectedSecret || bearerSecret === expectedSecret;
+}
+
 module.exports = async function handler(req, res) {
   try {
     if (req.method === 'GET') {
@@ -23,6 +40,11 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
+      if (!isAuthorizedSnapshotMutation(req)) {
+        sendJson(res, 403, { ok: false, error: 'Forbidden' });
+        return;
+      }
+
       const body = await readJsonBody(req);
       const action = typeof body.action === 'string' ? body.action.trim() : '';
 
