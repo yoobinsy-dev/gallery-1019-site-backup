@@ -225,7 +225,15 @@ function getStoredUsers() {
 }
 
 function getManagedUsers(users) {
-  return (users || []).filter(u => u.username !== 'admin' || u.id === 1);
+  return (users || []).filter((user) => {
+    const username = String(user?.username || '').trim().toLowerCase();
+    const email = String(user?.email || '').trim().toLowerCase();
+    const id = Number(user?.id);
+
+    // Keep hiding only the original seeded legacy admin account.
+    const isLegacySeedAdmin = username === 'admin' && id === 1 && email === 'admin@1019.com';
+    return !isLegacySeedAdmin;
+  });
 }
 
 function getFilteredUsers(users) {
