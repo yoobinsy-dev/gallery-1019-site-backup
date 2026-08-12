@@ -4,7 +4,8 @@ const { getStateMap, getStateMetaMap, getStateMapWithMeta, setStateValue, delete
 const { logStateWriteAttempt, recordAlert, maybeTriggerConflictSpikeAlert } = require('./_lib/audit-store');
 const { buildTransferSafeExhibitions, migrateExhibitionImageReferences } = require('./_lib/exhibition-image-refs');
 
-const ALLOWED_KEYS = new Set(['users', 'exhibitions']);
+const ALLOWED_KEYS = new Set(['users', 'exhibitions', 'pottery-students-v1', 'studio-calendar-state-v1']);
+const STRICT_VERSION_KEYS = new Set(['users', 'pottery-students-v1', 'studio-calendar-state-v1']);
 const HARD_DROP_MIN_PREVIOUS_TOTAL = 20;
 const HARD_DROP_MIN_ABSOLUTE = 15;
 const HARD_DROP_RATIO = 0.7;
@@ -421,6 +422,214 @@ function detectSuspiciousUserDrop(currentUsers, nextUsers, removedIds = []) {
   };
 }
 
+function mergeStringArrayUnique(current, incoming) {
+  const merged = [];
+  const seen = new Set();
+  const append = (value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    merged.push(normalized);
+  };
+
+  (Array.isArray(current) ? current : []).forEach(append);
+  (Array.isArray(incoming) ? incoming : []).forEach(append);
+  return merged;
+}
+
+function mergeByIdentityArray(currentList, incomingList, identityResolver) {
+  const current = Array.isArray(currentList) ? currentList : [];
+  const incoming = Array.isArray(incomingList) ? incomingList : [];
+
+  const merged = current.slice();
+  const indexByIdentity = new Map();
+
+  const setIdentity = (item, index) => {
+    const identity = identityResolver(item);
+    if (!identity) return;
+    if (!indexByIdentity.has(identity)) {
+      indexByIdentity.set(identity, index);
+    }
+  };
+
+  merged.forEach((item, index) => setIdentity(item, index));
+
+  incoming.forEach((incomingItem) => {
+    const identity = identityResolver(incomingItem);
+    if (!identity) {
+      merged.push(incomingItem);
+      return;
+    }
+
+    const existingIndex = indexByIdentity.get(identity);
+    if (typeof existingIndex === 'number') {
+      merged[existingIndex] = incomingItem;
+      return;
+    }
+
+    merged.push(incomingItem);
+    indexByIdentity.set(identity, merged.length - 1);
+  });
+
+  return merged;
+}
+
+function resolveStudentIdentity(student) {
+  if (!student || typeof student !== 'object') return '';
+  const id = String(student.id || '').trim();
+  if (id) return `id:${id}`;
+  const name = String(student.name || '').trim().toLowerCase();
+  if (name) return `name:${name}`;
+  return '';
+}
+
+function mergeStudentRecord(currentStudent, incomingStudent) {
+  if (!currentStudent || typeof currentStudent !== 'object') return incomingStudent;
+  if (!incomingStudent || typeof incomingStudent !== 'object') return currentStudent;
+
+  return {
+    ...currentStudent,
+    ...incomingStudent,
+    paymentHistory: mergeStringArrayUnique(currentStudent.paymentHistory, incomingStudent.paymentHistory)
+  };
+}
+
+function mergeStudentsState(currentStudents, incomingStudents) {
+  if (!Array.isArray(currentStudents)) return Array.isArray(incomingStudents) ? incomingStudents : [];
+  if (!Array.isArray(incomingStudents)) return currentStudents;
+
+  const currentByIdentity = new Map();
+  currentStudents.forEach((student) => {
+    const identity = resolveStudentIdentity(student);
+    if (!identity || currentByIdentity.has(identity)) return;
+    currentByIdentity.set(identity, student);
+  });
+
+  return mergeByIdentityArray(currentStudents, incomingStudents, resolveStudentIdentity)
+    .map((student) => {
+      const identity = resolveStudentIdentity(student);
+      if (!identity) return student;
+      const current = currentByIdentity.get(identity);
+      return mergeStudentRecord(current, student);
+    });
+}
+
+function resolveItemIdentity(item) {
+  if (!item || typeof item !== 'object') return '';
+  const id = String(item.id || '').trim();
+  if (id) return `id:${id}`;
+
+  const date = String(item.date || '').trim();
+  const title = String(item.title || '').trim().toLowerCase();
+  const kind = String(item.kind || '').trim().toLowerCase();
+  const start = String(item.start || '').trim();
+  const end = String(item.end || '').trim();
+  if (date || title || kind || start || end) {
+    return `sig:${date}|${title}|${kind}|${start}|${end}`;
+  }
+  return '';
+}
+
+function mergeRulesByIdentity(currentRules, incomingRules) {
+  return mergeByIdentityArray(currentRules, incomingRules, (rule) => {
+    if (!rule || typeof rule !== 'object') return '';
+    const id = String(rule.id || '').trim();
+    if (id) return `id:${id}`;
+    const day = Number(rule.day);
+    const startSlot = Number(rule.startSlot);
+    const endSlot = Number(rule.endSlot);
+    const type = String(rule.type || '').trim();
+    if (Number.isFinite(day) && Number.isFinite(startSlot) && Number.isFinite(endSlot)) {
+      return `sig:${day}|${startSlot}|${endSlot}|${type}`;
+    }
+    return '';
+  });
+}
+
+function mergeTimelineByWeek(currentTimeline, incomingTimeline) {
+  const current = Array.isArray(currentTimeline) ? currentTimeline : [];
+  const incoming = Array.isArray(incomingTimeline) ? incomingTimeline : [];
+
+  const mergedByWeek = new Map();
+
+  current.forEach((entry) => {
+    const weekKey = String(entry?.weekKey || '').trim();
+    if (!weekKey) return;
+    mergedByWeek.set(weekKey, {
+      weekKey,
+      rules: Array.isArray(entry.rules) ? entry.rules : []
+    });
+  });
+
+  incoming.forEach((entry) => {
+    const weekKey = String(entry?.weekKey || '').trim();
+    if (!weekKey) return;
+    const existing = mergedByWeek.get(weekKey);
+    if (!existing) {
+      mergedByWeek.set(weekKey, {
+        weekKey,
+        rules: Array.isArray(entry.rules) ? entry.rules : []
+      });
+      return;
+    }
+
+    mergedByWeek.set(weekKey, {
+      weekKey,
+      rules: mergeRulesByIdentity(existing.rules, Array.isArray(entry.rules) ? entry.rules : [])
+    });
+  });
+
+  return Array.from(mergedByWeek.values()).sort((a, b) => String(a.weekKey).localeCompare(String(b.weekKey)));
+}
+
+function mergeWeekOverrides(currentOverrides, incomingOverrides) {
+  const current = currentOverrides && typeof currentOverrides === 'object' ? currentOverrides : {};
+  const incoming = incomingOverrides && typeof incomingOverrides === 'object' ? incomingOverrides : {};
+  const merged = { ...current };
+
+  Object.keys(incoming).forEach((weekKey) => {
+    const incomingRules = Array.isArray(incoming[weekKey]) ? incoming[weekKey] : [];
+    const currentRules = Array.isArray(current[weekKey]) ? current[weekKey] : [];
+    merged[weekKey] = mergeRulesByIdentity(currentRules, incomingRules);
+  });
+
+  return merged;
+}
+
+function mergeCalendarLog(currentLog, incomingLog) {
+  const current = Array.isArray(currentLog) ? currentLog : [];
+  const incoming = Array.isArray(incomingLog) ? incomingLog : [];
+  const merged = [];
+  const seen = new Set();
+
+  const append = (entry) => {
+    const signature = JSON.stringify(entry || {});
+    if (seen.has(signature)) return;
+    seen.add(signature);
+    merged.push(entry);
+  };
+
+  current.forEach(append);
+  incoming.forEach(append);
+  return merged;
+}
+
+function mergeStudioCalendarState(currentState, incomingState) {
+  const current = currentState && typeof currentState === 'object' ? currentState : {};
+  const incoming = incomingState && typeof incomingState === 'object' ? incomingState : {};
+
+  return {
+    ...current,
+    ...incoming,
+    events: mergeByIdentityArray(current.events, incoming.events, resolveItemIdentity),
+    baseRules: mergeRulesByIdentity(current.baseRules, incoming.baseRules),
+    baseRuleTimeline: mergeTimelineByWeek(current.baseRuleTimeline, incoming.baseRuleTimeline),
+    baseWeekOverrides: mergeWeekOverrides(current.baseWeekOverrides, incoming.baseWeekOverrides),
+    studioUsers: mergeStringArrayUnique(current.studioUsers, incoming.studioUsers),
+    classTeachingLog: mergeCalendarLog(current.classTeachingLog, incoming.classTeachingLog)
+  };
+}
+
 function getRequestId(req) {
   const fromHeader = typeof req.headers?.['x-request-id'] === 'string'
     ? req.headers['x-request-id'].trim()
@@ -528,14 +737,14 @@ function mergeExhibitionsStatePreferServerOnConflict(currentValue, incomingValue
 }
 
 function sanitizeRequestedKeys(raw) {
-  if (!raw) return ['users', 'exhibitions'];
+  if (!raw) return ['users', 'exhibitions', 'pottery-students-v1', 'studio-calendar-state-v1'];
   const parsed = raw
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
     .filter((item) => ALLOWED_KEYS.has(item));
 
-  return parsed.length > 0 ? parsed : ['users', 'exhibitions'];
+  return parsed.length > 0 ? parsed : ['users', 'exhibitions', 'pottery-students-v1', 'studio-calendar-state-v1'];
 }
 
 function buildExhibitionsSummary(exhibitions) {
@@ -664,14 +873,14 @@ module.exports = async function handler(req, res) {
       const clientId = getClientIdFromRequest(req);
 
       if (!ALLOWED_KEYS.has(key)) {
-        sendJson(res, 400, { ok: false, error: 'Invalid key. Allowed: users, exhibitions.' });
+        sendJson(res, 400, { ok: false, error: 'Invalid key. Allowed: users, exhibitions, pottery-students-v1, studio-calendar-state-v1.' });
         return;
       }
 
       const { meta: currentMeta } = await getStateMapWithMeta([key]);
       const serverUpdatedAt = currentMeta?.[key]?.updatedAt || '';
 
-      if (key === 'users' && hasKnownServerVersion(serverUpdatedAt) && !baseUpdatedAt) {
+      if (STRICT_VERSION_KEYS.has(key) && hasKnownServerVersion(serverUpdatedAt) && !baseUpdatedAt) {
         await logStateWriteAttempt({
           requestId,
           stateKey: key,
@@ -696,7 +905,7 @@ module.exports = async function handler(req, res) {
         return;
       }
 
-      if (key === 'users' && isStaleComparedToServer(baseUpdatedAt, serverUpdatedAt)) {
+      if (STRICT_VERSION_KEYS.has(key) && isStaleComparedToServer(baseUpdatedAt, serverUpdatedAt)) {
         await logStateWriteAttempt({
           requestId,
           stateKey: key,
@@ -858,6 +1067,22 @@ module.exports = async function handler(req, res) {
         };
       }
 
+      if (key === 'pottery-students-v1' && Array.isArray(body.value)) {
+        const existingMap = await getStateMap(['pottery-students-v1']);
+        const currentStudents = Array.isArray(existingMap['pottery-students-v1']) ? existingMap['pottery-students-v1'] : [];
+        valueToPersist = mergeStudentsState(currentStudents, body.value);
+        writeReason = 'pottery-students-merged';
+      }
+
+      if (key === 'studio-calendar-state-v1' && body.value && typeof body.value === 'object') {
+        const existingMap = await getStateMap(['studio-calendar-state-v1']);
+        const currentCalendar = existingMap['studio-calendar-state-v1'] && typeof existingMap['studio-calendar-state-v1'] === 'object'
+          ? existingMap['studio-calendar-state-v1']
+          : {};
+        valueToPersist = mergeStudioCalendarState(currentCalendar, body.value);
+        writeReason = 'studio-calendar-merged';
+      }
+
       if (key === 'exhibitions') {
         const existingMap = await getStateMap(['exhibitions']);
         const currentExhibitions = Array.isArray(existingMap.exhibitions) ? existingMap.exhibitions : [];
@@ -992,7 +1217,7 @@ module.exports = async function handler(req, res) {
       const requestId = getRequestId(req);
       const clientId = getClientIdFromRequest(req);
       if (!ALLOWED_KEYS.has(key)) {
-        sendJson(res, 400, { ok: false, error: 'Invalid key. Allowed: users, exhibitions.' });
+        sendJson(res, 400, { ok: false, error: 'Invalid key. Allowed: users, exhibitions, pottery-students-v1, studio-calendar-state-v1.' });
         return;
       }
 

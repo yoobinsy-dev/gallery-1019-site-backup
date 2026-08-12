@@ -1,5 +1,5 @@
 (function () {
-  const SYNCED_KEYS = new Set(['users', 'exhibitions']);
+  const SYNCED_KEYS = new Set(['users', 'exhibitions', 'pottery-students-v1', 'studio-calendar-state-v1']);
   const PUSH_DEBOUNCE_MS = 1500;
   const META_KEY = '__sync_updated_at__';
   const SESSION_META_KEY = '__sync_updated_at_session__';
@@ -26,14 +26,16 @@
   let applyingRemoteState = false;
   let resolveCloudSyncReady = null;
 
+  const initialHadRemoteData = {};
+  SYNCED_KEYS.forEach((key) => {
+    initialHadRemoteData[key] = false;
+  });
+
   const cloudSyncStatus = {
     ready: false,
     activeKeys: activeSyncKeys.slice(),
     remoteReachable: false,
-    hadRemoteData: {
-      users: false,
-      exhibitions: false
-    },
+    hadRemoteData: initialHadRemoteData,
     appliedRemoteKeys: []
   };
 
@@ -78,8 +80,16 @@
       return Array.from(SYNCED_KEYS);
     }
 
-    if (page === 'login.html' || page === 'users.html' || page === 'pottery-master-calendar.html') {
+    if (page === 'login.html' || page === 'users.html') {
       return ['users'];
+    }
+
+    if (page === 'pottery-master-calendar.html') {
+      return ['users', 'studio-calendar-state-v1'];
+    }
+
+    if (page === 'pottery-students.html') {
+      return ['users', 'pottery-students-v1', 'studio-calendar-state-v1'];
     }
 
     if (page === 'gallery-lounge.html') {
