@@ -594,6 +594,7 @@
     document.getElementById('edit-student-tuition').value = student.tuition ? formatWon(student.tuition) : '';
     document.getElementById('edit-student-tuition-basis').value = student.tuitionBasis || '';
     document.getElementById('edit-student-recent-payment').value = student.mostRecentPaymentDate || '';
+    document.getElementById('edit-student-manual-deduction').value = String(getManualUsedAdjustment(student));
 
     const modal = document.getElementById('student-edit-modal');
     if (!modal) return;
@@ -665,6 +666,10 @@
     student.tuition = parseCurrencyInput(document.getElementById('edit-student-tuition')?.value || '');
     student.tuitionBasis = String(document.getElementById('edit-student-tuition-basis')?.value || '');
     student.mostRecentPaymentDate = String(document.getElementById('edit-student-recent-payment')?.value || '');
+    const manualDeductionInput = Number(document.getElementById('edit-student-manual-deduction')?.value || '0');
+    student.manualUsedAdjustment = Number.isFinite(manualDeductionInput)
+      ? Math.max(0, Math.floor(manualDeductionInput))
+      : 0;
     if (!Array.isArray(student.paymentHistory)) {
       student.paymentHistory = [];
     }
@@ -683,9 +688,13 @@
     if (isMonthlyStartBasis(student.tuitionBasis)) {
       student.carryOverBeforePayment = 0;
       student.paymentCycleCredits = 0;
+      student.manualUsedAdjustment = 0;
     } else if (paymentChanged && student.mostRecentPaymentDate) {
-      student.carryOverBeforePayment = previousRemaining;
+      // Manual deduction is a one-cycle correction and should not carry to next payment cycle.
+      const hadManualDeduction = getManualUsedAdjustment(student) > 0;
+      student.carryOverBeforePayment = hadManualDeduction ? 0 : previousRemaining;
       student.paymentCycleCredits = basisToCount(student.tuitionBasis);
+      student.manualUsedAdjustment = 0;
     } else {
       const existingCycleCredits = Number(student.paymentCycleCredits);
       if (!Number.isFinite(existingCycleCredits)) {
@@ -694,6 +703,12 @@
       const existingCarry = Number(student.carryOverBeforePayment);
       if (!Number.isFinite(existingCarry)) {
         student.carryOverBeforePayment = 0;
+      }
+      const existingManualAdjustment = Number(student.manualUsedAdjustment);
+      if (!Number.isFinite(existingManualAdjustment) || existingManualAdjustment < 0) {
+        student.manualUsedAdjustment = 0;
+      } else {
+        student.manualUsedAdjustment = Math.floor(existingManualAdjustment);
       }
     }
 
@@ -756,8 +771,15 @@
     const safeCarry = Number.isFinite(carry) ? carry : 0;
     const safeCycle = Number.isFinite(cycleCredits) ? cycleCredits : 0;
     const safeUsed = Number.isFinite(used) ? used : 0;
+    const manualUsedAdjustment = getManualUsedAdjustment(student);
 
-    return safeCarry + safeCycle - safeUsed;
+    return safeCarry + safeCycle - safeUsed - manualUsedAdjustment;
+  }
+
+  function getManualUsedAdjustment(student) {
+    const parsed = Number(student?.manualUsedAdjustment || 0);
+    if (!Number.isFinite(parsed) || parsed < 0) return 0;
+    return Math.floor(parsed);
   }
 
   function renderDetailPaymentClassTable(student) {
@@ -1608,6 +1630,7 @@
               ? student.paymentHistory.map((d) => String(d || '').trim()).filter(Boolean)
               : (student?.mostRecentPaymentDate ? [String(student.mostRecentPaymentDate).trim()] : []),
             carryOverBeforePayment: Number(student.carryOverBeforePayment ?? 0),
+            manualUsedAdjustment: Number(student.manualUsedAdjustment ?? 0),
             paymentCycleCredits: Number(
               student.paymentCycleCredits
               ?? student.purchasedClassCount

@@ -143,6 +143,11 @@
           <label for="edit-student-recent-payment">가장 최근 결제일</label>
           <input id="edit-student-recent-payment" type="date">
         </div>
+        <div class="students-form-field">
+          <label for="edit-student-manual-deduction">수동 차감 (회)</label>
+          <input id="edit-student-manual-deduction" type="number" step="1" inputmode="numeric" placeholder="예: 2">
+          <small class="students-field-note">지금 사이클에만 반영됩니다. 다음 결제일로 변경하면 자동으로 0으로 초기화됩니다.</small>
+        </div>
       </form>
 
       <div class="modal-actions">
@@ -194,6 +199,6 @@
   <script src="cloud-sync.js?v=20260812-1"></script>
   <script src="auth.js?v=20260812-3"></script>
   <script src="pottery-landing.js?v=20260812-2"></script>
-  <script src="pottery-students.js?v=20260810-2"></script>
+  <script src="pottery-students.js?v=20260812-3"></script>
 </body>
 </html>
