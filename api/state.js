@@ -210,6 +210,64 @@ function getClientIdFromRequest(req) {
   return fromHeader || null;
 }
 
+function normalizeUserIdentityPart(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function buildUserIdentityKeys(user) {
+  const keys = [];
+  const id = Number(user?.id);
+  if (Number.isFinite(id) && id > 0) {
+    keys.push(`id:${id}`);
+  }
+
+  const username = normalizeUserIdentityPart(user?.username);
+  if (username) keys.push(`username:${username}`);
+
+  const email = normalizeUserIdentityPart(user?.email);
+  if (email) keys.push(`email:${email}`);
+
+  const name = normalizeUserIdentityPart(user?.name);
+  if (name) keys.push(`name:${name}`);
+
+  return keys;
+}
+
+function mergeUsersPreservingPasswords(currentUsers, incomingUsers) {
+  if (!Array.isArray(incomingUsers)) return incomingUsers;
+  const current = Array.isArray(currentUsers) ? currentUsers : [];
+
+  const currentByIdentity = new Map();
+  current.forEach((user) => {
+    if (!user || typeof user !== 'object') return;
+    buildUserIdentityKeys(user).forEach((key) => {
+      if (!currentByIdentity.has(key)) {
+        currentByIdentity.set(key, user);
+      }
+    });
+  });
+
+  return incomingUsers.map((user) => {
+    if (!user || typeof user !== 'object') return user;
+
+    const hasIncomingPassword = Boolean(String(user.password || '').trim());
+    if (hasIncomingPassword) return user;
+
+    const identities = buildUserIdentityKeys(user);
+    const matched = identities
+      .map((key) => currentByIdentity.get(key))
+      .find((candidate) => candidate && typeof candidate === 'object');
+
+    const preservedPassword = String(matched?.password || '').trim();
+    if (!preservedPassword) return user;
+
+    return {
+      ...user,
+      password: preservedPassword
+    };
+  });
+}
+
 function getRequestId(req) {
   const fromHeader = typeof req.headers?.['x-request-id'] === 'string'
     ? req.headers['x-request-id'].trim()
@@ -513,6 +571,12 @@ module.exports = async function handler(req, res) {
       let valueToPersist = body.value;
       let mergedOnConflict = false;
       let imageMigrationStats = null;
+
+      if (key === 'users' && Array.isArray(body.value)) {
+        const existingMap = await getStateMap(['users']);
+        const currentUsers = Array.isArray(existingMap.users) ? existingMap.users : [];
+        valueToPersist = mergeUsersPreservingPasswords(currentUsers, body.value);
+      }
 
       if (key === 'exhibitions') {
         const existingMap = await getStateMap(['exhibitions']);
