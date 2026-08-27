@@ -25,7 +25,14 @@ function getEffectiveGalleryRole(user) {
 }
 
 function getEffectiveStudioRole(user) {
-  return normalizeAccountType(user?.studioRole);
+  const direct = normalizeAccountType(user?.studioRole);
+  if (direct) return direct;
+
+  if (normalizeSiteAccess(user?.siteAccess) === 'pottery' && isAdminAccount(user?.accountType)) {
+    return '어드민';
+  }
+
+  return '';
 }
 
 function isAdminAnywhere(user) {
@@ -103,6 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   setCardVisibility('landing-users-card', isDualSiteAdmin(currentUser));
+  setCardVisibility('landing-accounting-card', isDualSiteAdmin(currentUser));
 
   wireAccessGuard('a[href="pottery-workshop.html"]', hasPotteryAccess(currentUser), '도예공방 10.19 접근 권한이 없습니다.');
   wireAccessGuard('a[href="gallery-lounge.html"]', hasGalleryAccess(currentUser), '10.19 Gallery&Lounge 접근 권한이 없습니다.');

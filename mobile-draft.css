@@ -1,0 +1,320 @@
+/* Mobile draft overrides: layout + usability only, no logic changes */
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img,
+canvas,
+svg,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 980px), (pointer: coarse) {
+  body {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .user-info {
+    position: sticky !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 320 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 0 8px !important;
+    padding: 5px 10px !important;
+    min-height: 34px !important;
+    border-radius: 0 !important;
+    gap: 6px !important;
+  }
+
+  #user-display {
+    min-width: 0 !important;
+    max-width: 180px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .user-pill-actions {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    margin-left: 8px !important;
+  }
+
+  .edit-account-btn,
+  .logout-btn {
+    min-height: 24px !important;
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+    line-height: 1.1 !important;
+  }
+
+  .home-back-link,
+  .studio-back-link,
+  .students-back-link,
+  .personal-back-link,
+  .orders-back-link,
+  .accounting-back-link,
+  .pottery-back-link,
+  .section-back-link,
+  .landing-back-link {
+    position: static !important;
+    display: inline-flex !important;
+    margin: 0 0 8px !important;
+  }
+
+  .admin-container,
+  .studio-page,
+  .students-wrap,
+  .personal-wrap,
+  .orders-wrap,
+  .accounting-wrap,
+  .container,
+  .main-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 12px !important;
+  }
+
+  .students-form,
+  .personal-form {
+    grid-template-columns: 1fr !important;
+  }
+
+  .students-submit-btn,
+  .personal-submit-btn {
+    grid-column: auto !important;
+  }
+
+  .students-detail-cards,
+  .students-modal-info,
+  .personal-detail-grid,
+  .accounting-summary,
+  .accounting-grid,
+  .studio-layout,
+  .studio-header {
+    grid-template-columns: 1fr !important;
+  }
+
+  .studio-header {
+    align-items: flex-start;
+  }
+
+  .slot-grid {
+    min-width: 780px !important;
+  }
+
+  /* Master calendar: keep the same grid math as desktop for bubble alignment. */
+  .studio-calendar-wrap {
+    overflow: hidden !important;
+    --calendar-scrollbar-gap: 0px !important;
+  }
+
+  .studio-calendar-viewport {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .studio-calendar-header,
+  .calendar-all-day-row,
+  .calendar-rows {
+    min-width: 1120px !important;
+    grid-template-columns: 64px repeat(7, minmax(150px, 1fr)) !important;
+  }
+
+  .studio-calendar-body {
+    min-width: 1120px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  .studio-calendar-wrap.is-month-mode .studio-calendar-header.month-header,
+  .studio-calendar-wrap.is-month-mode .month-grid {
+    min-width: 980px !important;
+    grid-template-columns: repeat(7, minmax(140px, 1fr)) !important;
+  }
+
+  .studio-calendar-wrap,
+  .slot-selector-wrap,
+  .students-table-wrap,
+  .personal-table-wrap,
+  .orders-table-wrap,
+  .accounting-table-wrap,
+  .users-table-wrapper,
+  .exhibitions-table-wrapper,
+  .inventory-table-wrapper,
+  .artist-sales-summary-table-wrapper {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .students-table,
+  .personal-table,
+  .orders-table,
+  .accounting-table,
+  .users-table,
+  .exhibitions-table,
+  .inventory-table,
+  .artist-sales-summary-table {
+    min-width: 980px !important;
+  }
+
+  .accounting-table {
+    min-width: 720px !important;
+  }
+
+  .students-table th,
+  .students-table td,
+  .personal-table th,
+  .personal-table td,
+  .orders-table th,
+  .orders-table td,
+  .accounting-table th,
+  .accounting-table td,
+  .users-table th,
+  .users-table td,
+  .exhibitions-table th,
+  .exhibitions-table td,
+  .inventory-table th,
+  .inventory-table td,
+  .artist-sales-summary-table th,
+  .artist-sales-summary-table td {
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+    overflow-wrap: normal !important;
+  }
+
+  .students-modal-content,
+  .students-modal-wide,
+  .students-modal-detail,
+  .personal-modal-content,
+  .personal-modal-wide,
+  .modal-content,
+  .sales-add-modal-content,
+  .artist-sales-summary-modal-content,
+  .accounting-modal-content,
+  .accounting-detail-modal-content,
+  .studio-modal-content,
+  .exhibition-modal-content {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100vh - 16px) !important;
+    margin: 8px !important;
+  }
+
+  .orders-modal-actions,
+  .personal-modal-actions,
+  .accounting-modal-actions,
+  .students-modal-actions,
+  .modal-actions {
+    flex-wrap: wrap;
+  }
+
+  .orders-modal-actions button,
+  .personal-modal-actions button,
+  .accounting-modal-actions button,
+  .students-modal-actions button,
+  .modal-actions button {
+    flex: 1 1 140px;
+  }
+
+  button,
+  .row-action-btn,
+  .personal-action-btn,
+  .orders-action-btn,
+  .accounting-mini-btn,
+  .logout-btn,
+  .studio-primary-btn,
+  .studio-secondary-btn {
+    min-height: 40px;
+  }
+
+  /* Keep calendar geometry identical to desktop: global button min-height must not affect slot rows/bubbles. */
+  .studio-calendar-wrap .day-slot,
+  .studio-calendar-wrap .event-bubble,
+  .studio-calendar-wrap .month-mini-pill,
+  .studio-calendar-wrap .month-span-pill {
+    min-height: 0 !important;
+  }
+
+  .all-day-pill-delete,
+  .event-bubble-delete {
+    min-height: 0 !important;
+  }
+
+  .all-day-pill-delete {
+    width: 14px !important;
+    height: 14px !important;
+    padding: 0 !important;
+  }
+
+  .event-bubble-delete {
+    width: 18px !important;
+    height: 18px !important;
+    padding: 0 !important;
+  }
+
+}
+
+@media (max-width: 640px), (max-width: 980px) and (pointer: coarse) {
+  .admin-title {
+    font-size: 34px !important;
+  }
+
+  .admin-subtitle,
+  .students-header p,
+  .personal-header p,
+  .orders-header p,
+  .accounting-header p,
+  .studio-header p {
+    font-size: 14px !important;
+  }
+
+  .students-table,
+  .personal-table,
+  .orders-table,
+  .accounting-table,
+  .users-table,
+  .exhibitions-table,
+  .inventory-table,
+  .artist-sales-summary-table {
+    min-width: 920px !important;
+  }
+
+  .accounting-table {
+    min-width: 680px !important;
+  }
+
+  .students-table th,
+  .students-table td,
+  .personal-table th,
+  .personal-table td,
+  .orders-table th,
+  .orders-table td,
+  .accounting-table th,
+  .accounting-table td,
+  .users-table th,
+  .users-table td,
+  .exhibitions-table th,
+  .exhibitions-table td {
+    padding: 6px !important;
+    font-size: 12px !important;
+  }
+
+  .menu-grid,
+  .pottery-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

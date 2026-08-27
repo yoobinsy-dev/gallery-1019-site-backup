@@ -4,9 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>도예공방 10.19 - 마스터 캘린더</title>
-  <link rel="stylesheet" href="studio.css?v=20260812-3">
+  <link rel="stylesheet" href="studio.css?v=20260819-6">
+  <link rel="stylesheet" href="mobile-draft.css?v=20260820-3">
 </head>
-<body>
+<body class="studio-master-page">
   <a class="studio-back-link" href="pottery-workshop.html" aria-label="도예공방 10.19 메뉴로 돌아가기">← 메뉴로</a>
 
   <div class="studio-page">
@@ -15,57 +16,76 @@
         <h1>도예공방 10.19</h1>
         <p>마스터 캘린더</p>
       </div>
-      <div class="studio-week-nav">
-        <div class="studio-view-toggle" role="group" aria-label="캘린더 보기 전환">
-          <button type="button" id="go-today-btn">오늘</button>
-          <button type="button" id="week-view-btn" class="is-active">주간</button>
-          <button type="button" id="month-view-btn">월간</button>
-        </div>
-        <button type="button" id="prev-week-btn">이전 주</button>
-        <strong id="week-label">-</strong>
-        <button type="button" id="next-week-btn">다음 주</button>
-      </div>
     </header>
 
     <main class="studio-layout">
       <aside class="studio-sidebar">
         <button type="button" class="studio-primary-btn" id="open-add-event-btn">일정 추가</button>
         <button type="button" class="studio-secondary-btn" id="open-base-editor-btn">베이스 시간표 수정</button>
+        <button
+          type="button"
+          class="studio-secondary-btn studio-mobile-info-toggle"
+          id="mobile-info-toggle-btn"
+          aria-expanded="false"
+          aria-controls="studio-mobile-info-panels"
+        >범례 및 개인작업 현황 보기</button>
 
-        <section class="studio-panel">
-          <h2>일정 종류</h2>
-          <ul class="legend-list">
-            <li><span class="dot kind-class"></span>수강</li>
-            <li><span class="dot kind-personal"></span>개인작업</li>
-            <li><span class="dot kind-guided"></span>강사 지도 하 개인작업</li>
-            <li><span class="dot kind-kiln"></span>가마 소성</li>
-            <li><span class="dot kind-exhibition"></span>전시회</li>
-            <li><span class="dot kind-other"></span>기타</li>
-          </ul>
-        </section>
+        <div id="studio-mobile-info-panels" class="studio-mobile-info-panels">
+          <section class="studio-panel">
+            <h2>일정 종류</h2>
+            <ul class="legend-list">
+              <li><span class="dot kind-class"></span>수강</li>
+              <li><span class="dot kind-personal"></span>개인작업</li>
+              <li><span class="dot kind-guided"></span>강사 지도 하 개인작업</li>
+              <li><span class="dot kind-kiln"></span>가마 소성</li>
+              <li><span class="dot kind-exhibition"></span>전시회</li>
+              <li><span class="dot kind-other"></span>기타</li>
+            </ul>
+          </section>
 
-        <section class="studio-panel">
-          <h2>베이스 시간표</h2>
-          <ul class="legend-list">
-            <li><span class="dot base-class"></span>수업시간</li>
-            <li><span class="dot base-personal"></span>개인작업 시간</li>
-            <li><span class="dot base-closed"></span>이용 불가</li>
-          </ul>
-        </section>
+          <section class="studio-panel">
+            <h2>베이스 시간표</h2>
+            <ul class="legend-list">
+              <li><span class="dot base-class"></span>수업시간</li>
+              <li><span class="dot base-personal"></span>개인작업 시간</li>
+              <li><span class="dot base-closed"></span>이용 불가</li>
+            </ul>
+          </section>
 
-        <section class="studio-panel my-workshop-panel" id="my-workshop-panel" hidden>
-          <h2>나의 개인작업 현황</h2>
-          <div class="my-workshop-info-row"><strong>계약 기간</strong><span id="my-workshop-cycle">-</span></div>
-          <div class="my-workshop-info-row"><strong>월별 이용료</strong><span id="my-workshop-fee">-</span></div>
-          <div class="my-workshop-info-row"><strong>최근 결제일</strong><span id="my-workshop-payment">-</span></div>
-          <div class="my-workshop-info-row"><strong>사용한 이용시간</strong><span id="my-workshop-used">0시간</span></div>
-          <div class="my-workshop-info-row"><strong>남은 이용시간</strong><span id="my-workshop-remain">0시간</span></div>
-        </section>
+          <section class="studio-panel my-workshop-panel" id="my-workshop-panel" hidden>
+            <h2>나의 개인작업 현황</h2>
+            <div class="my-workshop-info-row"><strong>계약 기간</strong><span id="my-workshop-cycle">-</span></div>
+            <div class="my-workshop-info-row"><strong>월별 이용료</strong><span id="my-workshop-fee">-</span></div>
+            <div class="my-workshop-info-row"><strong>최근 결제일</strong><span id="my-workshop-payment">-</span></div>
+            <div class="my-workshop-info-row"><strong>사용한 이용시간</strong><span id="my-workshop-used">0시간</span></div>
+            <div class="my-workshop-info-row"><strong>남은 이용시간</strong><span id="my-workshop-remain">0시간</span></div>
+          </section>
+        </div>
       </aside>
 
       <section class="studio-calendar-wrap">
-        <div class="studio-calendar-header" id="calendar-day-header"></div>
-        <div class="studio-calendar-body" id="calendar-body"></div>
+        <div class="studio-calendar-controls">
+          <div class="studio-controls-top">
+            <div class="studio-view-toggle" role="group" aria-label="캘린더 보기 전환">
+              <button type="button" id="go-today-btn">오늘</button>
+              <button type="button" id="week-view-btn" class="is-active">주간</button>
+              <button type="button" id="month-view-btn">월간</button>
+            </div>
+            <div class="studio-zoom-controls" role="group" aria-label="캘린더 확대 축소">
+              <button type="button" id="zoom-in-btn" aria-label="확대">🔍 +</button>
+              <button type="button" id="zoom-out-btn" aria-label="축소">🔍 -</button>
+            </div>
+          </div>
+          <div class="studio-controls-bottom">
+            <button type="button" id="prev-week-btn">이전 주</button>
+            <strong id="week-label">-</strong>
+            <button type="button" id="next-week-btn">다음 주</button>
+          </div>
+        </div>
+        <div class="studio-calendar-viewport" id="calendar-viewport">
+          <div class="studio-calendar-header" id="calendar-day-header"></div>
+          <div class="studio-calendar-body" id="calendar-body"></div>
+        </div>
       </section>
     </main>
   </div>
@@ -97,6 +117,13 @@
       <div class="form-row" id="event-title-row" style="display: none;">
         <label for="event-title">제목</label>
         <input id="event-title" type="text" placeholder="예: 배관 점검, 공사 작업">
+      </div>
+      <div class="form-row" id="event-kiln-category-row" style="display: none;">
+        <label for="event-kiln-category">구분</label>
+        <select id="event-kiln-category">
+          <option value="초벌">초벌</option>
+          <option value="재벌">재벌</option>
+        </select>
       </div>
       <div class="form-row two-col">
         <div id="event-date-wrap">
@@ -161,6 +188,13 @@
       <div class="form-row" id="quick-edit-title-row" style="display: none;">
         <label for="quick-edit-title">제목</label>
         <input id="quick-edit-title" type="text" placeholder="제목 입력">
+      </div>
+      <div class="form-row" id="quick-edit-kiln-category-row" style="display: none;">
+        <label for="quick-edit-kiln-category">구분</label>
+        <select id="quick-edit-kiln-category">
+          <option value="초벌">초벌</option>
+          <option value="재벌">재벌</option>
+        </select>
       </div>
       <div class="form-row" id="quick-edit-date-row">
         <label for="quick-edit-date">날짜</label>
@@ -394,8 +428,8 @@
     </div>
   </div>
 
-  <script src="cloud-sync.js?v=20260812-1"></script>
-  <script src="auth.js?v=20260812-3"></script>
-  <script src="studio.js?v=20260812-5"></script>
+  <script src="cloud-sync.js?v=20260813-1"></script>
+  <script src="auth.js?v=20260819-1"></script>
+  <script src="studio.js?v=20260820-4"></script>
 </body>
 </html>

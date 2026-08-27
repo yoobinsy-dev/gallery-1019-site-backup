@@ -3,6 +3,7 @@
   const SLOTS_PER_DAY = 48;
   const STORAGE_KEY = 'studio-calendar-state-v1';
   const STUDENT_STORAGE_KEY = 'pottery-students-v1';
+  const PERSONAL_WORK_STORAGE_KEY = 'pottery-personal-work-v1';
   const SLOT_HEIGHT = 28;
   const BASE_EDITOR_START_SLOT = 20; // 10:00
   const BASE_EDITOR_END_SLOT = 36; // 18:00
@@ -15,8 +16,12 @@
   const EVENT_SELECTOR_TIME_COL_WIDTH = 56;
   const MONTH_ROWS = 6;
   const MONTH_ROW_HEIGHT = 128;
+  const MIN_CALENDAR_ZOOM = 0.7;
+  const MAX_CALENDAR_ZOOM = 1.5;
+  const CALENDAR_ZOOM_STEP = 0.1;
   const DAY_NAMES = ['월', '화', '수', '목', '금', '토', '일'];
   const ROLE_LOCK_MESSAGE = '계정 등급으로 인해 선택 불가능';
+  const KILN_CATEGORY_OPTIONS = ['초벌', '재벌'];
 
   const state = {
     weekStart: getWeekStart(new Date()),
@@ -104,11 +109,13 @@
       endSlot: null,
       duration: 1,
       capacity: 1,
+      originLane: 0,
       kind: '',
       title: '',
       repeatWeekly: false,
       anchorOffset: 0,
       bubbleEl: null,
+      occupancySnapshot: null,
       validPreview: false,
       targetDayIndex: null,
       targetStartSlot: null,
@@ -116,6 +123,8 @@
       targetLane: 0,
       pointerDownX: 0,
       pointerDownY: 0,
+      pointerId: null,
+      touchIdentifier: null,
       pointerMoved: false,
       suppressClickUntil: 0
     },
@@ -143,16 +152,80 @@
       userName: '',
       studioRole: ''
     },
-    eventKindOptionsHtml: ''
+    eventKindOptionsHtml: '',
+    calendarZoom: 1
   };
 
   document.addEventListener('DOMContentLoaded', () => {
+    initializeStudioPage();
+  });
+
+  window.addEventListener('cloud-sync:state-applied', (event) => {
+    const keys = Array.isArray(event?.detail?.keys) ? event.detail.keys : [];
+    if (!keys.length) return;
+
+    if (keys.includes(STORAGE_KEY)) {
+      loadState();
+      renderAll();
+      return;
+    }
+
+    if (keys.includes(PERSONAL_WORK_STORAGE_KEY) || keys.includes('users')) {
+      renderMyWorkshopUsagePanel();
+      renderEventPersonalUserInfo();
+    }
+  });
+
+  window.addEventListener('storage', (event) => {
+    const changedKey = String(event?.key || '');
+    if (!changedKey) return;
+
+    if (changedKey === STORAGE_KEY) {
+      loadState();
+      renderAll();
+      return;
+    }
+
+    if (changedKey === PERSONAL_WORK_STORAGE_KEY || changedKey === 'users') {
+      renderMyWorkshopUsagePanel();
+      renderEventPersonalUserInfo();
+    }
+  });
+
+  function waitForCloudSyncReady(timeoutMs = 4000) {
+    const cloudReady = window.cloudSyncReady;
+    if (!cloudReady || typeof cloudReady.then !== 'function') {
+      return Promise.resolve(window.cloudSyncStatus || null);
+    }
+
+    const timeoutPromise = new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(window.cloudSyncStatus || null);
+      }, timeoutMs);
+    });
+
+    return Promise.race([
+      cloudReady.catch(() => null),
+      timeoutPromise
+    ]);
+  }
+
+  async function initializeStudioPage() {
     if (!enforceStudioAccess()) return;
+    await waitForCloudSyncReady();
     loadState();
     setCalendarToToday();
     bindEvents();
     renderAll();
-  });
+    startWorkshopUsageTicker();
+  }
+
+  function startWorkshopUsageTicker() {
+    setInterval(() => {
+      renderMyWorkshopUsagePanel();
+      renderEventPersonalUserInfo();
+    }, 60 * 1000);
+  }
 
   function setCalendarToToday() {
     const now = new Date();
@@ -359,6 +432,19 @@
   }
 
   function bindEvents() {
+    const mobileInfoToggleBtn = document.getElementById('mobile-info-toggle-btn');
+    if (mobileInfoToggleBtn) {
+      mobileInfoToggleBtn.addEventListener('click', toggleMobileInfoPanels);
+    }
+
+    document.getElementById('zoom-in-btn')?.addEventListener('click', () => {
+      setCalendarZoom(state.calendarZoom + CALENDAR_ZOOM_STEP);
+    });
+
+    document.getElementById('zoom-out-btn')?.addEventListener('click', () => {
+      setCalendarZoom(state.calendarZoom - CALENDAR_ZOOM_STEP);
+    });
+
     document.getElementById('prev-week-btn').addEventListener('click', () => {
       shiftCurrentRange(-1);
       renderAll();
@@ -526,8 +612,9 @@
     document.getElementById('undo-base-btn').addEventListener('click', undoBaseChange);
     document.addEventListener('mouseup', handleBaseEditorGlobalMouseUp);
     document.addEventListener('mousemove', handleBaseEditorGlobalMouseMove);
-    document.addEventListener('mousemove', handleMasterCalendarMouseMove);
-    document.addEventListener('mouseup', handleMasterCalendarMouseUp);
+    document.addEventListener('pointermove', handleMasterCalendarPointerMove);
+    document.addEventListener('pointerup', handleMasterCalendarPointerUp);
+    document.addEventListener('pointercancel', handleMasterCalendarPointerCancel);
     document.addEventListener('keydown', handleBaseEditorUndoShortcut);
 
     const baseGridRoot = document.getElementById('base-editor-grid');
@@ -559,8 +646,79 @@
     });
 
     window.addEventListener('resize', syncCalendarHeaderScrollbarGap);
+    window.addEventListener('resize', syncMobileInfoPanelsState);
 
     applyStudioRoleUiLocks();
+    syncMobileInfoPanelsState();
+  }
+
+  function isMobileViewport() {
+    if (typeof window === 'undefined') return false;
+    if (window.matchMedia && window.matchMedia('(max-width: 980px)').matches) return true;
+    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
+    return window.innerWidth <= 980;
+  }
+
+  function syncMobileInfoPanelsState() {
+    const toggleBtn = document.getElementById('mobile-info-toggle-btn');
+    const sidebar = document.querySelector('.studio-sidebar');
+    const infoPanels = document.getElementById('studio-mobile-info-panels');
+    if (!toggleBtn || !sidebar || !infoPanels) return;
+
+    const mobile = isMobileViewport();
+    if (!mobile) {
+      sidebar.classList.remove('mobile-info-open');
+      toggleBtn.setAttribute('aria-expanded', 'false');
+      toggleBtn.textContent = '범례 및 개인작업 현황 보기';
+      infoPanels.hidden = false;
+      return;
+    }
+
+    const opened = sidebar.classList.contains('mobile-info-open');
+    infoPanels.hidden = !opened;
+    toggleBtn.setAttribute('aria-expanded', opened ? 'true' : 'false');
+    toggleBtn.textContent = opened ? '범례 및 개인작업 현황 닫기' : '범례 및 개인작업 현황 보기';
+  }
+
+  function toggleMobileInfoPanels() {
+    const sidebar = document.querySelector('.studio-sidebar');
+    if (!sidebar) return;
+    sidebar.classList.toggle('mobile-info-open');
+    syncMobileInfoPanelsState();
+  }
+
+  function getCalendarSlotHeight() {
+    return SLOT_HEIGHT;
+  }
+
+  function getCalendarZoomFactor() {
+    const zoom = Number(state.calendarZoom);
+    if (!Number.isFinite(zoom)) return 1;
+    return Math.max(MIN_CALENDAR_ZOOM, Math.min(MAX_CALENDAR_ZOOM, zoom));
+  }
+
+  function applyCalendarZoomStyles() {
+    const viewport = document.getElementById('calendar-viewport');
+    if (!viewport) return;
+    const zoom = getCalendarZoomFactor();
+    viewport.style.zoom = String(zoom);
+    viewport.style.transformOrigin = 'top left';
+  }
+
+  function setCalendarZoom(nextZoom) {
+    const numeric = Number(nextZoom);
+    if (!Number.isFinite(numeric)) return;
+    state.calendarZoom = Math.max(MIN_CALENDAR_ZOOM, Math.min(MAX_CALENDAR_ZOOM, Math.round(numeric * 10) / 10));
+    updateCalendarZoomButtons();
+    renderCalendar();
+  }
+
+  function updateCalendarZoomButtons() {
+    const zoomInBtn = document.getElementById('zoom-in-btn');
+    const zoomOutBtn = document.getElementById('zoom-out-btn');
+    if (!zoomInBtn || !zoomOutBtn) return;
+    zoomInBtn.disabled = state.calendarZoom >= MAX_CALENDAR_ZOOM;
+    zoomOutBtn.disabled = state.calendarZoom <= MIN_CALENDAR_ZOOM;
   }
 
   function applyStudioRoleUiLocks() {
@@ -596,6 +754,8 @@
 
   function renderAll() {
     applyStudioRoleUiLocks();
+    syncMobileInfoPanelsState();
+    updateCalendarZoomButtons();
     renderMyWorkshopUsagePanel();
     syncViewToggleButtons();
     renderWeekLabel();
@@ -604,6 +764,11 @@
     renderBaseEditModeToggle();
     renderBaseEditorGrid();
     updateUndoButtonState();
+  }
+
+  function refreshWorkshopUsageUi() {
+    renderMyWorkshopUsagePanel();
+    renderEventPersonalUserInfo();
   }
 
   function renderWeekLabel() {
@@ -723,6 +888,7 @@
     const dayHeader = document.getElementById('calendar-day-header');
     const body = document.getElementById('calendar-body');
     const wrap = body ? body.closest('.studio-calendar-wrap') : null;
+    applyCalendarZoomStyles();
     if (state.viewMode === 'month') {
       renderMonthCalendar(dayHeader, body, wrap);
       return;
@@ -844,7 +1010,7 @@
       pill.style.top = `${2 + lane * 24}px`;
 
       const fallbackTitle = isExhibitionKind(event.kind) ? '전시회' : '가마 소성';
-      pill.innerHTML = `<strong>${escapeHtml(event.title || fallbackTitle)}</strong>`;
+      pill.innerHTML = `<strong>${escapeHtml(getEventDisplayTitle(event, fallbackTitle))}</strong>`;
 
       if (canManageOccurrence) {
         const deleteBtn = document.createElement('button');
@@ -1098,7 +1264,7 @@
         pill.type = 'button';
         pill.className = `month-mini-pill ${kindToClass(event.kind)}`;
         const start = event.start || '';
-        const label = `${start ? `${start} ` : ''}${event.title || '새 일정'}`;
+        const label = `${start ? `${start} ` : ''}${getEventDisplayTitle(event, '새 일정')}`;
         pill.textContent = label;
         if (!canManageEventOccurrence(event, date)) {
           setRoleLockedMessage(pill);
@@ -1325,40 +1491,12 @@
         } else {
           setRoleLockedMessage(bubble);
         }
-        const isAbsent = isEventAbsentOnDate(event, date);
-        if (isAbsent) {
-          bubble.classList.add('is-absent');
-        }
         bubble.style.top = `${startSlot * SLOT_HEIGHT + 1}px`;
         bubble.style.height = `${Math.max(SLOT_HEIGHT - 2, (endSlot - startSlot) * SLOT_HEIGHT - 2)}px`;
         bubble.style.left = `${((dayIndex + (lane / 3)) / 7) * 100}%`;
         bubble.style.width = `${((need / 3) / 7) * 100}%`;
-        bubble.title = `${event.title || '이용자 없음'}`;
-        bubble.innerHTML = `<strong>${escapeHtml(event.title || '이용자 없음')}</strong>`;
-
-        if (event.kind === '수강' && canManageOccurrence) {
-          const absenceBtn = document.createElement('button');
-          absenceBtn.type = 'button';
-          absenceBtn.className = 'event-bubble-absence';
-          if (isAbsent) {
-            absenceBtn.classList.add('is-clear');
-            absenceBtn.setAttribute('aria-label', '결석 해제');
-            absenceBtn.textContent = '결석\n해제';
-          } else {
-            absenceBtn.setAttribute('aria-label', '결석 처리');
-            absenceBtn.textContent = '결석';
-          }
-          absenceBtn.addEventListener('mousedown', (mouseEvent) => {
-            mouseEvent.preventDefault();
-            mouseEvent.stopPropagation();
-          });
-          absenceBtn.addEventListener('click', (clickEvent) => {
-            clickEvent.preventDefault();
-            clickEvent.stopPropagation();
-            toggleEventAbsence(event.id, date);
-          });
-          bubble.appendChild(absenceBtn);
-        }
+        bubble.title = getEventDisplayTitle(event, '이용자 없음');
+        bubble.innerHTML = `<strong>${escapeHtml(getEventDisplayTitle(event, '이용자 없음'))}</strong>`;
 
         if (canManageOccurrence) {
           const deleteBtn = document.createElement('button');
@@ -1366,10 +1504,14 @@
           deleteBtn.className = 'event-bubble-delete';
           deleteBtn.setAttribute('aria-label', '일정 삭제');
           deleteBtn.innerHTML = '<span aria-hidden="true">×</span>';
-          deleteBtn.addEventListener('mousedown', (mouseEvent) => {
-            mouseEvent.preventDefault();
-            mouseEvent.stopPropagation();
+          deleteBtn.addEventListener('pointerdown', (pointerEvent) => {
+            pointerEvent.preventDefault();
+            pointerEvent.stopPropagation();
           });
+          deleteBtn.addEventListener('touchstart', (touchEvent) => {
+            touchEvent.preventDefault();
+            touchEvent.stopPropagation();
+          }, { passive: false });
           deleteBtn.addEventListener('click', (clickEvent) => {
             clickEvent.preventDefault();
             clickEvent.stopPropagation();
@@ -1386,8 +1528,20 @@
         bubble.dataset.lane = String(lane);
         if (canManageOccurrence) {
           bubble.classList.add('editable');
-          bubble.addEventListener('mousedown', (mouseEvent) => {
-            startMasterEventEdit(mouseEvent, event, dayIndex, date, startSlot, endSlot, lane, need, bubble);
+          bubble.addEventListener('pointerdown', (pointerEvent) => {
+            if (String(pointerEvent?.pointerType || 'mouse') !== 'mouse') {
+              return;
+            }
+            startMasterEventEdit(pointerEvent, event, dayIndex, date, startSlot, endSlot, lane, need, bubble);
+          });
+          bubble.addEventListener('click', (clickEvent) => {
+            if (clickEvent.target && typeof clickEvent.target.closest === 'function' && clickEvent.target.closest('.event-bubble-delete')) {
+              return;
+            }
+            if (Date.now() < state.masterEdit.suppressClickUntil) {
+              return;
+            }
+            openQuickEditEventModal(event.id, date);
           });
         }
         overlay.appendChild(bubble);
@@ -1396,7 +1550,8 @@
   }
 
   function startMasterEventEdit(event, item, dayIndex, occurrenceDate, startSlot, endSlot, lane, need, bubble) {
-    if (!event || event.button !== 0) return;
+    if (!event) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
     if (!item) return;
     if (!canManageEventOccurrence(item, occurrenceDate)) {
       event.preventDefault();
@@ -1420,22 +1575,37 @@
     state.masterEdit.endSlot = endSlot;
     state.masterEdit.duration = Math.max(1, endSlot - startSlot);
     state.masterEdit.capacity = Math.max(1, Math.min(3, Number(item.capacity || 1)));
+    state.masterEdit.originLane = Number.isInteger(lane) ? lane : 0;
     state.masterEdit.kind = String(item.kind || '');
     state.masterEdit.title = String(item.title || '');
     state.masterEdit.repeatWeekly = Boolean(item.repeatWeekly);
     state.masterEdit.anchorOffset = pointer ? Math.max(0, pointer.slot - startSlot) : 0;
     state.masterEdit.pointerDownX = Number(event.clientX || 0);
     state.masterEdit.pointerDownY = Number(event.clientY || 0);
+    state.masterEdit.pointerId = event.pointerType === 'touch'
+      ? null
+      : (Number.isFinite(event.pointerId) ? Number(event.pointerId) : null);
+    state.masterEdit.touchIdentifier = event.pointerType === 'touch' && Number.isFinite(event.touchIdentifier)
+      ? Number(event.touchIdentifier)
+      : null;
     state.masterEdit.pointerMoved = false;
     state.masterEdit.bubbleEl = bubble;
+    state.masterEdit.occupancySnapshot = buildMasterEditOccupancySnapshot(item.id);
     state.masterEdit.validPreview = true;
     state.masterEdit.targetDayIndex = dayIndex;
     state.masterEdit.targetStartSlot = startSlot;
     state.masterEdit.targetEndSlot = endSlot;
-    state.masterEdit.targetLane = lane;
+    state.masterEdit.targetLane = Number.isInteger(lane) ? lane : 0;
 
     if (bubble) {
       bubble.classList.add('editing');
+      if (state.masterEdit.pointerId !== null && typeof bubble.setPointerCapture === 'function') {
+        try {
+          bubble.setPointerCapture(state.masterEdit.pointerId);
+        } catch (_error) {
+          // Ignore capture errors for unsupported environments.
+        }
+      }
     }
     document.body.classList.add('is-dragging-base');
   }
@@ -1443,24 +1613,35 @@
   function getMasterEventResizeEdge(event, bubble) {
     if (!event || !bubble) return '';
     const rect = bubble.getBoundingClientRect();
+    const edgePx = event.pointerType === 'touch'
+      ? Math.max(BASE_RESIZE_EDGE_PX, 14)
+      : BASE_RESIZE_EDGE_PX;
     const y = Number(event.clientY - rect.top);
-    if (y <= BASE_RESIZE_EDGE_PX) return 'start';
-    if (y >= Math.max(0, rect.height - BASE_RESIZE_EDGE_PX)) return 'end';
+    if (y <= edgePx) return 'start';
+    if (y >= Math.max(0, rect.height - edgePx)) return 'end';
     return '';
   }
 
-  function handleMasterCalendarMouseMove(event) {
+  function handleMasterCalendarPointerMove(event) {
     if (!state.masterEdit.active) return;
-    if (!event || typeof event.clientX !== 'number' || typeof event.clientY !== 'number') return;
+    if (state.masterEdit.touchIdentifier !== null) return;
+    if (state.masterEdit.pointerId !== null && Number(event.pointerId) !== state.masterEdit.pointerId) return;
+    applyMasterCalendarEditMove(event?.clientX, event?.clientY, event);
+  }
+
+  function applyMasterCalendarEditMove(clientX, clientY, sourceEvent) {
+    if (!state.masterEdit.active) return;
+    if (typeof clientX !== 'number' || typeof clientY !== 'number') return;
+    if (sourceEvent && sourceEvent.cancelable) sourceEvent.preventDefault();
 
     if (
-      Math.abs(event.clientX - state.masterEdit.pointerDownX) > 3
-      || Math.abs(event.clientY - state.masterEdit.pointerDownY) > 3
+      Math.abs(clientX - state.masterEdit.pointerDownX) > 3
+      || Math.abs(clientY - state.masterEdit.pointerDownY) > 3
     ) {
       state.masterEdit.pointerMoved = true;
     }
 
-    const pointer = getMasterPointerDaySlot(event.clientX, event.clientY);
+    const pointer = getMasterPointerDaySlot(clientX, clientY);
     if (!pointer) return;
 
     let nextDay = state.masterEdit.dayIndex;
@@ -1493,7 +1674,10 @@
       }
     }
 
-    const placement = getMasterEditPlacement(nextDay, nextStart, nextEnd);
+    const placement = getMasterEditPlacement(nextDay, nextStart, nextEnd, {
+      preferredLane: state.masterEdit.originLane,
+      requirePreferredLane: state.masterEdit.mode === 'resize'
+    });
     if (!placement) {
       state.masterEdit.validPreview = false;
       return;
@@ -1507,7 +1691,7 @@
     applyMasterEditPreview();
   }
 
-  function getMasterEditPlacement(dayIndex, startSlot, endSlot) {
+  function getMasterEditPlacement(dayIndex, startSlot, endSlot, options) {
     const kind = state.masterEdit.kind;
     const cap = state.masterEdit.capacity;
     if (!kind || endSlot <= startSlot) return null;
@@ -1518,8 +1702,15 @@
     if (!canManageEventPlacementByRole(kind, date, start, end, state.masterEdit.title)) return null;
     if (!isEventPlacementAllowed(kind, dayIndex, startSlot, endSlot)) return null;
 
-    const occupancy = buildDailyOccupancyMap(date, state.masterEdit.eventId);
-    if (!hasEnoughCapacityForRange(occupancy, startSlot, endSlot, cap)) return null;
+    const occupancy = getMasterEditOccupancyMap(date);
+    const preferredLaneRaw = Number(options?.preferredLane);
+    const preferredLane = Number.isInteger(preferredLaneRaw) ? preferredLaneRaw : null;
+    const requirePreferredLane = Boolean(options?.requirePreferredLane);
+
+    if (preferredLane !== null && canPlaceInLane(occupancy, startSlot, endSlot, cap, preferredLane)) {
+      return { lane: preferredLane };
+    }
+    if (requirePreferredLane) return null;
 
     const lane = findLane(occupancy, startSlot, endSlot, cap);
     if (lane < 0) return null;
@@ -1542,20 +1733,31 @@
     bubble.style.width = `${((cap / 3) / 7) * 100}%`;
   }
 
-  function handleMasterCalendarMouseUp(event) {
+  function handleMasterCalendarPointerUp(event) {
+    if (!event) return;
+    if (state.masterEdit.touchIdentifier !== null) return;
+    if (state.masterEdit.active && state.masterEdit.pointerId !== null && Number(event.pointerId) !== state.masterEdit.pointerId) {
+      return;
+    }
+    finalizeMasterCalendarEdit(event.clientX, event.clientY);
+  }
+
+  function finalizeMasterCalendarEdit(clientX, clientY) {
     if (state.masterEdit.active) {
       const edit = state.masterEdit;
       const editEventId = edit.eventId;
       const shouldOpenQuickEdit = Boolean(editEventId) && !edit.pointerMoved;
 
-      if (edit.kind === '수강' && event && typeof event.clientX === 'number' && typeof event.clientY === 'number') {
-        const pointer = getMasterPointerDaySlot(event.clientX, event.clientY);
+      if (edit.kind === '수강' && typeof clientX === 'number' && typeof clientY === 'number') {
+        const pointer = getMasterPointerDaySlot(clientX, clientY);
         if (pointer) {
           const classRule = getBaseRuleForSlot(pointer.day, pointer.slot);
           if (classRule && classRule.type === '수업시간') {
             const snapStart = Number(classRule.startSlot);
             const snapEnd = Number(classRule.endSlot);
-            const placement = getMasterEditPlacement(pointer.day, snapStart, snapEnd);
+            const placement = getMasterEditPlacement(pointer.day, snapStart, snapEnd, {
+              preferredLane: edit.originLane
+            });
             if (placement) {
               edit.validPreview = true;
               edit.targetDayIndex = pointer.day;
@@ -1613,6 +1815,7 @@
 
       resetMasterEditState();
       renderCalendar();
+      refreshWorkshopUsageUi();
 
       if (shouldOpenQuickEdit) {
         openQuickEditEventModal(editEventId, edit.occurrenceDate || '');
@@ -1625,9 +1828,63 @@
     }
   }
 
+  function handleMasterCalendarPointerCancel(event) {
+    if (!state.masterEdit.active) return;
+    if (state.masterEdit.touchIdentifier !== null) return;
+    if (state.masterEdit.pointerId !== null && Number(event?.pointerId) !== state.masterEdit.pointerId) return;
+    resetMasterEditState();
+    renderCalendar();
+  }
+
+  function getTrackedMasterTouch(event) {
+    const tracked = state.masterEdit.touchIdentifier;
+    if (!Number.isFinite(tracked)) return null;
+    const changed = Array.from(event?.changedTouches || []);
+    const active = Array.from(event?.touches || []);
+    const allTouches = changed.concat(active);
+    return allTouches.find((touch) => Number(touch.identifier) === Number(tracked)) || null;
+  }
+
+  function handleMasterCalendarTouchMove(event) {
+    if (!state.masterEdit.active) return;
+    if (state.masterEdit.touchIdentifier === null) return;
+    const touch = getTrackedMasterTouch(event);
+    if (!touch) return;
+    applyMasterCalendarEditMove(touch.clientX, touch.clientY, event);
+  }
+
+  function handleMasterCalendarTouchEnd(event) {
+    if (!state.masterEdit.active) return;
+    if (state.masterEdit.touchIdentifier === null) return;
+    const touch = getTrackedMasterTouch(event);
+    if (touch) {
+      finalizeMasterCalendarEdit(touch.clientX, touch.clientY);
+      return;
+    }
+    finalizeMasterCalendarEdit();
+  }
+
+  function handleMasterCalendarTouchCancel() {
+    if (!state.masterEdit.active) return;
+    if (state.masterEdit.touchIdentifier === null) return;
+    resetMasterEditState();
+    renderCalendar();
+  }
+
   function resetMasterEditState() {
-    if (state.masterEdit.bubbleEl) {
-      state.masterEdit.bubbleEl.classList.remove('editing');
+    const bubble = state.masterEdit.bubbleEl;
+    const pointerId = state.masterEdit.pointerId;
+    if (bubble) {
+      bubble.classList.remove('editing');
+      if (pointerId !== null && typeof bubble.hasPointerCapture === 'function' && typeof bubble.releasePointerCapture === 'function') {
+        try {
+          if (bubble.hasPointerCapture(pointerId)) {
+            bubble.releasePointerCapture(pointerId);
+          }
+        } catch (_error) {
+          // Ignore release errors for unsupported environments.
+        }
+      }
     }
     document.body.classList.remove('is-dragging-base');
     state.masterEdit.active = false;
@@ -1640,11 +1897,13 @@
     state.masterEdit.endSlot = null;
     state.masterEdit.duration = 1;
     state.masterEdit.capacity = 1;
+    state.masterEdit.originLane = 0;
     state.masterEdit.kind = '';
     state.masterEdit.title = '';
     state.masterEdit.repeatWeekly = false;
     state.masterEdit.anchorOffset = 0;
     state.masterEdit.bubbleEl = null;
+    state.masterEdit.occupancySnapshot = null;
     state.masterEdit.validPreview = false;
     state.masterEdit.targetDayIndex = null;
     state.masterEdit.targetStartSlot = null;
@@ -1652,6 +1911,8 @@
     state.masterEdit.targetLane = 0;
     state.masterEdit.pointerDownX = 0;
     state.masterEdit.pointerDownY = 0;
+    state.masterEdit.pointerId = null;
+    state.masterEdit.touchIdentifier = null;
     state.masterEdit.pointerMoved = false;
     state.masterEdit.suppressClickUntil = Date.now() + 220;
   }
@@ -1688,11 +1949,13 @@
     const kindEl = document.getElementById('quick-edit-kind');
     const userRow = document.getElementById('quick-edit-user-row');
     const titleRow = document.getElementById('quick-edit-title-row');
+    const kilnCategoryRow = document.getElementById('quick-edit-kiln-category-row');
     const dateRow = document.getElementById('quick-edit-date-row');
     const rangeRow = document.getElementById('quick-edit-range-row');
     const timeRow = document.getElementById('quick-edit-time-row');
     const userInput = document.getElementById('quick-edit-user');
     const titleInput = document.getElementById('quick-edit-title');
+    const kilnCategoryInput = document.getElementById('quick-edit-kiln-category');
     const dateInput = document.getElementById('quick-edit-date');
     const rangeStart = document.getElementById('quick-edit-range-start');
     const rangeEnd = document.getElementById('quick-edit-range-end');
@@ -1726,6 +1989,12 @@
     if (titleInput) {
       titleInput.value = String(eventItem.title || '');
     }
+    if (kilnCategoryInput) {
+      const inferredCategory = normalizeKilnCategory(eventItem.kilnCategory)
+        || extractKilnCategoryFromTitle(eventItem.title)
+        || KILN_CATEGORY_OPTIONS[0];
+      kilnCategoryInput.value = inferredCategory;
+    }
 
     if (dateInput) {
       dateInput.value = eventItem.date || formatDateInput(state.weekStart);
@@ -1742,6 +2011,7 @@
 
     if (userRow) userRow.style.display = (!isOther && !isExhibition && !isKiln) ? '' : 'none';
     if (titleRow) titleRow.style.display = (isOther || isExhibition) ? '' : 'none';
+    if (kilnCategoryRow) kilnCategoryRow.style.display = isKiln ? '' : 'none';
     if (dateRow) dateRow.style.display = isExhibition ? 'none' : '';
     if (rangeRow) rangeRow.style.display = isExhibition ? '' : 'none';
     if (timeRow) timeRow.style.display = isAllDay ? 'none' : '';
@@ -1774,6 +2044,7 @@
     const nextRangeEnd = String(document.getElementById('quick-edit-range-end')?.value || '').trim();
     const nextStart = String(document.getElementById('quick-edit-start')?.value || '').trim();
     const nextEnd = String(document.getElementById('quick-edit-end')?.value || '').trim();
+    const nextKilnCategory = normalizeKilnCategory(document.getElementById('quick-edit-kiln-category')?.value || '');
 
     if (isExhibition) {
       if (!nextTitle) {
@@ -1797,6 +2068,7 @@
       saveState();
       closeModal('event-quick-edit-modal');
       renderCalendar();
+      refreshWorkshopUsageUi();
       return;
     }
 
@@ -1859,12 +2131,21 @@
         return;
       }
       eventItem.title = nextTitle;
-    } else if (!isKiln) {
+      eventItem.kilnCategory = '';
+    } else if (isKiln) {
+      if (!nextKilnCategory) {
+        alert('가마 소성 구분을 선택해주세요.');
+        return;
+      }
+      eventItem.kilnCategory = nextKilnCategory;
+      eventItem.title = buildKilnEventTitle(nextKilnCategory);
+    } else {
       if (!nextUser) {
         alert('이용자를 선택해주세요.');
         return;
       }
       eventItem.title = nextUser;
+      eventItem.kilnCategory = '';
     }
 
     eventItem.date = nextDate;
@@ -1876,6 +2157,7 @@
     saveState();
     closeModal('event-quick-edit-modal');
     renderCalendar();
+    refreshWorkshopUsageUi();
   }
 
   function getMasterPointerDaySlot(clientX, clientY) {
@@ -1908,25 +2190,92 @@
     const x = clientX - rect.left - 64;
     const y = clientY - rect.top + body.scrollTop - allDayOffset;
     const day = Math.max(0, Math.min(6, Math.floor((x / totalWidth) * 7)));
-    const slot = Math.max(0, Math.min(SLOTS_PER_DAY - 1, Math.floor(y / SLOT_HEIGHT)));
+    const slot = Math.max(0, Math.min(SLOTS_PER_DAY - 1, Math.floor(y / (SLOT_HEIGHT * getCalendarZoomFactor()))));
     return { day, slot };
   }
 
   function findLane(occupancy, startSlot, endSlot, need) {
     for (let lane = 0; lane <= 3 - need; lane += 1) {
-      let available = true;
-      for (let s = startSlot; s < endSlot; s += 1) {
-        for (let l = lane; l < lane + need; l += 1) {
-          if (occupancy[s][l]) {
-            available = false;
-            break;
-          }
-        }
-        if (!available) break;
+      if (canPlaceInLane(occupancy, startSlot, endSlot, need, lane)) {
+        return lane;
       }
-      if (available) return lane;
     }
     return -1;
+  }
+
+  function canPlaceInLane(occupancy, startSlot, endSlot, need, lane) {
+    if (!Array.isArray(occupancy)) return false;
+    if (!Number.isInteger(startSlot) || !Number.isInteger(endSlot) || endSlot <= startSlot) return false;
+    if (!Number.isInteger(need) || need < 1 || need > 3) return false;
+    if (!Number.isInteger(lane) || lane < 0 || lane + need > 3) return false;
+
+    for (let s = startSlot; s < endSlot; s += 1) {
+      if (!Array.isArray(occupancy[s])) return false;
+      for (let l = lane; l < lane + need; l += 1) {
+        if (occupancy[s][l]) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function createEmptyDailyOccupancy() {
+    return Array.from({ length: SLOTS_PER_DAY }, () => [false, false, false]);
+  }
+
+  function cloneDailyOccupancy(occupancy) {
+    return Array.from({ length: SLOTS_PER_DAY }, (_unused, slot) => {
+      const row = Array.isArray(occupancy?.[slot]) ? occupancy[slot] : [];
+      return [Boolean(row[0]), Boolean(row[1]), Boolean(row[2])];
+    });
+  }
+
+  function markLaneOccupancy(occupancy, startSlot, endSlot, lane, need) {
+    for (let slot = startSlot; slot < endSlot; slot += 1) {
+      for (let l = lane; l < lane + need; l += 1) {
+        occupancy[slot][l] = true;
+      }
+    }
+  }
+
+  function buildMasterEditOccupancySnapshot(excludeEventId) {
+    const snapshot = {};
+    for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+      const date = formatDateInput(addDays(state.weekStart, dayIndex));
+      snapshot[date] = createEmptyDailyOccupancy();
+    }
+
+    const bubbles = Array.from(document.querySelectorAll('#calendar-body .events-overlay .event-bubble[data-event-id]'));
+    bubbles.forEach((bubble) => {
+      const eventId = String(bubble?.dataset?.eventId || '');
+      if (!eventId || (excludeEventId && eventId === excludeEventId)) return;
+
+      const date = String(bubble?.dataset?.date || '').trim();
+      if (!date || !snapshot[date]) return;
+
+      const startSlot = Number(bubble?.dataset?.startSlot);
+      const endSlot = Number(bubble?.dataset?.endSlot);
+      const lane = Number(bubble?.dataset?.lane);
+      const need = Math.max(1, Math.min(3, Number(bubble?.dataset?.need || 1)));
+
+      if (!Number.isInteger(startSlot) || !Number.isInteger(endSlot) || endSlot <= startSlot) return;
+      if (!canPlaceInLane(snapshot[date], startSlot, endSlot, need, lane)) return;
+
+      markLaneOccupancy(snapshot[date], startSlot, endSlot, lane, need);
+    });
+
+    return snapshot;
+  }
+
+  function getMasterEditOccupancyMap(date) {
+    const key = String(date || '').trim();
+    const snapshot = state.masterEdit.occupancySnapshot;
+    const saved = snapshot && snapshot[key];
+    if (saved) {
+      return cloneDailyOccupancy(saved);
+    }
+    return buildDailyOccupancyMap(key, state.masterEdit.eventId);
   }
 
   function openEventModal(preset) {
@@ -1966,6 +2315,8 @@
     document.getElementById('event-end').value = end;
     document.getElementById('event-capacity').value = '1';
     document.getElementById('event-weekly-repeat').checked = false;
+    const kilnCategoryInput = document.getElementById('event-kiln-category');
+    if (kilnCategoryInput) kilnCategoryInput.value = KILN_CATEGORY_OPTIONS[0];
 
     resetEventSelectionState();
 
@@ -2041,6 +2392,7 @@
     const kind = document.getElementById('event-kind').value;
     const user = document.getElementById('event-user').value;
     const customTitle = String(document.getElementById('event-title')?.value || '').trim();
+    const kilnCategory = normalizeKilnCategory(document.getElementById('event-kiln-category')?.value || '');
     const date = document.getElementById('event-date').value;
     const rangeStart = document.getElementById('event-range-start')?.value || '';
     const rangeEnd = document.getElementById('event-range-end')?.value || '';
@@ -2056,6 +2408,9 @@
         alert('제목을 입력해주세요.');
         return;
       }
+    } else if (isKilnKind(kind) && !kilnCategory) {
+      alert('가마 소성 구분을 선택해주세요.');
+      return;
     } else if (!isAllDayKind(kind) && !user) {
       alert('이용자를 선택해주세요.');
       return;
@@ -2136,7 +2491,9 @@
     state.events.push({
       id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       kind,
-      title: (kind === '기타' || isExhibitionKind(kind)) ? customTitle : (isKilnKind(kind) ? '가마 소성' : user),
+      title: (kind === '기타' || isExhibitionKind(kind))
+        ? customTitle
+        : (isKilnKind(kind) ? buildKilnEventTitle(kilnCategory) : user),
       date: eventDate,
       endDate: eventEndDate,
       start: normalizedStart,
@@ -2144,6 +2501,7 @@
       classType: classRule ? String(classRule.className || '수업시간') : '',
       instructor: classRule ? String(classRule.instructor || '').trim() : '',
       baseRuleId: classRule ? String(classRule.id || '') : '',
+      kilnCategory: isKilnKind(kind) ? kilnCategory : '',
       capacity,
       repeatWeekly: weeklyRepeat
     });
@@ -2151,6 +2509,7 @@
     saveState();
     closeModal('event-modal');
     renderCalendar();
+    refreshWorkshopUsageUi();
   }
 
   function getEventsForDate(date) {
@@ -2189,36 +2548,6 @@
     });
   }
 
-  function isEventAbsentOnDate(eventItem, occurrenceDate) {
-    if (!eventItem || String(eventItem.kind || '') !== '수강') return false;
-    const dates = Array.isArray(eventItem.absenceDates) ? eventItem.absenceDates : [];
-    return dates.includes(String(occurrenceDate || ''));
-  }
-
-  function toggleEventAbsence(eventId, occurrenceDate) {
-    const id = String(eventId || '');
-    const date = String(occurrenceDate || '');
-    if (!id || !date) return;
-
-    const eventItem = state.events.find((item) => item && String(item.id || '') === id);
-    if (!eventItem || String(eventItem.kind || '') !== '수강') return;
-    if (!canManageEventOccurrence(eventItem, date)) return;
-
-    const dates = Array.isArray(eventItem.absenceDates) ? eventItem.absenceDates.slice() : [];
-    const existingIndex = dates.indexOf(date);
-    if (existingIndex >= 0) {
-      dates.splice(existingIndex, 1);
-    } else {
-      dates.push(date);
-      dates.sort();
-    }
-
-    eventItem.absenceDates = dates;
-    saveState();
-    renderCalendar();
-    renderEventSelectorGrid();
-  }
-
   function requestDeleteEvent(eventId, occurrenceDate) {
     const eventItem = state.events.find((item) => item && item.id === eventId);
     if (!eventItem) return;
@@ -2249,6 +2578,7 @@
     saveState();
     closeModal('delete-confirm-modal');
     renderCalendar();
+    refreshWorkshopUsageUi();
   }
 
   function handleDeleteRecurringOne() {
@@ -2270,6 +2600,7 @@
     saveState();
     closeModal('recurring-delete-modal');
     renderCalendar();
+    refreshWorkshopUsageUi();
   }
 
   function handleDeleteRecurringFollowing() {
@@ -2293,6 +2624,7 @@
       saveState();
       closeModal('recurring-delete-modal');
       renderCalendar();
+      refreshWorkshopUsageUi();
       return;
     }
 
@@ -2305,6 +2637,7 @@
     saveState();
     closeModal('recurring-delete-modal');
     renderCalendar();
+    refreshWorkshopUsageUi();
   }
 
   function handleMoveRecurringOne() {
@@ -2351,6 +2684,7 @@
     resetRecurringMoveState();
     closeModal('recurring-move-modal');
     renderCalendar();
+    refreshWorkshopUsageUi();
   }
 
   function handleMoveRecurringFollowing() {
@@ -2394,6 +2728,7 @@
       resetRecurringMoveState();
       closeModal('recurring-move-modal');
       renderCalendar();
+      refreshWorkshopUsageUi();
       return;
     }
 
@@ -2425,6 +2760,7 @@
     resetRecurringMoveState();
     closeModal('recurring-move-modal');
     renderCalendar();
+    refreshWorkshopUsageUi();
   }
 
   function resetRecurringMoveState() {
@@ -2439,7 +2775,7 @@
   }
 
   function buildDailyOccupancyMap(date, excludeEventId) {
-    const occupancy = Array.from({ length: SLOTS_PER_DAY }, () => [false, false, false]);
+    const occupancy = createEmptyDailyOccupancy();
     const events = getEventsForDate(date);
 
     events.forEach((event) => {
@@ -2450,11 +2786,7 @@
       const need = Math.max(1, Math.min(3, Number(event.capacity || 1)));
       const lane = findLane(occupancy, s, e, need);
       if (lane < 0) return;
-      for (let slot = s; slot < e; slot += 1) {
-        for (let l = lane; l < lane + need; l += 1) {
-          occupancy[slot][l] = true;
-        }
-      }
+      markLaneOccupancy(occupancy, s, e, lane, need);
     });
 
     return occupancy;
@@ -2599,7 +2931,7 @@
 
       let personalNames = [];
       try {
-        const rawPersonal = JSON.parse(localStorage.getItem('pottery-personal-work-v1') || '[]');
+        const rawPersonal = JSON.parse(localStorage.getItem(PERSONAL_WORK_STORAGE_KEY) || '[]');
         personalNames = (Array.isArray(rawPersonal) ? rawPersonal : [])
           .filter((entry) => !entry?.isDormant)
           .map((entry) => String(entry?.userName || '').trim())
@@ -2630,7 +2962,7 @@
 
   function getPersonalUsersForEvents() {
     try {
-      const rawPersonal = JSON.parse(localStorage.getItem('pottery-personal-work-v1') || '[]');
+      const rawPersonal = JSON.parse(localStorage.getItem(PERSONAL_WORK_STORAGE_KEY) || '[]');
       return Array.from(new Set(
         (Array.isArray(rawPersonal) ? rawPersonal : [])
           .filter((entry) => !entry?.isDormant)
@@ -2644,7 +2976,7 @@
 
   function getActivePersonalWorkEntries() {
     try {
-      const rawPersonal = JSON.parse(localStorage.getItem('pottery-personal-work-v1') || '[]');
+      const rawPersonal = JSON.parse(localStorage.getItem(PERSONAL_WORK_STORAGE_KEY) || '[]');
       return (Array.isArray(rawPersonal) ? rawPersonal : [])
         .filter((entry) => !entry?.isDormant)
         .map((entry) => {
@@ -2714,7 +3046,9 @@
     const from = new Date(`${String(cycleStart || '').trim()}T00:00:00`);
     const to = new Date(`${String(cycleEnd || '').trim()}T00:00:00`);
     const now = new Date();
+    const todayKey = formatDateInput(now);
     const targetName = String(userName || '').trim();
+    const personalKinds = new Set(['개인작업', '강사 지도 하 개인작업']);
 
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || !targetName) return 0;
 
@@ -2727,14 +3061,16 @@
       const endSlot = Math.max(startSlot + 1, timeToSlot(eventItem?.end));
       const endAt = new Date(new Date(`${dateKey}T00:00:00`).getTime() + (endSlot * SLOT_MINUTES * 60 * 1000));
       if (Number.isNaN(endAt.getTime())) return;
-      if (endAt > now) return;
+      const occurrenceKey = formatDateInput(new Date(`${dateKey}T00:00:00`));
+      if (endAt > now && occurrenceKey !== todayKey) return;
       if (startAt < from || startAt >= to) return;
 
       total += ((endSlot - startSlot) * SLOT_MINUTES) / 60;
     };
 
     (state.events || []).forEach((eventItem) => {
-      if (!eventItem || String(eventItem.kind || '').trim() !== '개인작업') return;
+      const kind = String(eventItem?.kind || '').trim();
+      if (!eventItem || !personalKinds.has(kind)) return;
       if (String(eventItem.title || '').trim() !== targetName) return;
 
       const eventDate = String(eventItem.date || '').trim();
@@ -3047,6 +3383,7 @@
     const titleRow = document.getElementById('event-title-row');
     const dateWrap = document.getElementById('event-date-wrap');
     const rangeRow = document.getElementById('event-range-row');
+    const kilnCategoryRow = document.getElementById('event-kiln-category-row');
     const repeatRow = document.getElementById('event-weekly-repeat')?.closest('.checkbox-row');
     const capacityWrap = document.getElementById('event-capacity-wrap');
     const capacitySelect = document.getElementById('event-capacity');
@@ -3058,6 +3395,7 @@
 
     if (userRow) userRow.style.display = (isOther || isKiln || isExhibition) ? 'none' : '';
     if (titleRow) titleRow.style.display = (isOther || isExhibition) ? '' : 'none';
+    if (kilnCategoryRow) kilnCategoryRow.style.display = isKiln ? '' : 'none';
     if (dateWrap) dateWrap.style.display = isExhibition ? 'none' : '';
     if (rangeRow) rangeRow.style.display = isExhibition ? '' : 'none';
     if (repeatRow) repeatRow.style.display = (isKiln || isExhibition) ? 'none' : '';
@@ -3290,14 +3628,13 @@
 
         layouts.push({
           kind: event.kind,
-          title: event.title || '제목 없음',
+          title: getEventDisplayTitle(event, '제목 없음'),
           start: event.start,
           end: event.end,
           startSlot,
           endSlot,
           lane,
           need,
-          absent: isEventAbsentOnDate(event, date),
           preview: false
         });
       });
@@ -3319,7 +3656,9 @@
             kind,
             title: kind === '기타'
               ? (inputTitle || '새 일정')
-              : (user || '새 일정'),
+              : (isKilnKind(kind)
+                ? buildKilnEventTitle(normalizeKilnCategory(document.getElementById('event-kiln-category')?.value || '') || KILN_CATEGORY_OPTIONS[0])
+                : (user || '새 일정')),
             start: slotToTime(startSlot),
             end: slotToTime(endSlot),
             startSlot,
@@ -3334,9 +3673,6 @@
       layouts.forEach((item) => {
         const bubble = document.createElement('div');
         bubble.className = `event-bubble event-selector-bubble ${kindToClass(item.kind)}${item.preview ? ' is-preview' : ''}`;
-        if (item.absent) {
-          bubble.classList.add('is-absent');
-        }
         bubble.style.top = `${EVENT_SELECTOR_ROW_HEIGHT + item.startSlot * EVENT_SELECTOR_ROW_HEIGHT + 1}px`;
         bubble.style.height = `${Math.max(EVENT_SELECTOR_ROW_HEIGHT - 2, (item.endSlot - item.startSlot) * EVENT_SELECTOR_ROW_HEIGHT - 2)}px`;
         bubble.style.left = `${EVENT_SELECTOR_TIME_COL_WIDTH + dayIndex * dayWidth + (item.lane * (dayWidth / 3)) + 1}px`;
@@ -4854,6 +5190,41 @@
     return value === '가마 소성' || value === '가마 관련' || value.includes('가마');
   }
 
+  function normalizeKilnCategory(value) {
+    const text = String(value || '').trim();
+    return KILN_CATEGORY_OPTIONS.includes(text) ? text : '';
+  }
+
+  function extractKilnCategoryFromTitle(title) {
+    const text = String(title || '').trim();
+    const matched = text.match(/^가마\s*소성\s*\(([^)]+)\)$/);
+    if (!matched) return '';
+    return normalizeKilnCategory(matched[1]);
+  }
+
+  function buildKilnEventTitle(category) {
+    const normalized = normalizeKilnCategory(category);
+    return normalized ? `가마 소성 (${normalized})` : '가마 소성';
+  }
+
+  function getEventDisplayTitle(eventItem, fallbackTitle) {
+    const fallback = String(fallbackTitle || '새 일정');
+    if (!eventItem) return fallback;
+
+    if (isKilnKind(eventItem.kind)) {
+      const fromCategory = normalizeKilnCategory(eventItem.kilnCategory);
+      if (fromCategory) {
+        return buildKilnEventTitle(fromCategory);
+      }
+
+      const fromTitle = String(eventItem.title || '').trim();
+      return fromTitle || '가마 소성';
+    }
+
+    const title = String(eventItem.title || '').trim();
+    return title || fallback;
+  }
+
   function syncBaseClassNameVisibility() {
     const type = document.getElementById('base-type').value;
     const classInput = document.getElementById('base-class-name');
@@ -5132,20 +5503,34 @@
     try {
       const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
       state.events = Array.isArray(parsed.events)
-        ? parsed.events.map((event) => ({
-            ...event,
-            date: String(event?.date || ''),
-            endDate: String(event?.endDate || ''),
-            start: String(event?.start || ''),
-            end: String(event?.end || ''),
-            capacity: Math.max(1, Math.min(3, Number(event?.capacity || 1))),
-            classType: String(event?.classType || '').trim(),
-            instructor: String(event?.instructor || '').trim(),
-            baseRuleId: String(event?.baseRuleId || '').trim(),
-            repeatWeekly: Boolean(event?.repeatWeekly),
-            repeatSkipDates: Array.isArray(event?.repeatSkipDates) ? event.repeatSkipDates.slice() : [],
-            repeatEndDate: String(event?.repeatEndDate || '')
-          }))
+        ? parsed.events.map((event) => {
+            const kind = String(event?.kind || '').trim();
+            const kilnCategory = isKilnKind(kind)
+              ? (normalizeKilnCategory(event?.kilnCategory)
+                || extractKilnCategoryFromTitle(event?.title)
+                || '')
+              : '';
+
+            return {
+              id: String(event?.id || `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+              kind,
+              title: isKilnKind(kind)
+                ? buildKilnEventTitle(kilnCategory)
+                : String(event?.title || ''),
+              kilnCategory,
+              date: String(event?.date || ''),
+              endDate: String(event?.endDate || ''),
+              start: String(event?.start || ''),
+              end: String(event?.end || ''),
+              capacity: Math.max(1, Math.min(3, Number(event?.capacity || 1))),
+              classType: String(event?.classType || '').trim(),
+              instructor: String(event?.instructor || '').trim(),
+              baseRuleId: String(event?.baseRuleId || '').trim(),
+              repeatWeekly: Boolean(event?.repeatWeekly),
+              repeatSkipDates: Array.isArray(event?.repeatSkipDates) ? event.repeatSkipDates.slice() : [],
+              repeatEndDate: String(event?.repeatEndDate || '')
+            };
+          })
         : [];
       state.baseRules = Array.isArray(parsed.baseRules)
         ? parsed.baseRules.map((rule) => normalizeBaseRule(rule))

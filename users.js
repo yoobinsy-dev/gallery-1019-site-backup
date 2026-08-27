@@ -3,6 +3,7 @@ let currentFilter = 'all';
 let userToApprove = null;
 let selectedUserIds = [];
 let lastUserCheckboxIndex = null;
+let latestTemporaryPassword = '';
 
 const SITE_ACCESS_LABELS = {
   pottery: '도예공방 10.19',
@@ -342,6 +343,9 @@ function loadUsers() {
       <td>${siteAccessLabel}</td>
       <td>${accountType}</td>
       <td class="action-col">
+        <button class="action-btn edit-btn" onclick="resetUserPassword(${user.id})">
+          임시비밀번호 설정
+        </button>
         ${!user.approved ? `
           <button class="action-btn approve-btn" onclick="openApproveModal(${user.id})">
             승인
@@ -504,6 +508,15 @@ function normalizeText(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function createTemporaryPassword() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  let value = '';
+  for (let index = 0; index < 10; index += 1) {
+    value += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+  }
+  return value;
+}
+
 function createUserByAdmin() {
   const name = document.getElementById('create-name').value.trim();
   const username = document.getElementById('create-username').value.trim();
@@ -642,6 +655,84 @@ function editUser(userId) {
   loadUsers();
 }
 
+function resetUserPassword(userId) {
+  const users = getStoredUsers();
+  const userIndex = users.findIndex((item) => item.id === userId);
+  if (userIndex === -1) {
+    alert('사용자를 찾지 못했습니다.');
+    return;
+  }
+
+  const user = users[userIndex];
+  const confirmed = confirm(`${user.name} (${user.username}) 계정의 비밀번호를 임시비밀번호로 변경하시겠습니까?`);
+  if (!confirmed) {
+    return;
+  }
+
+  const temporaryPassword = createTemporaryPassword();
+  users[userIndex] = {
+    ...user,
+    password: temporaryPassword,
+    passwordResetRequired: true,
+    temporaryPasswordIssuedAt: new Date().toISOString()
+  };
+
+  const saved = persistUsers(users);
+  if (!saved) {
+    alert('저장 공간이 부족해 임시비밀번호를 저장하지 못했습니다.');
+    return;
+  }
+
+  refreshCurrentUserIfMatches(users[userIndex]);
+  latestTemporaryPassword = temporaryPassword;
+
+  const info = document.getElementById('temp-password-user-info');
+  const input = document.getElementById('temp-password-value');
+  const modal = document.getElementById('temp-password-modal');
+  if (!info || !input || !modal) {
+    alert(`임시비밀번호가 설정되었습니다.\n사용자: ${user.name} (${user.username})\n임시비밀번호: ${temporaryPassword}`);
+    loadUsers();
+    return;
+  }
+
+  info.textContent = `${user.name} (${user.username}) 계정의 새 임시비밀번호입니다.`;
+  input.value = temporaryPassword;
+  modal.style.display = 'flex';
+  loadUsers();
+}
+
+function closeTemporaryPasswordModal() {
+  const modal = document.getElementById('temp-password-modal');
+  const input = document.getElementById('temp-password-value');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+  if (input) {
+    input.value = '';
+  }
+  latestTemporaryPassword = '';
+}
+
+async function copyTemporaryPassword() {
+  const input = document.getElementById('temp-password-value');
+  const value = input && input.value ? input.value : latestTemporaryPassword;
+  if (!value) {
+    alert('복사할 임시비밀번호가 없습니다.');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(value);
+    alert('임시비밀번호를 복사했습니다.');
+  } catch (error) {
+    if (input) {
+      input.focus();
+      input.select();
+    }
+    alert('클립보드 복사에 실패했습니다. 임시비밀번호를 직접 복사해주세요.');
+  }
+}
+
 function deleteUser(userId) {
   const users = JSON.parse(localStorage.getItem('users')) || [];
   const user = users.find(u => u.id === userId);
@@ -716,10 +807,14 @@ function goBack() {
 window.addEventListener('click', (event) => {
   const approveModal = document.getElementById('approve-modal');
   const createModal = document.getElementById('create-user-modal');
+  const tempPasswordModal = document.getElementById('temp-password-modal');
   if (event.target === approveModal) {
     closeApproveModal();
   }
   if (event.target === createModal) {
     closeCreateUserModal();
+  }
+  if (event.target === tempPasswordModal) {
+    closeTemporaryPasswordModal();
   }
 });

@@ -4,6 +4,7 @@
   const DEFAULT_STATUS = '주문 완료';
   const STATUS_OPTIONS = ['주문 완료', '배송중', '배송 완료'];
   const CATEGORY_OPTIONS = ['흙', '유약', '기타'];
+  const SITE_OPTIONS = ['클레이어', '동영세라믹스', '대원도재', '중앙도재', '석산도재', '대구도재'];
 
   const state = {
     orders: [],
@@ -30,6 +31,17 @@
   document.addEventListener('DOMContentLoaded', () => {
     loadOrders();
     bindEvents();
+    renderMonthLabel();
+    renderOrdersTable();
+  });
+
+  window.addEventListener('cloud-sync:state-applied', (event) => {
+    const keys = Array.isArray(event?.detail?.keys) ? event.detail.keys : [];
+    if (!keys.includes(STORAGE_KEY)) {
+      return;
+    }
+
+    loadOrders();
     renderMonthLabel();
     renderOrdersTable();
   });
@@ -314,7 +326,7 @@
 
     if (orders.length === 0) {
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td colspan="12" class="orders-empty-row">해당 월의 재료 주문 기록이 없습니다.</td>';
+      tr.innerHTML = '<td colspan="13" class="orders-empty-row">해당 월의 재료 주문 기록이 없습니다.</td>';
       tbody.appendChild(tr);
       updateBulkActionButtons();
       return;
@@ -390,12 +402,12 @@
     const tr = document.createElement('tr');
     tr.className = 'orders-total-row';
     tr.innerHTML = `
-      <td colspan="6" class="orders-total-label">총 합계</td>
+      <td colspan="7" class="orders-total-label">총 합계</td>
       <td class="orders-price">-</td>
       <td class="orders-price">-</td>
       <td class="orders-price">-</td>
       <td class="orders-price">${formatPriceText(grandTotal)}</td>
-      <td colspan="3"></td>
+      <td colspan="2"></td>
     `;
     tbody.appendChild(tr);
   }
@@ -466,6 +478,7 @@
     return `
       ${checkboxCell}${groupCells}
       <td data-merge-col="category">${escapeHtml(item.category || '-')}</td>
+      <td data-merge-col="site">${escapeHtml(item.site || '-')}</td>
       <td data-merge-col="product">${escapeHtml(item.product)}</td>
       <td class="orders-col-qty" data-merge-col="quantity">${String(item.quantity)}</td>
       <td class="orders-price" data-merge-col="price">${formatPriceText(item.price)}</td>
@@ -480,6 +493,7 @@
   function buildInlineEditRowHTML(orderNo, order, item, itemIndex, showGroupCell, rowSpan, mergeMeta) {
     const statusOptionsHTML = buildStatusOptionsHTML(item.status || DEFAULT_STATUS);
     const categoryOptionsHTML = buildCategoryOptionsHTML(item.category || '');
+    const siteOptionsHTML = buildSiteOptionsHTML(item.site || '');
     const mergeOrderCells = Boolean(mergeMeta?.mergeOrderCells);
     const mergeDiscount = Boolean(mergeMeta?.mergeDiscount);
     const mergeShipping = Boolean(mergeMeta?.mergeShipping);
@@ -558,6 +572,11 @@
       <td class="${leadClass.trim()}" data-merge-col="category">
         <select class="orders-select js-edit-category" required>
           ${categoryOptionsHTML}
+        </select>
+      </td>
+      <td class="${leadClass.trim()}" data-merge-col="site">
+        <select class="orders-select js-edit-site" required>
+          ${siteOptionsHTML}
         </select>
       </td>
       <td class="${leadClass.trim()}" data-merge-col="product">
@@ -829,6 +848,7 @@
       if (!existingItem) continue;
 
       const categorySelect = row.querySelector('.js-edit-category');
+      const siteSelect = row.querySelector('.js-edit-site');
       const productInput = row.querySelector('.js-edit-product');
       const quantityInput = row.querySelector('.js-edit-quantity');
       const priceInput = row.querySelector('.js-edit-price');
@@ -837,6 +857,7 @@
       const statusSelect = row.querySelector('.js-edit-status');
 
       const category = String(categorySelect?.value || '').trim();
+  const site = String(siteSelect?.value || '').trim();
       const product = String(productInput?.value || '').trim();
       const quantity = Number(quantityInput?.value || 0);
       const status = orderStatusSelect
@@ -859,6 +880,7 @@
       nextItems.push({
         ...existingItem,
         category,
+        site,
         product,
         quantity,
         price,
@@ -909,6 +931,7 @@
       if (!existingItem) return;
 
       const categorySelect = row.querySelector('.js-edit-category');
+      const siteSelect = row.querySelector('.js-edit-site');
       const productInput = row.querySelector('.js-edit-product');
       const quantityInput = row.querySelector('.js-edit-quantity');
       const priceInput = row.querySelector('.js-edit-price');
@@ -917,6 +940,7 @@
       const statusSelect = row.querySelector('.js-edit-status');
 
       const category = String(categorySelect?.value || existingItem.category || '').trim();
+  const site = String(siteSelect?.value || existingItem.site || '').trim();
       const product = String(productInput?.value || existingItem.product || '').trim() || existingItem.product;
       const rawQuantity = Number(quantityInput?.value || existingItem.quantity || 0);
       const quantity = Number.isInteger(rawQuantity) && rawQuantity > 0 ? rawQuantity : existingItem.quantity;
@@ -924,6 +948,7 @@
       nextItems.push({
         ...existingItem,
         category,
+        site,
         product,
         quantity,
         price: parseCurrencyInput(priceInput?.value || '') ?? existingItem.price,
@@ -1192,6 +1217,7 @@
           String(index + 1),
           String(order.orderDate || ''),
           String(item.category || ''),
+          String(item.site || ''),
           String(item.product || ''),
           String(item.quantity || ''),
           formatPriceText(item.price),
@@ -1208,7 +1234,7 @@
       return;
     }
 
-    const header = ['번호', '날짜', '분류', '상품', '수량', '가격', '할인', '배송비', '합계', '상태'];
+    const header = ['번호', '날짜', '분류', '싸이트', '상품', '수량', '가격', '할인', '배송비', '합계', '상태'];
     const csv = [header, ...rows]
       .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       .join('\n');
@@ -1276,6 +1302,7 @@
     row.dataset.lineId = lineId;
 
     const category = String(initial.category || '').trim();
+    const site = String(initial.site || '').trim();
     const product = String(initial.product || '');
     const quantity = Number.isFinite(Number(initial.quantity)) ? Math.max(1, Math.floor(Number(initial.quantity))) : 1;
     const price = Number.isFinite(Number(initial.price)) && Number(initial.price) > 0 ? Number(initial.price) : null;
@@ -1293,6 +1320,11 @@
       <td data-merge-col="category">
         <select class="orders-select js-new-category" required>
           ${buildCategoryOptionsHTML(category)}
+        </select>
+      </td>
+      <td data-merge-col="site">
+        <select class="orders-select js-new-site" required>
+          ${buildSiteOptionsHTML(site)}
         </select>
       </td>
       <td data-merge-col="product">
@@ -1335,6 +1367,7 @@
     return Array.from(linesRoot.querySelectorAll('.order-line-row')).map((row) => ({
       lineId: String(row.dataset.lineId || makeId('line')),
       category: String(row.querySelector('.js-new-category')?.value || '').trim(),
+      site: String(row.querySelector('.js-new-site')?.value || '').trim(),
       product: String(row.querySelector('.js-new-product')?.value || ''),
       quantity: Number(row.querySelector('.js-new-quantity')?.value || 1),
       price: parseCurrencyInput(String(row.querySelector('.js-new-price')?.value || '')),
@@ -1650,6 +1683,7 @@
     for (let i = 0; i < lineRows.length; i += 1) {
       const row = lineRows[i];
       const category = String(row.querySelector('.js-new-category')?.value || '').trim();
+      const site = String(row.querySelector('.js-new-site')?.value || '').trim();
       const product = String(row.querySelector('.js-new-product')?.value || '').trim();
       const quantity = Number(row.querySelector('.js-new-quantity')?.value || 0);
       const priceValue = String(row.querySelector('.js-new-price')?.value || '');
@@ -1669,6 +1703,7 @@
       items.push({
         id: makeId('item'),
         category,
+        site,
         product,
         quantity,
         price: parseCurrencyInput(priceValue),
@@ -1762,6 +1797,18 @@
     const fallback = CATEGORY_OPTIONS.includes(selected) ? selected : CATEGORY_OPTIONS[0];
 
     return CATEGORY_OPTIONS
+      .map((option) => {
+        const selectedAttr = option === fallback ? ' selected' : '';
+        return `<option value="${escapeAttribute(option)}"${selectedAttr}>${escapeHtml(option)}</option>`;
+      })
+      .join('');
+  }
+
+  function buildSiteOptionsHTML(selectedValue) {
+    const selected = String(selectedValue || '').trim();
+    const fallback = SITE_OPTIONS.includes(selected) ? selected : SITE_OPTIONS[0];
+
+    return SITE_OPTIONS
       .map((option) => {
         const selectedAttr = option === fallback ? ' selected' : '';
         return `<option value="${escapeAttribute(option)}"${selectedAttr}>${escapeHtml(option)}</option>`;
@@ -1864,6 +1911,9 @@
 
     const id = String(item.id || makeId('item')).trim();
     const category = String(item.category || '').trim();
+    const site = SITE_OPTIONS.includes(String(item.site || '').trim())
+      ? String(item.site || '').trim()
+      : SITE_OPTIONS[0];
     const product = String(item.product || '').trim();
     const quantity = Math.floor(Number(item.quantity));
 
@@ -1880,6 +1930,7 @@
     return {
       id,
       category,
+      site,
       product,
       quantity,
       price,
@@ -1986,7 +2037,7 @@
     }
 
     totalRow.innerHTML = `
-      <td colspan="5" class="orders-total-label">총 합계</td>
+      <td colspan="6" class="orders-total-label">총 합계</td>
       <td class="orders-price">-</td>
       <td class="orders-price">-</td>
       <td class="orders-price">-</td>

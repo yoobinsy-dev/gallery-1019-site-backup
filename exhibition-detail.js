@@ -3118,7 +3118,12 @@ function renderSoldWorkRows() {
     const soldQuantityValue = getSoldQuantityForItemType(soldItemType, sold.soldQuantity);
     const isCertificateReady = hasGeneratedCertificate(sold);
     const certificateButtonHtml = soldItemType === '작품'
-      ? `<button class="action-btn ${isCertificateReady ? 'approve-btn' : 'edit-btn'}" onclick="handleSoldCertificateAction(${sold.id})">${isCertificateReady ? '보증서 다운로드' : '보증서 만들기'}</button>`
+      ? (isCertificateReady
+        ? `<div class="certificate-actions">
+            <button class="action-btn approve-btn" onclick="handleSoldCertificateAction(${sold.id})">보증서 다운로드</button>
+            <button class="action-btn edit-btn" onclick="handleSoldCertificateRemakeAction(${sold.id})">보증서 다시 만들기</button>
+          </div>`
+        : `<button class="action-btn edit-btn" onclick="handleSoldCertificateAction(${sold.id})">보증서 만들기</button>`)
       : '';
 
     const paymentDisplay = sold.paymentMethod === '기타'
@@ -3912,12 +3917,44 @@ function canvasToBlob(canvas, mimeType, quality) {
   });
 }
 
-async function buildCertificatePngBytesFromDataUrl(imageDataUrl) {
-  const source = (imageDataUrl || '').toString().trim();
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Failed to read artwork image blob.'));
+        return;
+      }
+      resolve(reader.result);
+    };
+    reader.onerror = () => reject(reader.error || new Error('Failed to read artwork image blob.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function resolveCertificateImageDataUrl(imageSource) {
+  const source = (imageSource || '').toString().trim();
   if (!source) {
-    throw new Error('Missing artwork image data URL.');
+    throw new Error('Missing artwork image source.');
+  }
+  if (!/^https?:\/\//i.test(source)) {
+    return source;
   }
 
+  const response = await fetch(source, {
+    mode: 'cors',
+    credentials: 'omit',
+    cache: 'default'
+  });
+  if (!response.ok) {
+    throw new Error(`Artwork image fetch failed (${response.status}).`);
+  }
+
+  return blobToDataUrl(await response.blob());
+}
+
+async function buildCertificatePngBytesFromDataUrl(imageDataUrl) {
+  const source = await resolveCertificateImageDataUrl(imageDataUrl);
   const image = await loadImageElement(source);
   const width = Number(image.naturalWidth || image.width || 0);
   const height = Number(image.naturalHeight || image.height || 0);
@@ -4956,6 +4993,51 @@ async function handleSoldCertificateAction(soldId) {
   } catch (error) {
     console.error('certificate generation failed', error);
     alert('보증서 생성에 실패했습니다. 템플릿 파일과 네트워크 상태를 확인해주세요.');
+  }
+}
+
+async function handleSoldCertificateRemakeAction(soldId) {
+  const soldWorks = ensureSoldWorksArray();
+  const sold = soldWorks.find((item) => item.id === soldId);
+  if (!sold || normalizeSoldItemType(sold) !== '작품') return;
+
+  if (!sold.saved || !hasGeneratedCertificate(sold)) {
+    alert('먼저 보증서를 만들어주세요.');
+    return;
+  }
+
+  const work = getSourceArtworkForSold(sold);
+  if (!work) {
+    alert('작품 목록에서 해당 작품 정보를 찾을 수 없습니다. 작품 목록 데이터를 확인해주세요.');
+    return;
+  }
+
+  if (typeof XlsxPopulate === 'undefined' || typeof JSZip === 'undefined') {
+    alert('보증서 생성을 위한 라이브러리를 불러오지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.');
+    return;
+  }
+
+  if (!getCertificateImageDataUrl(sold, work)) {
+    alert('작품 이미지가 없어 보증서를 다시 만들 수 없습니다. 작품 목록에서 사진을 먼저 등록해주세요.');
+    return;
+  }
+
+  try {
+    await buildCertificateWorkbookBlob(sold, work);
+    sold.certificateFileName = safeCertificateFileName(work.title || sold.title || '작품');
+    sold.certificateCreatedAt = new Date().toISOString();
+    sold.certificateReady = true;
+    sold.certificateVersion = 2;
+
+    if (exhibitionDetailState.exhibition) {
+      exhibitionDetailState.exhibition.soldWorks = soldWorks;
+    }
+    saveExhibition();
+    renderSoldWorkRows();
+    alert('보증서를 다시 만들었습니다. 보증서 다운로드 버튼에서 새 보증서를 다운로드할 수 있습니다.');
+  } catch (error) {
+    console.error('certificate remake failed', error);
+    alert('보증서를 다시 만드는 데 실패했습니다. 템플릿 파일과 네트워크 상태를 확인해주세요.');
   }
 }
 

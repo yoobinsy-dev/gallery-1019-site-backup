@@ -14,6 +14,7 @@ body {
   position: fixed;
   top: 16px;
   right: 16px;
+  max-width: calc(100vw - 180px);
   z-index: 260;
   display: inline-flex;
   align-items: center;
@@ -29,7 +30,11 @@ body {
 }
 
 #user-display {
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .logout-btn {
@@ -126,6 +131,15 @@ body {
   display: grid;
   grid-template-columns: 270px minmax(0, 1fr);
   gap: 14px;
+}
+
+.studio-mobile-info-toggle {
+  display: none;
+}
+
+.studio-mobile-info-panels {
+  display: grid;
+  gap: 10px;
 }
 
 .studio-sidebar {
@@ -259,10 +273,59 @@ body {
 
 .studio-calendar-wrap {
   --calendar-scrollbar-gap: 0px;
+  --slot-height: 28px;
   background: #fff;
   border: 1px solid #e2e8f2;
   border-radius: 10px;
   overflow: hidden;
+}
+
+.studio-calendar-viewport {
+  width: 100%;
+  transform-origin: top left;
+}
+
+.studio-calendar-controls {
+  display: grid;
+  gap: 8px;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid #e7ecf5;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 6;
+}
+
+.studio-controls-top,
+.studio-controls-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.studio-controls-bottom {
+  justify-content: flex-start;
+}
+
+.studio-zoom-controls {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.studio-zoom-controls button {
+  border: 1px solid #bcc7dc;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.studio-zoom-controls button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .studio-calendar-header {
@@ -446,11 +509,11 @@ body {
   z-index: 3;
   background: #fff;
   border-bottom: 1px solid #e9edf6;
-  min-height: calc(28px + (max(0, var(--all-day-lanes, 1) - 1) * 24px));
+  min-height: calc(var(--slot-height) + (max(0, var(--all-day-lanes, 1) - 1) * 24px));
 }
 
 .all-day-time-cell {
-  height: 28px;
+  height: var(--slot-height);
   font-size: 10px;
   color: #6f7b92;
   border-top: 1px solid #f2f5fa;
@@ -525,7 +588,7 @@ body {
 }
 
 .time-cell {
-  height: 28px;
+  height: var(--slot-height);
   font-size: 11px;
   color: #76849d;
   border-top: 1px solid #f2f5fa;
@@ -539,7 +602,7 @@ body {
   border: 0;
   padding: 0;
   appearance: none;
-  height: 28px;
+  height: var(--slot-height);
   border-top: 1px solid #f2f5fa;
   border-left: 1px solid #f2f5fa;
   position: relative;
@@ -597,7 +660,7 @@ body {
   top: 0;
   left: 64px;
   right: 0;
-  height: calc(48 * 28px);
+  height: calc(48 * var(--slot-height));
   z-index: 2;
   pointer-events: none;
 }
@@ -641,50 +704,12 @@ body {
   padding: 4px;
 }
 
-.event-bubble.is-absent.kind-class {
-  background: #81bc95;
-}
-
 .event-bubble strong {
   display: block;
   max-width: calc(100% - 8px);
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: keep-all;
-}
-
-.event-bubble-absence {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 3px;
-  min-width: 40px;
-  height: 18px;
-  border: 1px solid rgba(205, 215, 228, 0.95);
-  border-radius: 999px;
-  background: #ffffff;
-  color: #b22626;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 16px;
-  padding: 0 6px;
-  cursor: pointer;
-  box-shadow: 0 1px 4px rgba(10, 16, 30, 0.2);
-  z-index: 3;
-}
-
-.event-bubble-absence.is-clear {
-  min-width: 40px;
-  width: 40px;
-  height: 28px;
-  padding: 2px 4px;
-  line-height: 1.05;
-  white-space: pre-line;
-  color: #16c73b;
-}
-
-.event-bubble-absence:hover {
-  background: #fff6f6;
 }
 
 .event-bubble-delete {
@@ -718,6 +743,7 @@ body {
 
 .event-bubble.editable {
   cursor: grab;
+  touch-action: auto;
 }
 
 .event-bubble.editing {
@@ -1424,6 +1450,32 @@ body {
 @media (max-width: 980px) {
   .studio-layout {
     grid-template-columns: 1fr;
+  }
+
+  .studio-mobile-info-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+    width: 100%;
+  }
+
+  .studio-mobile-info-panels {
+    display: none;
+  }
+
+  .studio-sidebar.mobile-info-open .studio-mobile-info-panels:not([hidden]) {
+    display: grid;
+  }
+
+  .studio-calendar-controls {
+    position: static;
+    padding: 10px 8px;
+  }
+
+  .studio-week-nav {
+    flex-wrap: wrap;
+    align-items: center;
   }
 
   .studio-calendar-body {

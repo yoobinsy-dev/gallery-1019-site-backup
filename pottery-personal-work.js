@@ -573,8 +573,7 @@
       entry.lastPaymentDate = '';
       entry.paymentHistory = [];
     } else if (nextPayment) {
-      entry.lastPaymentDate = nextPayment;
-      addPaymentHistoryDate(entry, nextPayment);
+      replaceMostRecentPaymentDate(entry, nextPayment);
     }
 
     state.editingId = '';
@@ -759,7 +758,7 @@
     tbody.innerHTML = '';
     const history = normalizePaymentHistory(entry.paymentHistory);
     if (!history.length) {
-      tbody.innerHTML = '<tr><td>-</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="2">-</td></tr>';
       return;
     }
 
@@ -767,9 +766,64 @@
       const tr = document.createElement('tr');
       const td = document.createElement('td');
       td.textContent = date;
+      const actionTd = document.createElement('td');
+      actionTd.className = 'personal-detail-actions';
+
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'personal-small-btn';
+      editBtn.textContent = '수정';
+      editBtn.addEventListener('click', () => editPaymentHistoryDate(entry.id, date));
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'personal-small-btn';
+      deleteBtn.textContent = '삭제';
+      deleteBtn.addEventListener('click', () => deletePaymentHistoryDate(entry.id, date));
+
+      actionTd.appendChild(editBtn);
+      actionTd.appendChild(deleteBtn);
       tr.appendChild(td);
+      tr.appendChild(actionTd);
       tbody.appendChild(tr);
     });
+  }
+
+  function editPaymentHistoryDate(entryId, oldDate) {
+    const entry = state.entries.find((item) => item.id === entryId);
+    if (!entry) return;
+
+    const input = prompt('새 결제일을 입력해주세요. (YYYY-MM-DD)', oldDate);
+    if (input === null) return;
+    const nextDate = normalizeDateInput(input);
+    if (!nextDate) {
+      alert('올바른 결제일을 입력해주세요.');
+      return;
+    }
+
+    const history = normalizePaymentHistory(entry.paymentHistory)
+      .filter((date) => date !== oldDate);
+    history.push(nextDate);
+    entry.paymentHistory = normalizePaymentHistory(history);
+    entry.lastPaymentDate = entry.paymentHistory[0] || '';
+
+    saveEntries();
+    renderDetailPaymentHistory(entry);
+    renderTable();
+  }
+
+  function deletePaymentHistoryDate(entryId, targetDate) {
+    const entry = state.entries.find((item) => item.id === entryId);
+    if (!entry) return;
+    if (!confirm('이 결제일을 삭제하시겠습니까?')) return;
+
+    entry.paymentHistory = normalizePaymentHistory(entry.paymentHistory)
+      .filter((date) => date !== targetDate);
+    entry.lastPaymentDate = entry.paymentHistory[0] || '';
+
+    saveEntries();
+    renderDetailPaymentHistory(entry);
+    renderTable();
   }
 
   function renderDetailUsageHistory(entry) {
@@ -798,16 +852,20 @@
   function collectPersonalWorkUsageRows(userName, options = {}) {
     const now = new Date();
     const pastOnly = Boolean(options.pastOnly);
+    const todayKey = formatDateInput(now);
     const from = options.from ? new Date(`${options.from}T00:00:00`) : null;
     const to = options.to ? new Date(`${options.to}T00:00:00`) : null;
 
     const rows = [];
+    const personalKinds = new Set(['개인작업', '강사 지도 하 개인작업']);
 
     const pushOccurrence = (event, dateKey) => {
       const startAt = new Date(`${dateKey}T${String(event.start || '00:00')}:00`);
       const endAt = getOccurrenceEndDateTime(dateKey, event.start, event.end);
       if (!startAt || !endAt || Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) return;
-      if (pastOnly && endAt > now) return;
+      const occurrenceKey = normalizeDateInput(dateKey);
+      // Same-day usage should count for quota checks even if the session has not ended yet.
+      if (pastOnly && endAt > now && occurrenceKey !== todayKey) return;
       if (from && startAt < from) return;
       if (to && startAt >= to) return;
 
@@ -824,7 +882,8 @@
     };
 
     state.calendarEvents.forEach((event) => {
-      if (!event || String(event.kind || '').trim() !== '개인작업') return;
+      const kind = String(event?.kind || '').trim();
+      if (!event || !personalKinds.has(kind)) return;
       if (String(event.title || '').trim() !== String(userName || '').trim()) return;
       if (!event.date) return;
 
@@ -945,6 +1004,16 @@
     }
     history.sort((a, b) => b.localeCompare(a));
     entry.paymentHistory = history;
+  }
+
+  function replaceMostRecentPaymentDate(entry, paymentDate) {
+    if (!entry || !paymentDate) return;
+    const latest = normalizeDateInput(entry.lastPaymentDate || '');
+    const history = normalizePaymentHistory(entry.paymentHistory)
+      .filter((date) => date !== latest);
+    history.push(paymentDate);
+    entry.paymentHistory = normalizePaymentHistory(history);
+    entry.lastPaymentDate = paymentDate;
   }
 
   function normalizePaymentHistory(paymentHistory) {

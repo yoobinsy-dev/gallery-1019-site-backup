@@ -4,19 +4,150 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>도예공방 10.19 - 회계</title>
-  <link rel="stylesheet" href="pottery-section.css?v=20260809-1">
+  <link rel="stylesheet" href="pottery-accounting.css?v=20260822-4">
+  <link rel="stylesheet" href="mobile-draft.css?v=20260819-8">
 </head>
 <body>
-  <a class="section-back-link" href="pottery-workshop.html" aria-label="도예공방 메뉴로 돌아가기">← 메뉴로</a>
+  <a class="accounting-back-link" href="index.html" aria-label="메인 선택 페이지로 돌아가기">← 메뉴로</a>
 
-  <main class="section-wrap">
-    <section class="section-card">
+  <main class="accounting-wrap">
+    <header class="accounting-header">
       <h1>회계</h1>
-      <p>회계 화면은 다음 단계에서 구현됩니다. 이 페이지를 시작점으로 월별 수입/지출 집계, 정산, 리포트 기능을 연결할 수 있습니다.</p>
+      <p>도예공방/갤러리 월별 수입·지출을 카테고리별로 관리합니다.</p>
+    </header>
+
+    <section class="accounting-top-bar" aria-label="회계 탭 및 보기 제어">
+      <div class="accounting-tabs" role="tablist" aria-label="회계 대상 선택">
+        <button type="button" id="accounting-tab-pottery" class="accounting-tab-btn is-active" role="tab" aria-selected="true">도예공방 회계</button>
+        <button type="button" id="accounting-tab-gallery" class="accounting-tab-btn" role="tab" aria-selected="false">갤러리 회계</button>
+      </div>
+      <div class="accounting-tools">
+        <label class="accounting-switch" for="accounting-view-toggle">
+          <input type="checkbox" id="accounting-view-toggle" aria-label="상세 뷰 전환">
+          <span class="accounting-switch-slider"></span>
+        </label>
+        <span class="accounting-switch-label" id="accounting-view-toggle-label">요약 뷰</span>
+        <button type="button" id="accounting-export-btn" class="accounting-export-btn">엑셀 파일로 다운 받기</button>
+      </div>
+    </section>
+
+    <section class="accounting-month-nav" aria-label="회계 월 선택">
+      <button type="button" id="accounting-month-prev-btn" class="accounting-month-btn" aria-label="이전 달">◀</button>
+      <strong id="accounting-month-label">-</strong>
+      <button type="button" id="accounting-month-next-btn" class="accounting-month-btn" aria-label="다음 달">▶</button>
+      <button type="button" id="accounting-month-current-btn" class="accounting-month-current-btn">이번 달</button>
+    </section>
+
+    <section class="accounting-summary" aria-live="polite">
+      <div class="accounting-summary-card revenue">
+        <span>총 수입</span>
+        <strong id="accounting-total-revenue">0원</strong>
+      </div>
+      <div class="accounting-summary-card expense">
+        <span>총 지출</span>
+        <strong id="accounting-total-expense">0원</strong>
+      </div>
+      <div class="accounting-summary-card profit" id="accounting-profit-card">
+        <span>월 손익</span>
+        <strong id="accounting-total-profit">0원</strong>
+      </div>
+    </section>
+
+    <section class="accounting-grid">
+      <article class="accounting-panel" aria-labelledby="revenue-title">
+        <div class="accounting-panel-head">
+          <h2 id="revenue-title">수입</h2>
+          <button type="button" class="accounting-add-btn" id="accounting-add-revenue-btn">+ 항목 추가</button>
+        </div>
+        <p class="accounting-fixed-hint">카테고리를 누르면 해당 카테고리의 내역이 펼쳐집니다.</p>
+        <div class="accounting-table-wrap">
+          <table class="accounting-table" id="accounting-revenue-table">
+            <thead>
+              <tr>
+                <th>카테고리</th>
+                <th>합계</th>
+                <th>상태</th>
+              </tr>
+            </thead>
+            <tbody id="accounting-revenue-body"></tbody>
+            <tfoot>
+              <tr>
+                <th>수입 합계</th>
+                <th id="accounting-revenue-total">0원</th>
+                <th></th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </article>
+
+      <article class="accounting-panel" aria-labelledby="expense-title">
+        <div class="accounting-panel-head">
+          <h2 id="expense-title">지출</h2>
+          <button type="button" class="accounting-add-btn" id="accounting-add-expense-btn">+ 항목 추가</button>
+        </div>
+        <p class="accounting-fixed-hint">카테고리를 누르면 해당 카테고리의 내역이 펼쳐집니다.</p>
+        <div class="accounting-table-wrap">
+          <table class="accounting-table" id="accounting-expense-table">
+            <thead>
+              <tr>
+                <th>카테고리</th>
+                <th>합계</th>
+                <th>상태</th>
+              </tr>
+            </thead>
+            <tbody id="accounting-expense-body"></tbody>
+            <tfoot>
+              <tr>
+                <th>지출 합계</th>
+                <th id="accounting-expense-total">0원</th>
+                <th></th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </article>
     </section>
   </main>
 
-  <script src="auth.js?v=20260812-3"></script>
-    <script src="pottery-landing.js?v=20260812-2"></script>
+  <div class="accounting-modal" id="accounting-entry-modal" aria-hidden="true">
+    <div class="accounting-modal-content" role="dialog" aria-modal="true" aria-label="회계 항목 편집">
+      <h2 id="accounting-entry-modal-title">항목 추가</h2>
+      <form id="accounting-entry-form" autocomplete="off">
+        <div class="accounting-form-row">
+          <label for="accounting-entry-date">날짜</label>
+          <input id="accounting-entry-date" type="date">
+        </div>
+        <div class="accounting-form-row">
+          <label for="accounting-entry-category">카테고리</label>
+          <select id="accounting-entry-category"></select>
+        </div>
+        <div class="accounting-form-row">
+          <label for="accounting-entry-title">항목명</label>
+          <input id="accounting-entry-title" type="text" maxlength="80" placeholder="예: SNS 광고 집행">
+        </div>
+        <div class="accounting-form-row">
+          <label for="accounting-entry-amount">금액</label>
+          <input id="accounting-entry-amount" type="text" inputmode="numeric" placeholder="예: 120000">
+        </div>
+        <div class="accounting-form-row accounting-form-row-check">
+          <label class="accounting-switch" for="accounting-entry-fixed">
+            <input id="accounting-entry-fixed" type="checkbox">
+            <span class="accounting-switch-slider"></span>
+          </label>
+          <small>고정: 선택한 달 이후 매월 반복 반영</small>
+        </div>
+      </form>
+      <div class="accounting-modal-actions">
+        <button type="button" class="accounting-primary-btn" id="accounting-entry-save-btn">저장</button>
+        <button type="button" class="accounting-secondary-btn" id="accounting-entry-cancel-btn">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="cloud-sync.js?v=20260822-1"></script>
+  <script src="auth.js?v=20260819-1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-populate/browser/xlsx-populate.min.js"></script>
+  <script src="pottery-accounting.js?v=20260822-7"></script>
 </body>
 </html>

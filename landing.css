@@ -156,6 +156,17 @@ body {
   color: #4d2d8a;
 }
 
+.landing-card-accounting {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.36), rgba(214, 238, 226, 0.46)),
+    #e7f6ef;
+}
+
+.landing-card-accounting .landing-card-badge {
+  background: rgba(26, 108, 74, 0.16);
+  color: #175a3f;
+}
+
 .landing-card-users-compact {
   grid-column: 1 / 3;
   justify-self: center;

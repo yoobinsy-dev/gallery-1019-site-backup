@@ -156,13 +156,14 @@ function stripLegacyImagePayloadsWhenUrlExists(item, stats) {
 
   const fullUrl = normalizeText(item.photoUrl);
   const previewUrl = normalizeText(item.photoPreviewUrl);
+  const hasPublicBlobImage = isPublicBlobUrl(fullUrl) || isPublicBlobUrl(previewUrl);
 
-  if (isPublicBlobUrl(fullUrl) && isDataUrl(item.photoDataUrl)) {
+  if (hasPublicBlobImage && isDataUrl(item.photoDataUrl)) {
     item.photoDataUrl = '';
     stats.strippedFullDataUrlCount += 1;
   }
 
-  if (isPublicBlobUrl(previewUrl) && isDataUrl(item.photoPreviewDataUrl)) {
+  if (hasPublicBlobImage && isDataUrl(item.photoPreviewDataUrl)) {
     item.photoPreviewDataUrl = '';
     stats.strippedPreviewDataUrlCount += 1;
   }

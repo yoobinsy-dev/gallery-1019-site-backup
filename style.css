@@ -10,6 +10,10 @@ body {
   min-height: 100vh;
 }
 
+body.login-page {
+  background: linear-gradient(145deg, #031634 0%, #0b2f63 58%, #163f7a 100%);
+}
+
 .home-back-link {
   position: fixed;
   top: 18px;
@@ -106,6 +110,27 @@ body {
 .auth-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+body.login-page .auth-input:focus {
+  border-color: #124a97;
+  box-shadow: 0 0 8px rgba(18, 74, 151, 0.35);
+}
+
+body.login-page .auth-btn {
+  background: linear-gradient(145deg, #0e3a78, #1f4d8f);
+}
+
+body.login-page .auth-btn:hover {
+  box-shadow: 0 7px 18px rgba(11, 47, 99, 0.5);
+}
+
+body.login-page .auth-toggle span {
+  color: #0e3a78;
+}
+
+body.login-page .auth-toggle span:hover {
+  color: #1f4d8f;
 }
 
 .auth-toggle {
@@ -1969,6 +1994,13 @@ body {
 
 .sales-table td:nth-child(16) .action-btn {
   white-space: nowrap;
+}
+
+.certificate-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 
 .works-table input.required-missing {

@@ -511,6 +511,19 @@ body {
   color: #5c4432;
 }
 
+.personal-detail-actions {
+  white-space: nowrap;
+}
+
+.personal-detail-actions .personal-small-btn {
+  margin-left: 0;
+  margin-right: 6px;
+}
+
+.personal-detail-actions .personal-small-btn:last-child {
+  margin-right: 0;
+}
+
 .personal-table input[type="checkbox"] {
   width: 16px;
   height: 16px;

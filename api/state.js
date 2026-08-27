@@ -4,8 +4,23 @@ const { getStateMap, getStateMetaMap, getStateMapWithMeta, setStateValue, delete
 const { logStateWriteAttempt, recordAlert, maybeTriggerConflictSpikeAlert } = require('./_lib/audit-store');
 const { buildTransferSafeExhibitions, migrateExhibitionImageReferences } = require('./_lib/exhibition-image-refs');
 
-const ALLOWED_KEYS = new Set(['users', 'exhibitions', 'pottery-students-v1', 'studio-calendar-state-v1']);
-const STRICT_VERSION_KEYS = new Set(['users', 'pottery-students-v1', 'studio-calendar-state-v1']);
+const ALLOWED_KEYS = new Set([
+  'users',
+  'exhibitions',
+  'pottery-students-v1',
+  'pottery-personal-work-v1',
+  'studio-calendar-state-v1',
+  'pottery-material-orders-v1',
+  'pottery-accounting-v1'
+]);
+const STRICT_VERSION_KEYS = new Set([
+  'users',
+  'pottery-students-v1',
+  'pottery-personal-work-v1',
+  'studio-calendar-state-v1',
+  'pottery-material-orders-v1',
+  'pottery-accounting-v1'
+]);
 const HARD_DROP_MIN_PREVIOUS_TOTAL = 20;
 const HARD_DROP_MIN_ABSOLUTE = 15;
 const HARD_DROP_RATIO = 0.7;
@@ -487,10 +502,25 @@ function mergeStudentRecord(currentStudent, incomingStudent) {
   if (!currentStudent || typeof currentStudent !== 'object') return incomingStudent;
   if (!incomingStudent || typeof incomingStudent !== 'object') return currentStudent;
 
+  const paymentRecords = mergeByIdentityArray(
+    currentStudent.paymentRecords,
+    incomingStudent.paymentRecords,
+    (record) => {
+      const id = String(record?.id || '').trim();
+      if (id) return `id:${id}`;
+      const date = String(record?.date || '').trim();
+      return date ? `date:${date}` : '';
+    }
+  );
+  const paymentHistory = paymentRecords.length
+    ? mergeStringArrayUnique([], paymentRecords.map((record) => record?.date))
+    : mergeStringArrayUnique(currentStudent.paymentHistory, incomingStudent.paymentHistory);
+
   return {
     ...currentStudent,
     ...incomingStudent,
-    paymentHistory: mergeStringArrayUnique(currentStudent.paymentHistory, incomingStudent.paymentHistory)
+    paymentHistory,
+    paymentRecords
   };
 }
 
@@ -618,15 +648,40 @@ function mergeStudioCalendarState(currentState, incomingState) {
   const current = currentState && typeof currentState === 'object' ? currentState : {};
   const incoming = incomingState && typeof incomingState === 'object' ? incomingState : {};
 
+  // Calendar state writes are full snapshots from clients.
+  // Prefer incoming collections to preserve explicit deletions.
+  const events = Array.isArray(incoming.events)
+    ? incoming.events
+    : (Array.isArray(current.events) ? current.events : []);
+  const baseRules = Array.isArray(incoming.baseRules)
+    ? incoming.baseRules
+    : (Array.isArray(current.baseRules) ? current.baseRules : []);
+  const baseRuleTimeline = Array.isArray(incoming.baseRuleTimeline)
+    ? incoming.baseRuleTimeline
+    : (Array.isArray(current.baseRuleTimeline) ? current.baseRuleTimeline : []);
+  const baseWeekOverrides = incoming.baseWeekOverrides && typeof incoming.baseWeekOverrides === 'object'
+    ? incoming.baseWeekOverrides
+    : (current.baseWeekOverrides && typeof current.baseWeekOverrides === 'object' ? current.baseWeekOverrides : {});
+  const studioUsers = Array.isArray(incoming.studioUsers)
+    ? incoming.studioUsers
+    : (Array.isArray(current.studioUsers) ? current.studioUsers : []);
+  const classTeachingLog = Array.isArray(incoming.classTeachingLog)
+    ? incoming.classTeachingLog
+    : (Array.isArray(current.classTeachingLog) ? current.classTeachingLog : []);
+  const instructors = Array.isArray(incoming.instructors)
+    ? incoming.instructors
+    : (Array.isArray(current.instructors) ? current.instructors : []);
+
   return {
     ...current,
     ...incoming,
-    events: mergeByIdentityArray(current.events, incoming.events, resolveItemIdentity),
-    baseRules: mergeRulesByIdentity(current.baseRules, incoming.baseRules),
-    baseRuleTimeline: mergeTimelineByWeek(current.baseRuleTimeline, incoming.baseRuleTimeline),
-    baseWeekOverrides: mergeWeekOverrides(current.baseWeekOverrides, incoming.baseWeekOverrides),
-    studioUsers: mergeStringArrayUnique(current.studioUsers, incoming.studioUsers),
-    classTeachingLog: mergeCalendarLog(current.classTeachingLog, incoming.classTeachingLog)
+    events,
+    baseRules,
+    baseRuleTimeline,
+    baseWeekOverrides,
+    studioUsers,
+    classTeachingLog,
+    instructors
   };
 }
 
@@ -737,14 +792,14 @@ function mergeExhibitionsStatePreferServerOnConflict(currentValue, incomingValue
 }
 
 function sanitizeRequestedKeys(raw) {
-  if (!raw) return ['users', 'exhibitions', 'pottery-students-v1', 'studio-calendar-state-v1'];
+  if (!raw) return ['users', 'exhibitions', 'pottery-students-v1', 'pottery-personal-work-v1', 'studio-calendar-state-v1', 'pottery-material-orders-v1', 'pottery-accounting-v1'];
   const parsed = raw
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
     .filter((item) => ALLOWED_KEYS.has(item));
 
-  return parsed.length > 0 ? parsed : ['users', 'exhibitions', 'pottery-students-v1', 'studio-calendar-state-v1'];
+  return parsed.length > 0 ? parsed : ['users', 'exhibitions', 'pottery-students-v1', 'pottery-personal-work-v1', 'studio-calendar-state-v1', 'pottery-material-orders-v1', 'pottery-accounting-v1'];
 }
 
 function buildExhibitionsSummary(exhibitions) {
@@ -873,7 +928,7 @@ module.exports = async function handler(req, res) {
       const clientId = getClientIdFromRequest(req);
 
       if (!ALLOWED_KEYS.has(key)) {
-        sendJson(res, 400, { ok: false, error: 'Invalid key. Allowed: users, exhibitions, pottery-students-v1, studio-calendar-state-v1.' });
+        sendJson(res, 400, { ok: false, error: 'Invalid key. Allowed: users, exhibitions, pottery-students-v1, pottery-personal-work-v1, studio-calendar-state-v1, pottery-material-orders-v1, pottery-accounting-v1.' });
         return;
       }
 
@@ -1080,7 +1135,7 @@ module.exports = async function handler(req, res) {
           ? existingMap['studio-calendar-state-v1']
           : {};
         valueToPersist = mergeStudioCalendarState(currentCalendar, body.value);
-        writeReason = 'studio-calendar-merged';
+        writeReason = 'studio-calendar-full-overwrite';
       }
 
       if (key === 'exhibitions') {
@@ -1217,7 +1272,7 @@ module.exports = async function handler(req, res) {
       const requestId = getRequestId(req);
       const clientId = getClientIdFromRequest(req);
       if (!ALLOWED_KEYS.has(key)) {
-        sendJson(res, 400, { ok: false, error: 'Invalid key. Allowed: users, exhibitions, pottery-students-v1, studio-calendar-state-v1.' });
+        sendJson(res, 400, { ok: false, error: 'Invalid key. Allowed: users, exhibitions, pottery-students-v1, pottery-personal-work-v1, studio-calendar-state-v1, pottery-material-orders-v1, pottery-accounting-v1.' });
         return;
       }
 

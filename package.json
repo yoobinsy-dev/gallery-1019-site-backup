@@ -5,10 +5,20 @@
   "type": "commonjs",
   "scripts": {
     "dev": "vercel dev",
-    "start": "vercel dev"
+    "start": "vercel dev",
+    "vercel:guard-project": "node -e \"const fs=require('fs');const p='.vercel/project.json';if(!fs.existsSync(p)){console.error('Refusing deploy: .vercel/project.json is missing. Run: npx vercel link --scope 1019-gallery --project gallery-1019-site');process.exit(1);}const j=JSON.parse(fs.readFileSync(p,'utf8'));if(j.projectName!=='gallery-1019-site'){console.error('Refusing deploy: linked project is '+(j.projectName||'UNKNOWN')+'. Expected gallery-1019-site.');process.exit(1);}if(j.orgId!=='team_pLAV9RSL1pTmVUlpjZITNGc9'){console.error('Refusing deploy: linked orgId is '+(j.orgId||'UNKNOWN')+'. Expected team_pLAV9RSL1pTmVUlpjZITNGc9.');process.exit(1);}\"",
+    "vercel:whoami": "vercel whoami",
+    "deploy:prod": "vercel --prod --yes --scope 1019-gallery",
+    "deploy:prod:main": "bash ./scripts/deploy-main.sh",
+    "deploy:prod:safe": "npm run vercel:guard-project && npm run deploy:prod",
+    "deploy:prod:quick": "npm run deploy:prod:safe",
+    "deploy:prod:quick:main": "npm run vercel:guard-project && npm run deploy:prod:main"
   },
   "dependencies": {
     "@vercel/blob": "^0.27.0",
     "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "vercel": "58.9.4"
   }
 }

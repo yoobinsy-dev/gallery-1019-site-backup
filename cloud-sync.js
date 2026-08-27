@@ -1,5 +1,13 @@
 (function () {
-  const SYNCED_KEYS = new Set(['users', 'exhibitions', 'pottery-students-v1', 'studio-calendar-state-v1']);
+  const SYNCED_KEYS = new Set([
+    'users',
+    'exhibitions',
+    'pottery-students-v1',
+    'pottery-personal-work-v1',
+    'studio-calendar-state-v1',
+    'pottery-material-orders-v1',
+    'pottery-accounting-v1'
+  ]);
   const PUSH_DEBOUNCE_MS = 1500;
   const META_KEY = '__sync_updated_at__';
   const SESSION_META_KEY = '__sync_updated_at_session__';
@@ -85,11 +93,31 @@
     }
 
     if (page === 'pottery-master-calendar.html') {
-      return ['users', 'studio-calendar-state-v1'];
+      return ['users', 'pottery-personal-work-v1', 'studio-calendar-state-v1'];
+    }
+
+    if (page === 'pottery-personal-work.html') {
+      return ['users', 'pottery-personal-work-v1', 'studio-calendar-state-v1'];
+    }
+
+    if (page === 'pottery-material-orders.html') {
+      return ['users', 'pottery-material-orders-v1'];
     }
 
     if (page === 'pottery-students.html') {
       return ['users', 'pottery-students-v1', 'studio-calendar-state-v1'];
+    }
+
+    if (page === 'pottery-accounting.html') {
+      return [
+        'users',
+        'exhibitions',
+        'pottery-students-v1',
+        'pottery-personal-work-v1',
+        'studio-calendar-state-v1',
+        'pottery-material-orders-v1',
+        'pottery-accounting-v1'
+      ];
     }
 
     if (page === 'gallery-lounge.html') {
@@ -319,6 +347,123 @@
       changed,
       removedIds: Array.from(new Set(removedIds))
     };
+  }
+
+  function getMaterialOrderIdentity(order, fallbackPrefix, index) {
+    const id = String(order?.id || '').trim();
+    if (id) return `id:${id}`;
+
+    const createdAt = String(order?.createdAt || '').trim();
+    const orderDate = String(order?.orderDate || '').trim();
+    if (createdAt || orderDate) {
+      return `date:${orderDate}|created:${createdAt}|idx:${index}`;
+    }
+
+    return `${fallbackPrefix}:${index}`;
+  }
+
+  function getMaterialOrderEpochMs(order) {
+    if (!order || typeof order !== 'object') return 0;
+
+    const candidates = [
+      order.updatedAt,
+      order.modifiedAt,
+      order.createdAt,
+      order.orderDate
+    ];
+
+    for (let i = 0; i < candidates.length; i += 1) {
+      const ms = getEpochMs(candidates[i]);
+      if (ms > 0) return ms;
+    }
+
+    return 0;
+  }
+
+  function mergeMaterialOrderItems(preferredItems, fallbackItems) {
+    const result = [];
+    const seen = new Set();
+
+    const pushIfNew = (item, prefix, index) => {
+      if (!item || typeof item !== 'object') return;
+      const identity = String(item.id || '').trim() || `${prefix}:${index}`;
+      if (seen.has(identity)) return;
+      seen.add(identity);
+      result.push(item);
+    };
+
+    if (Array.isArray(preferredItems)) {
+      preferredItems.forEach((item, index) => pushIfNew(item, 'pref', index));
+    }
+    if (Array.isArray(fallbackItems)) {
+      fallbackItems.forEach((item, index) => pushIfNew(item, 'fallback', index));
+    }
+
+    return result;
+  }
+
+  function mergeMaterialOrderPair(localOrder, remoteOrder) {
+    if (!localOrder || typeof localOrder !== 'object') return remoteOrder;
+    if (!remoteOrder || typeof remoteOrder !== 'object') return localOrder;
+
+    const localMs = getMaterialOrderEpochMs(localOrder);
+    const remoteMs = getMaterialOrderEpochMs(remoteOrder);
+    const preferred = localMs >= remoteMs ? localOrder : remoteOrder;
+    const fallback = preferred === localOrder ? remoteOrder : localOrder;
+
+    const merged = { ...fallback, ...preferred };
+    merged.items = mergeMaterialOrderItems(preferred.items, fallback.items);
+
+    if (typeof preferred.orderWideDiscount === 'boolean') {
+      merged.orderWideDiscount = preferred.orderWideDiscount;
+    } else if (typeof fallback.orderWideDiscount === 'boolean') {
+      merged.orderWideDiscount = fallback.orderWideDiscount;
+    }
+
+    if (typeof preferred.orderWideShipping === 'boolean') {
+      merged.orderWideShipping = preferred.orderWideShipping;
+    } else if (typeof fallback.orderWideShipping === 'boolean') {
+      merged.orderWideShipping = fallback.orderWideShipping;
+    }
+
+    return merged;
+  }
+
+  function mergeMaterialOrdersForSync(localOrders, remoteOrders) {
+    if (!Array.isArray(localOrders) || !Array.isArray(remoteOrders)) {
+      return Array.isArray(remoteOrders) ? remoteOrders : (Array.isArray(localOrders) ? localOrders : []);
+    }
+
+    const merged = [];
+    const localByIdentity = new Map();
+    const consumedLocal = new Set();
+
+    localOrders.forEach((order, index) => {
+      if (!order || typeof order !== 'object') return;
+      const identity = getMaterialOrderIdentity(order, 'local', index);
+      if (!localByIdentity.has(identity)) {
+        localByIdentity.set(identity, order);
+      }
+    });
+
+    remoteOrders.forEach((remoteOrder, index) => {
+      if (!remoteOrder || typeof remoteOrder !== 'object') return;
+      const identity = getMaterialOrderIdentity(remoteOrder, 'remote', index);
+      const localOrder = localByIdentity.get(identity);
+      if (localOrder) {
+        merged.push(mergeMaterialOrderPair(localOrder, remoteOrder));
+        consumedLocal.add(identity);
+        return;
+      }
+      merged.push(remoteOrder);
+    });
+
+    localByIdentity.forEach((localOrder, identity) => {
+      if (consumedLocal.has(identity)) return;
+      merged.push(localOrder);
+    });
+
+    return merged;
   }
 
   function queuePushWithBaseline(key, nextValue, baselineValue) {
@@ -972,13 +1117,35 @@
         const localRaw = localStorage.getItem(key);
         const remoteUpdatedAt = remoteMeta[key]?.updatedAt || null;
         const localUpdatedAt = localMeta[key] || null;
-        const parsedLocal = key === 'exhibitions' ? parseJsonSafe(localRaw) : null;
+        const parsedLocal = (key === 'exhibitions' || key === 'pottery-material-orders-v1')
+          ? parseJsonSafe(localRaw)
+          : null;
 
         if (typeof remoteValue !== 'undefined') {
           const remoteTime = getEpochMs(remoteUpdatedAt);
           const localTime = getEpochMs(localUpdatedAt);
           let mergedRemoteValue = remoteValue;
           let shouldHealRemotePreviews = false;
+
+          if (key === 'pottery-material-orders-v1' && Array.isArray(parsedLocal) && Array.isArray(remoteValue)) {
+            const reconciledOrders = mergeMaterialOrdersForSync(parsedLocal, remoteValue);
+            const localNeedsApply = !isSameValue(parsedLocal, reconciledOrders);
+            const remoteNeedsRepair = !isSameValue(remoteValue, reconciledOrders);
+
+            if (localNeedsApply || remoteNeedsRepair) {
+              originalSetItem.call(localStorage, key, JSON.stringify(reconciledOrders));
+              markLocalUpdate(key, remoteUpdatedAt || new Date().toISOString());
+              appliedRemoteKeys.push(key);
+
+              if (remoteNeedsRepair) {
+                schedulePush(key, reconciledOrders, {
+                  stateSignature: buildStateSignature(reconciledOrders),
+                  syncMode: 'full'
+                });
+              }
+              return;
+            }
+          }
 
           if (remoteUpdatedAt) {
             markKnownRemoteVersion(key, remoteUpdatedAt);

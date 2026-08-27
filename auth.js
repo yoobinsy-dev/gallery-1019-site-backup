@@ -153,10 +153,22 @@ window.safeSetLocalStorageItem = safeSetLocalStorageItem;
 
 document.addEventListener('DOMContentLoaded', () => {
   loadCurrentUser();
+  reconcileCurrentUserFromUsers({ silent: true });
   renderGlobalUserInfoBox();
   const loginForm = document.getElementById('login-id');
   if (loginForm) {
     loginForm.focus();
+  }
+});
+
+window.addEventListener('cloud-sync:ready', () => {
+  reconcileCurrentUserFromUsers();
+});
+
+window.addEventListener('cloud-sync:state-applied', (event) => {
+  const keys = Array.isArray(event?.detail?.keys) ? event.detail.keys : [];
+  if (keys.includes('users')) {
+    reconcileCurrentUserFromUsers();
   }
 });
 
@@ -170,6 +182,31 @@ function ensureProfileEditStyles() {
   const style = document.createElement('style');
   style.id = 'profile-edit-styles';
   style.textContent = `
+    .user-info {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: flex-end !important;
+      gap: 8px !important;
+    }
+
+    .user-info .user-pill-actions {
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 8px !important;
+      margin-left: 0 !important;
+    }
+
+    .user-info #user-display {
+      display: inline-flex !important;
+      align-items: center !important;
+      flex: 0 1 auto !important;
+      min-width: 0 !important;
+      max-width: min(56vw, 280px) !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+    }
+
     .user-pill-actions {
       display: inline-flex;
       gap: 8px;
@@ -508,11 +545,6 @@ function renderGlobalUserInfoBox() {
   const userLabel = `<strong>${activeUser.name}</strong> (${accountTypeLabel})`;
 
   if (existingBox) {
-    const userDisplay = existingBox.querySelector('#user-display');
-    if (userDisplay) {
-      userDisplay.innerHTML = userLabel;
-    }
-
     let actionWrap = existingBox.querySelector('.user-pill-actions');
     if (!actionWrap) {
       actionWrap = document.createElement('span');
@@ -520,12 +552,18 @@ function renderGlobalUserInfoBox() {
       existingBox.appendChild(actionWrap);
     }
 
+    let userDisplay = existingBox.querySelector('#user-display');
+    if (!userDisplay) {
+      userDisplay = document.createElement('span');
+      userDisplay.id = 'user-display';
+    }
+    userDisplay.innerHTML = userLabel;
+
     let editButton = existingBox.querySelector('.edit-account-btn');
     if (!editButton) {
       editButton = document.createElement('button');
       editButton.className = 'edit-account-btn';
       editButton.textContent = '계정 수정';
-      actionWrap.appendChild(editButton);
     }
     editButton.setAttribute('onclick', 'openProfileEditModal()');
 
@@ -534,17 +572,18 @@ function renderGlobalUserInfoBox() {
       logoutButton = document.createElement('button');
       logoutButton.className = 'logout-btn';
       logoutButton.textContent = '로그아웃';
-      actionWrap.appendChild(logoutButton);
     }
     logoutButton.setAttribute('onclick', 'logout()');
+
+    actionWrap.replaceChildren(userDisplay, editButton, logoutButton);
     return;
   }
 
   const userInfoBox = document.createElement('div');
   userInfoBox.className = 'user-info';
   userInfoBox.innerHTML = `
-    <span id="user-display">${userLabel}</span>
     <span class="user-pill-actions">
+      <span id="user-display">${userLabel}</span>
       <button class="edit-account-btn" onclick="openProfileEditModal()">계정 수정</button>
       <button class="logout-btn" onclick="logout()">로그아웃</button>
     </span>
@@ -580,7 +619,23 @@ function normalizeLoginValue(value) {
   return value ? value.toString().trim().toLowerCase() : '';
 }
 
-function handleLogin() {
+function findUserForLogin(users, normalizedId, password) {
+  if (!Array.isArray(users) || !normalizedId) return null;
+
+  return users.find((u) => {
+    const normalizedName = normalizeLoginValue(u.name);
+    const normalizedUsername = normalizeLoginValue(u.username);
+    const normalizedPhone = normalizeLoginValue(u.phone);
+    const normalizedEmail = normalizeLoginValue(u.email);
+    return (normalizedName === normalizedId
+      || normalizedUsername === normalizedId
+      || normalizedPhone === normalizedId
+      || normalizedEmail === normalizedId)
+      && String(u.password || '') === String(password || '');
+  }) || null;
+}
+
+async function handleLogin() {
   const id = document.getElementById('login-id').value.trim();
   const password = document.getElementById('login-password').value.trim();
 
@@ -590,14 +645,15 @@ function handleLogin() {
   }
 
   const normalizedId = normalizeLoginValue(id);
-  const users = JSON.parse(localStorage.getItem('users')) || [];
-  const user = users.find(u => {
-    const normalizedName = normalizeLoginValue(u.name);
-    const normalizedUsername = normalizeLoginValue(u.username);
-    const normalizedPhone = normalizeLoginValue(u.phone);
-    const normalizedEmail = normalizeLoginValue(u.email);
-    return (normalizedName === normalizedId || normalizedUsername === normalizedId || normalizedPhone === normalizedId || normalizedEmail === normalizedId) && u.password === password;
-  });
+  let users = JSON.parse(localStorage.getItem('users')) || [];
+  let user = findUserForLogin(users, normalizedId, password);
+
+  // On first load, users may still be syncing from remote; retry once after cloud-sync becomes ready.
+  if (!user && isLoginPage()) {
+    await waitForCloudSyncReady();
+    users = JSON.parse(localStorage.getItem('users')) || [];
+    user = findUserForLogin(users, normalizedId, password);
+  }
 
   if (!user) {
     showMessage('ID 또는 비밀번호가 잘못되었습니다.', 'error');
@@ -616,6 +672,46 @@ function handleLogin() {
   setTimeout(() => {
     window.location.href = 'index.html';
   }, 1500);
+}
+
+function reconcileCurrentUserFromUsers(options = {}) {
+  const activeUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+  if (!activeUser) {
+    currentUser = null;
+    return null;
+  }
+
+  const users = JSON.parse(localStorage.getItem('users') || '[]');
+  if (!Array.isArray(users) || users.length === 0) {
+    currentUser = activeUser;
+    return activeUser;
+  }
+
+  const matchedIndex = getCurrentUserRecordIndex(users, activeUser);
+  if (matchedIndex === -1) {
+    currentUser = activeUser;
+    return activeUser;
+  }
+
+  const matchedUser = users[matchedIndex];
+  const mergedUser = {
+    ...activeUser,
+    ...matchedUser,
+    password: String(matchedUser?.password || activeUser?.password || '')
+  };
+
+  const before = JSON.stringify(activeUser);
+  const after = JSON.stringify(mergedUser);
+  currentUser = mergedUser;
+
+  if (before !== after) {
+    safeSetLocalStorageItem('currentUser', JSON.stringify(mergedUser));
+    if (!options.silent) {
+      renderGlobalUserInfoBox();
+    }
+  }
+
+  return mergedUser;
 }
 
 function handleSignup() {

@@ -4,6 +4,8 @@
   const SLOT_MINUTES = 30;
   const SLOTS_PER_DAY = 48;
   const DAY_NAMES = ['월', '화', '수', '목', '금', '토', '일'];
+  const STUDENT_GROUP_REGULAR = '정규반';
+  const STUDENT_GROUP_ONEDAY = '원데이';
 
   const state = {
     students: [],
@@ -17,7 +19,9 @@
     },
     pendingStudent: null,
     editingStudentId: '',
+    paymentStudentId: '',
     detailStudentId: '',
+    activeStudentGroup: STUDENT_GROUP_REGULAR,
     slotPicker: {
       weekStart: getWeekStart(new Date()),
       selected: null
@@ -30,11 +34,20 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     if (!enforceStudentsAccess()) return;
+    bindEvents();
+    initializeStudentsPage();
+    startHourlyAutoRecompute();
+  });
+
+  window.addEventListener('cloud-sync:state-applied', (event) => {
+    const keys = Array.isArray(event?.detail?.keys) ? event.detail.keys : [];
+    if (!keys.includes('pottery-students-v1') && !keys.includes('studio-calendar-state-v1') && !keys.includes('users')) {
+      return;
+    }
+
     loadStudents();
     loadCalendarState();
-    bindEvents();
     renderStudents();
-    startHourlyAutoRecompute();
   });
 
   function normalizeSiteAccess(access) {
@@ -103,11 +116,19 @@
   }
 
   function getVisibleStudents() {
-    if (!isInstructorRole()) return state.students;
-    const instructorName = String(state.access.userName || '').trim();
+    const activeGroup = normalizeStudentGroup(state.activeStudentGroup);
     return state.students.filter((student) => {
+      if (normalizeStudentGroup(student?.studentGroup) !== activeGroup) return false;
+      if (!isInstructorRole()) return true;
+      const instructorName = String(state.access.userName || '').trim();
       return getStudentCurrentInstructor(student) === instructorName;
     });
+  }
+
+  function normalizeStudentGroup(value) {
+    return String(value || '').trim() === STUDENT_GROUP_ONEDAY
+      ? STUDENT_GROUP_ONEDAY
+      : STUDENT_GROUP_REGULAR;
   }
 
   function canManageStudent(student) {
@@ -122,16 +143,36 @@
       renderStudents();
     };
 
-    const now = new Date();
-    const nextHour = new Date(now);
-    nextHour.setMinutes(0, 0, 0);
-    nextHour.setHours(nextHour.getHours() + 1);
-    const firstDelayMs = Math.max(1000, nextHour.getTime() - now.getTime());
+    setInterval(run, 60 * 1000);
+    window.addEventListener('focus', run);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) run();
+    });
+  }
 
-    setTimeout(() => {
-      run();
-      setInterval(run, 60 * 60 * 1000);
-    }, firstDelayMs);
+  async function initializeStudentsPage() {
+    await waitForCloudSyncReady();
+    loadStudents();
+    loadCalendarState();
+    renderStudents();
+  }
+
+  function waitForCloudSyncReady(timeoutMs = 4000) {
+    const cloudReady = window.cloudSyncReady;
+    if (!cloudReady || typeof cloudReady.then !== 'function') {
+      return Promise.resolve(window.cloudSyncStatus || null);
+    }
+
+    const timeoutPromise = new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(window.cloudSyncStatus || null);
+      }, timeoutMs);
+    });
+
+    return Promise.race([
+      cloudReady.catch(() => null),
+      timeoutPromise
+    ]);
   }
 
   function bindEvents() {
@@ -141,6 +182,13 @@
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       startStudentAddFlow();
+    });
+
+    document.getElementById('students-tab-regular')?.addEventListener('click', () => {
+      setActiveStudentGroup(STUDENT_GROUP_REGULAR);
+    });
+    document.getElementById('students-tab-oneday')?.addEventListener('click', () => {
+      setActiveStudentGroup(STUDENT_GROUP_ONEDAY);
     });
 
     document.getElementById('slot-week-prev-btn')?.addEventListener('click', () => {
@@ -161,6 +209,8 @@
     document.getElementById('slot-save-later-btn')?.addEventListener('click', saveStudentWithoutSlot);
     document.getElementById('student-edit-save-btn')?.addEventListener('click', saveStudentEdit);
     document.getElementById('student-edit-cancel-btn')?.addEventListener('click', closeEditModal);
+    document.getElementById('student-payment-save-btn')?.addEventListener('click', saveStudentPayment);
+    document.getElementById('student-payment-cancel-btn')?.addEventListener('click', closePaymentModal);
     document.getElementById('student-detail-close-btn')?.addEventListener('click', closeDetailModal);
 
     const addTuitionInput = document.getElementById('student-tuition');
@@ -176,6 +226,18 @@
       editTuitionInput.addEventListener('input', () => applyWonInputFormat(editTuitionInput, { withSuffix: false }));
       editTuitionInput.addEventListener('blur', () => applyWonInputFormat(editTuitionInput, { withSuffix: true }));
     }
+
+    const paymentTuitionInput = document.getElementById('payment-record-tuition');
+    if (paymentTuitionInput) {
+      paymentTuitionInput.addEventListener('focus', () => applyWonInputFormat(paymentTuitionInput, { withSuffix: false }));
+      paymentTuitionInput.addEventListener('input', () => applyWonInputFormat(paymentTuitionInput, { withSuffix: false }));
+      paymentTuitionInput.addEventListener('blur', () => applyWonInputFormat(paymentTuitionInput, { withSuffix: true }));
+    }
+
+    document.getElementById('payment-record-basis')?.addEventListener('change', (event) => {
+      const creditsInput = document.getElementById('payment-record-credits');
+      if (creditsInput) creditsInput.value = String(basisToCount(event.target?.value));
+    });
 
     const modal = document.getElementById('student-class-slot-modal');
     if (modal) {
@@ -203,9 +265,19 @@
         }
       });
     }
+
+    const paymentModal = document.getElementById('student-payment-modal');
+    if (paymentModal) {
+      paymentModal.addEventListener('click', (event) => {
+        if (event.target === paymentModal) {
+          closePaymentModal();
+        }
+      });
+    }
   }
 
   function startStudentAddFlow() {
+    const groupInput = document.getElementById('student-group');
     const nameInput = document.getElementById('student-name');
     const tuitionInput = document.getElementById('student-tuition');
     const tuitionBasisInput = document.getElementById('student-tuition-basis');
@@ -223,13 +295,17 @@
     const paymentDate = String(paymentInput?.value || '').trim();
 
     const purchasedCount = basisToCount(tuitionBasis);
+    const studentGroup = normalizeStudentGroup(groupInput?.value);
 
     state.pendingStudent = {
+      studentGroup,
       name,
       tuition: parseCurrencyInput(tuitionInput?.value || ''),
       tuitionBasis,
       mostRecentPaymentDate: paymentDate,
       paymentHistory: paymentDate ? [paymentDate] : [],
+      paymentRecords: paymentDate ? [createPaymentRecord(paymentDate, tuition, tuitionBasis, purchasedCount)] : [],
+      creditTrackingStartDate: formatDateInput(new Date()),
       carryOverBeforePayment: 0,
       paymentCycleCredits: purchasedCount
     };
@@ -267,6 +343,7 @@
     }
     const student = {
       id: `stu-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      studentGroup: state.pendingStudent.studentGroup,
       name: state.pendingStudent.name,
       classTime: formatClassTime(slot.date, slot.start, slot.end),
       classType: slot.className || '수업시간',
@@ -276,6 +353,8 @@
       tuitionBasis: state.pendingStudent.tuitionBasis,
       mostRecentPaymentDate: state.pendingStudent.mostRecentPaymentDate,
       paymentHistory: Array.isArray(state.pendingStudent.paymentHistory) ? state.pendingStudent.paymentHistory.slice() : [],
+      paymentRecords: normalizePaymentRecords(state.pendingStudent),
+      creditTrackingStartDate: state.pendingStudent.creditTrackingStartDate,
       carryOverBeforePayment: state.pendingStudent.carryOverBeforePayment,
       paymentCycleCredits: state.pendingStudent.paymentCycleCredits
     };
@@ -303,7 +382,7 @@
     saveCalendarState();
     closeSlotModal();
     clearStudentForm();
-    renderStudents();
+    setActiveStudentGroup(student.studentGroup);
   }
 
   function saveStudentWithoutSlot() {
@@ -315,6 +394,7 @@
 
     const student = {
       id: `stu-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      studentGroup: state.pendingStudent.studentGroup,
       name: state.pendingStudent.name,
       classTime: '',
       classType: '',
@@ -324,6 +404,8 @@
       tuitionBasis: state.pendingStudent.tuitionBasis,
       mostRecentPaymentDate: state.pendingStudent.mostRecentPaymentDate,
       paymentHistory: Array.isArray(state.pendingStudent.paymentHistory) ? state.pendingStudent.paymentHistory.slice() : [],
+      paymentRecords: normalizePaymentRecords(state.pendingStudent),
+      creditTrackingStartDate: state.pendingStudent.creditTrackingStartDate,
       carryOverBeforePayment: state.pendingStudent.carryOverBeforePayment,
       paymentCycleCredits: state.pendingStudent.paymentCycleCredits
     };
@@ -335,15 +417,17 @@
     saveCalendarState();
     closeSlotModal();
     clearStudentForm();
-    renderStudents();
+    setActiveStudentGroup(student.studentGroup);
   }
 
   function clearStudentForm() {
+    const groupInput = document.getElementById('student-group');
     const nameInput = document.getElementById('student-name');
     const tuitionInput = document.getElementById('student-tuition');
     const tuitionBasisInput = document.getElementById('student-tuition-basis');
     const paymentInput = document.getElementById('student-recent-payment');
 
+    if (groupInput) groupInput.value = STUDENT_GROUP_REGULAR;
     if (nameInput) nameInput.value = '';
     if (tuitionInput) tuitionInput.value = '';
     if (tuitionBasisInput) tuitionBasisInput.value = '';
@@ -494,6 +578,7 @@
     if (!tbody) return;
 
     const visibleStudents = getVisibleStudents();
+    renderStudentGroupTabs();
 
     if (!visibleStudents.length) {
       tbody.innerHTML = '<tr class="empty-row"><td colspan="11">수강생을 추가하면 여기에 표시됩니다.</td></tr>';
@@ -507,7 +592,7 @@
       const isMonthly = isMonthlyStartBasis(student?.tuitionBasis);
       const completedSincePayment = isMonthly
         ? 0
-        : getCompletedClassCountSince(student.name, student.mostRecentPaymentDate);
+        : getCompletedClassCountForBalance(student);
       const remainingCount = isMonthly
         ? null
         : getRemainingClassCount(student, completedSincePayment);
@@ -529,7 +614,20 @@
       tr.appendChild(buildTextCell(recentClassDate || '-'));
       tr.appendChild(buildTextCell(student.tuition ? formatWon(student.tuition) : '-'));
       tr.appendChild(buildTextCell(student.tuitionBasis || '-'));
-      tr.appendChild(buildTextCell(student.mostRecentPaymentDate || '-'));
+
+      const paymentTd = document.createElement('td');
+      paymentTd.className = 'payment-cell';
+      const paymentText = document.createElement('span');
+      paymentText.className = 'cell-text';
+      paymentText.textContent = student.mostRecentPaymentDate || '-';
+      const addPaymentBtn = document.createElement('button');
+      addPaymentBtn.type = 'button';
+      addPaymentBtn.className = 'row-action-btn payment-add';
+      addPaymentBtn.textContent = '결제 추가';
+      addPaymentBtn.addEventListener('click', () => addStudentPayment(student.id));
+      paymentTd.appendChild(paymentText);
+      paymentTd.appendChild(addPaymentBtn);
+      tr.appendChild(paymentTd);
 
       const remainingTd = document.createElement('td');
       const remainingBadge = document.createElement('span');
@@ -569,6 +667,26 @@
 
       tbody.appendChild(tr);
     });
+  }
+
+  function setActiveStudentGroup(group) {
+    state.activeStudentGroup = normalizeStudentGroup(group);
+    renderStudents();
+  }
+
+  function renderStudentGroupTabs() {
+    const regularTab = document.getElementById('students-tab-regular');
+    const oneDayTab = document.getElementById('students-tab-oneday');
+    const regularActive = state.activeStudentGroup === STUDENT_GROUP_REGULAR;
+
+    if (regularTab) {
+      regularTab.classList.toggle('is-active', regularActive);
+      regularTab.setAttribute('aria-selected', regularActive ? 'true' : 'false');
+    }
+    if (oneDayTab) {
+      oneDayTab.classList.toggle('is-active', !regularActive);
+      oneDayTab.setAttribute('aria-selected', regularActive ? 'false' : 'true');
+    }
   }
 
   function buildTextCell(value) {
@@ -653,7 +771,8 @@
 
     const oldName = String(student.name || '').trim();
     const previousPaymentDate = String(student.mostRecentPaymentDate || '');
-    const previousCompletedSincePayment = getCompletedClassCountSince(student.name, previousPaymentDate);
+    const previousTuitionBasis = String(student.tuitionBasis || '');
+    const previousCompletedSincePayment = getCompletedClassCountForBalance(student, previousPaymentDate);
     const previousRemaining = getRemainingClassCount(student, previousCompletedSincePayment);
 
     const nextName = String(document.getElementById('edit-student-name')?.value || '').trim();
@@ -662,27 +781,23 @@
       return;
     }
 
+    const nextTuition = parseCurrencyInput(document.getElementById('edit-student-tuition')?.value || '');
+    const nextTuitionBasis = String(document.getElementById('edit-student-tuition-basis')?.value || '');
+    const nextPaymentDate = String(document.getElementById('edit-student-recent-payment')?.value || '');
+    if (nextTuitionBasis !== previousTuitionBasis && nextPaymentDate === previousPaymentDate) {
+      alert('결제 기준 변경은 학생 목록의 결제 추가 버튼을 사용해주세요. 학생 수정에서는 기존 결제만 정정할 수 있습니다.');
+      return;
+    }
+
     student.name = nextName;
-    student.tuition = parseCurrencyInput(document.getElementById('edit-student-tuition')?.value || '');
-    student.tuitionBasis = String(document.getElementById('edit-student-tuition-basis')?.value || '');
-    student.mostRecentPaymentDate = String(document.getElementById('edit-student-recent-payment')?.value || '');
+    student.tuition = nextTuition;
+    student.tuitionBasis = nextTuitionBasis;
+    student.mostRecentPaymentDate = nextPaymentDate;
     const manualDeductionInput = Number(document.getElementById('edit-student-manual-deduction')?.value || '0');
     student.manualUsedAdjustment = Number.isFinite(manualDeductionInput)
-      ? Math.max(0, Math.floor(manualDeductionInput))
+      ? Math.floor(manualDeductionInput)
       : 0;
-    if (!Array.isArray(student.paymentHistory)) {
-      student.paymentHistory = [];
-    }
-    if (previousPaymentDate && !student.paymentHistory.includes(previousPaymentDate)) {
-      student.paymentHistory.push(previousPaymentDate);
-    }
-    if (student.mostRecentPaymentDate && !student.paymentHistory.includes(student.mostRecentPaymentDate)) {
-      student.paymentHistory.push(student.mostRecentPaymentDate);
-    }
-    student.paymentHistory = student.paymentHistory
-      .map((d) => String(d || '').trim())
-      .filter(Boolean)
-      .sort((a, b) => b.localeCompare(a));
+    updatePaymentHistoryForRecentEdit(student, previousPaymentDate, student.mostRecentPaymentDate);
 
     const paymentChanged = previousPaymentDate !== student.mostRecentPaymentDate;
     if (isMonthlyStartBasis(student.tuitionBasis)) {
@@ -691,8 +806,10 @@
       student.manualUsedAdjustment = 0;
     } else if (paymentChanged && student.mostRecentPaymentDate) {
       // Manual deduction is a one-cycle correction and should not carry to next payment cycle.
-      const hadManualDeduction = getManualUsedAdjustment(student) > 0;
-      student.carryOverBeforePayment = hadManualDeduction ? 0 : previousRemaining;
+      const hadManualAdjustment = getManualUsedAdjustment(student) !== 0;
+      student.carryOverBeforePayment = hadManualAdjustment
+        ? 0
+        : computeCarryOverForNewPaymentCycle(student, previousPaymentDate, student.mostRecentPaymentDate, previousRemaining);
       student.paymentCycleCredits = basisToCount(student.tuitionBasis);
       student.manualUsedAdjustment = 0;
     } else {
@@ -705,12 +822,14 @@
         student.carryOverBeforePayment = 0;
       }
       const existingManualAdjustment = Number(student.manualUsedAdjustment);
-      if (!Number.isFinite(existingManualAdjustment) || existingManualAdjustment < 0) {
+      if (!Number.isFinite(existingManualAdjustment)) {
         student.manualUsedAdjustment = 0;
       } else {
         student.manualUsedAdjustment = Math.floor(existingManualAdjustment);
       }
     }
+
+    updateLatestPaymentRecordForCorrection(student, previousPaymentDate);
 
     if (oldName && oldName !== nextName) {
       state.calendar.events.forEach((event) => {
@@ -726,6 +845,206 @@
     saveCalendarState();
     closeEditModal();
     renderStudents();
+  }
+
+  function addStudentPayment(studentId) {
+    const student = state.students.find((item) => item && item.id === studentId);
+    if (!student) return;
+    if (!canManageStudent(student)) return;
+
+    state.paymentStudentId = String(studentId);
+    document.getElementById('student-payment-title').textContent = `${student.name || '-'} 결제 추가`;
+    document.getElementById('payment-record-date').value = formatDateInput(new Date());
+    document.getElementById('payment-record-tuition').value = student.tuition ? formatWon(student.tuition) : '';
+    document.getElementById('payment-record-basis').value = student.tuitionBasis || '';
+    document.getElementById('payment-record-credits').value = String(basisToCount(student.tuitionBasis));
+
+    const modal = document.getElementById('student-payment-modal');
+    if (!modal) return;
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closePaymentModal() {
+    const modal = document.getElementById('student-payment-modal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    state.paymentStudentId = '';
+  }
+
+  function saveStudentPayment() {
+    const student = state.students.find((item) => item && item.id === state.paymentStudentId);
+    if (!student || !canManageStudent(student)) {
+      closePaymentModal();
+      return;
+    }
+
+    const nextPaymentDate = String(document.getElementById('payment-record-date')?.value || '').trim();
+    const nextTuition = parseCurrencyInput(document.getElementById('payment-record-tuition')?.value || '');
+    const nextBasis = String(document.getElementById('payment-record-basis')?.value || '').trim();
+    const nextCredits = Math.floor(Number(document.getElementById('payment-record-credits')?.value));
+    const invalidCredits = !Number.isFinite(nextCredits)
+      || nextCredits < 0
+      || (!isMonthlyStartBasis(nextBasis) && nextCredits < 1);
+    if (!isValidDateString(nextPaymentDate) || nextTuition <= 0 || !nextBasis || invalidCredits) {
+      alert('결제일, 수강료, 결제 기준, 포함 횟수를 확인해주세요.');
+      return;
+    }
+
+    const previousBasis = String(student.tuitionBasis || '').trim();
+    const previousPaymentDate = String(student.mostRecentPaymentDate || '').trim();
+    if (previousPaymentDate === nextPaymentDate) {
+      alert('같은 결제일이 이미 있습니다. 기존 결제 정정은 학생 수정에서 처리해주세요.');
+      return;
+    }
+    if (previousBasis && isMonthlyStartBasis(previousBasis) !== isMonthlyStartBasis(nextBasis)) {
+      alert('월초와 회차권 사이의 변경은 현재 지원하지 않습니다.');
+      return;
+    }
+    if (previousBasis && previousBasis !== nextBasis) {
+      const confirmed = confirm(`${previousBasis}에서 ${nextBasis}(으)로 변경됩니다. ${nextPaymentDate} 결제부터 적용할까요?`);
+      if (!confirmed) return;
+    }
+
+    const previousCompletedSincePayment = getCompletedClassCountForBalance(student, previousPaymentDate);
+    const previousRemaining = getRemainingClassCount(student, previousCompletedSincePayment);
+
+    student.tuition = nextTuition;
+    student.tuitionBasis = nextBasis;
+    student.mostRecentPaymentDate = nextPaymentDate;
+    appendPaymentHistory(student, nextPaymentDate);
+    student.paymentRecords = normalizePaymentRecords(student)
+      .filter((record) => record.date !== nextPaymentDate);
+    student.paymentRecords.push(createPaymentRecord(nextPaymentDate, nextTuition, nextBasis, nextCredits));
+
+    const paymentChanged = previousPaymentDate !== nextPaymentDate;
+    if (isMonthlyStartBasis(nextBasis)) {
+      student.carryOverBeforePayment = 0;
+      student.paymentCycleCredits = 0;
+      student.manualUsedAdjustment = 0;
+    } else if (paymentChanged) {
+      student.carryOverBeforePayment = computeCarryOverForNewPaymentCycle(
+        student,
+        previousPaymentDate,
+        nextPaymentDate,
+        previousRemaining
+      );
+      student.paymentCycleCredits = nextCredits;
+      student.manualUsedAdjustment = 0;
+    }
+
+    saveStudents();
+    closePaymentModal();
+    renderStudents();
+  }
+
+  function updatePaymentHistoryForRecentEdit(student, previousPaymentDate, nextPaymentDate) {
+    const previous = String(previousPaymentDate || '').trim();
+    const next = String(nextPaymentDate || '').trim();
+    let history = Array.isArray(student?.paymentHistory)
+      ? student.paymentHistory.map((d) => String(d || '').trim()).filter(Boolean)
+      : [];
+
+    if (previous && previous !== next) {
+      const previousIndex = history.indexOf(previous);
+      if (previousIndex >= 0) {
+        history.splice(previousIndex, 1);
+      }
+    }
+
+    if (next) {
+      history = history.filter((date) => date !== next);
+      history.push(next);
+    }
+
+    student.paymentHistory = history
+      .map((d) => String(d || '').trim())
+      .filter(Boolean)
+      .sort((a, b) => b.localeCompare(a));
+  }
+
+  function appendPaymentHistory(student, paymentDate) {
+    const next = String(paymentDate || '').trim();
+    let history = Array.isArray(student?.paymentHistory)
+      ? student.paymentHistory.map((d) => String(d || '').trim()).filter(Boolean)
+      : [];
+
+    if (!next) {
+      student.paymentHistory = history.sort((a, b) => b.localeCompare(a));
+      return;
+    }
+
+    if (!history.includes(next)) {
+      history.push(next);
+    }
+
+    student.paymentHistory = history.sort((a, b) => b.localeCompare(a));
+  }
+
+  function createPaymentRecord(date, tuition, basis, credits) {
+    return {
+      id: `payment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      date: String(date || '').trim(),
+      tuition: Number(tuition) || 0,
+      basis: String(basis || '').trim(),
+      credits: Math.max(0, Math.floor(Number(credits) || 0))
+    };
+  }
+
+  function normalizePaymentRecords(student) {
+    const records = Array.isArray(student?.paymentRecords) ? student.paymentRecords : [];
+    const normalized = records
+      .map((record) => ({
+        id: String(record?.id || '').trim() || `legacy-payment-${String(record?.date || '').trim()}`,
+        date: String(record?.date || '').trim(),
+        tuition: Number(record?.tuition) || 0,
+        basis: String(record?.basis || '').trim(),
+        credits: Math.max(0, Math.floor(Number(record?.credits) || 0))
+      }))
+      .filter((record) => isValidDateString(record.date));
+
+    getStudentPaymentHistory(student).forEach((date) => {
+      if (normalized.some((record) => record.date === date)) return;
+      const isLatest = date === String(student?.mostRecentPaymentDate || '').trim();
+      normalized.push({
+        id: `legacy-payment-${date}`,
+        date,
+        tuition: isLatest ? Number(student?.tuition) || 0 : 0,
+        basis: isLatest ? String(student?.tuitionBasis || '').trim() : '',
+        credits: isLatest ? getStudentPaymentCycleSize(student) : 0
+      });
+    });
+
+    return normalized.sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  function updateLatestPaymentRecordForCorrection(student, previousPaymentDate) {
+    const previous = String(previousPaymentDate || '').trim();
+    const next = String(student?.mostRecentPaymentDate || '').trim();
+    const existingRecords = normalizePaymentRecords(student);
+    const correctedRecord = existingRecords.find((record) => record.date === previous || record.date === next);
+    const records = existingRecords
+      .filter((record) => record.date !== previous && record.date !== next);
+    if (next) {
+      const replacement = createPaymentRecord(
+        next,
+        student.tuition,
+        student.tuitionBasis,
+        student.paymentCycleCredits
+      );
+      if (correctedRecord?.id) replacement.id = correctedRecord.id;
+      records.push(replacement);
+    }
+    student.paymentRecords = records.sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  function isValidDateString(value) {
+    const text = String(value || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+    const date = new Date(`${text}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return false;
+    return formatDateInput(date) === text;
   }
 
   function deleteStudent(studentId) {
@@ -778,8 +1097,43 @@
 
   function getManualUsedAdjustment(student) {
     const parsed = Number(student?.manualUsedAdjustment || 0);
-    if (!Number.isFinite(parsed) || parsed < 0) return 0;
+    if (!Number.isFinite(parsed)) return 0;
     return Math.floor(parsed);
+  }
+
+  function computeCarryOverForNewPaymentCycle(student, previousPaymentDate, nextPaymentDate, previousRemaining) {
+    const nextDate = String(nextPaymentDate || '').trim();
+    if (!nextDate) return 0;
+
+    const sameDayCompleted = getCompletedClassCountOnDate(student?.name, nextDate);
+    const balanceAfterSameDayClasses = Number(previousRemaining) || 0;
+    const balanceBeforeSameDayClasses = balanceAfterSameDayClasses + sameDayCompleted;
+    const outstandingBalance = Math.min(0, balanceBeforeSameDayClasses);
+    const oldCreditsAvailable = Math.max(0, balanceBeforeSameDayClasses);
+    const oldPlanClasses = Math.min(sameDayCompleted, oldCreditsAvailable);
+
+    return outstandingBalance + oldPlanClasses;
+  }
+
+  function getCompletedClassCountOnDate(studentName, targetDate) {
+    const dateText = String(targetDate || '').trim();
+    if (!isValidDateString(dateText)) return 0;
+    const date = new Date(`${dateText}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return 0;
+    const nextDate = formatDateInput(addDays(date, 1));
+    return getCompletedClassCountSinceInRange(studentName, dateText, nextDate);
+  }
+
+  function getCompletedClassCountSinceInRange(studentName, startDateInclusive, endDateExclusive) {
+    const start = String(startDateInclusive || '').trim();
+    if (!start) return 0;
+
+    const startCount = getCompletedClassCountSince(studentName, start);
+    const end = String(endDateExclusive || '').trim();
+    if (!end) return startCount;
+
+    const endCount = getCompletedClassCountSince(studentName, end);
+    return Math.max(0, startCount - endCount);
   }
 
   function renderDetailPaymentClassTable(student) {
@@ -793,7 +1147,7 @@
     if (!classRecords.length && !paymentDates.length) {
       const row = document.createElement('tr');
       row.className = 'students-detail-row-empty';
-      row.innerHTML = '<td colspan="2">수업/결제 기록이 없습니다.</td>';
+      row.innerHTML = '<td colspan="5">수업/결제 기록이 없습니다.</td>';
       tbody.appendChild(row);
       return;
     }
@@ -808,10 +1162,28 @@
         const row = document.createElement('tr');
 
         if (index === 0) {
+          const paymentRecord = group.paymentRecord || {};
           const paymentCell = document.createElement('td');
           paymentCell.rowSpan = spanCount;
           paymentCell.textContent = group.paymentDate || '-';
           row.appendChild(paymentCell);
+
+          const basisCell = document.createElement('td');
+          basisCell.rowSpan = spanCount;
+          basisCell.textContent = paymentRecord.basis || '-';
+          row.appendChild(basisCell);
+
+          const tuitionCell = document.createElement('td');
+          tuitionCell.rowSpan = spanCount;
+          tuitionCell.textContent = paymentRecord.tuition ? formatWon(paymentRecord.tuition) : '-';
+          row.appendChild(tuitionCell);
+
+          const creditsCell = document.createElement('td');
+          creditsCell.rowSpan = spanCount;
+          creditsCell.textContent = paymentRecord.basis
+            ? (isMonthlyStartBasis(paymentRecord.basis) ? '-' : String(paymentRecord.credits))
+            : '-';
+          row.appendChild(creditsCell);
         }
 
         const classCell = document.createElement('td');
@@ -821,14 +1193,6 @@
           const dayName = dayIndex >= 0 && dayIndex < DAY_NAMES.length ? DAY_NAMES[dayIndex] : '-';
           const classLabel = String(record.classType || '수강').trim();
           classCell.textContent = `${record.date} (${dayName}) ${record.start}~${record.end} · ${classLabel}`;
-
-          if (record.absent) {
-            classCell.classList.add('students-detail-class-absent');
-            const tag = document.createElement('span');
-            tag.className = 'students-absent-tag';
-            tag.textContent = '결석';
-            classCell.appendChild(tag);
-          }
         } else {
           classCell.textContent = '-';
         }
@@ -845,7 +1209,8 @@
         if (index === 0) {
           const paymentCell = document.createElement('td');
           paymentCell.rowSpan = unassigned.length;
-          paymentCell.textContent = '결제기록 없음';
+          paymentCell.colSpan = 4;
+          paymentCell.textContent = '이전 결제 사이클';
           row.appendChild(paymentCell);
         }
 
@@ -854,13 +1219,6 @@
         const dayName = dayIndex >= 0 && dayIndex < DAY_NAMES.length ? DAY_NAMES[dayIndex] : '-';
         const classLabel = String(record.classType || '수강').trim();
         classCell.textContent = `${record.date} (${dayName}) ${record.start}~${record.end} · ${classLabel}`;
-        if (record.absent) {
-          classCell.classList.add('students-detail-class-absent');
-          const tag = document.createElement('span');
-          tag.className = 'students-absent-tag';
-          tag.textContent = '결석';
-          classCell.appendChild(tag);
-        }
 
         row.appendChild(classCell);
         tbody.appendChild(row);
@@ -902,8 +1260,15 @@
   }
 
   function buildPaymentClassGroups(student, paymentDates, classRecords) {
+    const paymentRecordByDate = new Map(
+      normalizePaymentRecords(student).map((record) => [record.date, record])
+    );
     if (isMonthlyStartBasis(student?.tuitionBasis)) {
-      return buildMonthlyStartPaymentClassGroups(paymentDates, classRecords);
+      const monthlyGroups = buildMonthlyStartPaymentClassGroups(paymentDates, classRecords);
+      monthlyGroups.groups.forEach((group) => {
+        group.paymentRecord = paymentRecordByDate.get(group.paymentDate) || null;
+      });
+      return monthlyGroups;
     }
 
     const sortedPaymentsAsc = (Array.isArray(paymentDates) ? paymentDates : [])
@@ -919,11 +1284,16 @@
         return ak.localeCompare(bk);
       });
 
-    const cycleSize = getStudentPaymentCycleSize(student);
+    reservePriorCycleClasses(student, sortedPaymentsAsc, workingClasses);
 
     const groupsAsc = [];
     sortedPaymentsAsc.forEach((paymentDate, index) => {
       const nextPaymentDate = sortedPaymentsAsc[index + 1] || '';
+      const paymentRecord = paymentRecordByDate.get(paymentDate) || null;
+      const recordCredits = Number(paymentRecord?.credits);
+      const cycleSize = Number.isFinite(recordCredits) && recordCredits > 0
+        ? Math.floor(recordCredits)
+        : getStudentPaymentCycleSize(student);
       const assigned = [];
       let paidCount = 0;
 
@@ -931,29 +1301,29 @@
         if (!record) return;
         record.__assignedPayment = true;
         assigned.push(record);
-        if (!record.absent) {
-          paidCount += 1;
-        }
+        paidCount += 1;
       };
 
       // Primary pass: classes in this payment window [paymentDate, nextPaymentDate)
       for (let i = 0; i < workingClasses.length; i += 1) {
         const record = workingClasses[i];
         const classDate = String(record?.date || '');
-        if (!classDate || record.__assignedPayment) continue;
+        if (!classDate || record.__assignedPayment || record.__priorCycle) continue;
         if (classDate < paymentDate) continue;
         if (nextPaymentDate && classDate >= nextPaymentDate) continue;
         assignRecord(record);
         if (paidCount >= cycleSize) break;
       }
 
-      // Fallback pass: if still short, take earliest unassigned classes on/after paymentDate.
-      if (paidCount < cycleSize) {
+      // Boundary-day fallback: if a cycle is short, allow borrowing classes that happened on
+      // the next payment date only. This keeps same-day payment boundaries consistent with
+      // remaining-count carry logic.
+      if (paidCount < cycleSize && nextPaymentDate) {
         for (let i = 0; i < workingClasses.length; i += 1) {
           const record = workingClasses[i];
           const classDate = String(record?.date || '');
-          if (!classDate || record.__assignedPayment) continue;
-          if (classDate < paymentDate) continue;
+          if (!classDate || record.__assignedPayment || record.__priorCycle) continue;
+          if (classDate !== nextPaymentDate) continue;
           assignRecord(record);
           if (paidCount >= cycleSize) break;
         }
@@ -961,6 +1331,7 @@
 
       groupsAsc.push({
         paymentDate,
+        paymentRecord,
         classRecords: assigned
       });
     });
@@ -970,6 +1341,32 @@
       groups,
       unassigned: workingClasses.filter((record) => !record.__assignedPayment)
     };
+  }
+
+  function reservePriorCycleClasses(student, sortedPaymentsAsc, workingClasses) {
+    if (!Array.isArray(workingClasses) || workingClasses.length === 0) return;
+    if (!Array.isArray(sortedPaymentsAsc) || sortedPaymentsAsc.length === 0) return;
+
+    const firstPaymentDate = String(sortedPaymentsAsc[0] || '').trim();
+    let openingCredits = Math.max(0, -getManualUsedAdjustment(student));
+
+    for (let index = 0; index < workingClasses.length && openingCredits > 0; index += 1) {
+      const record = workingClasses[index];
+      const classDate = String(record?.date || '').trim();
+      if (!classDate || classDate < firstPaymentDate) continue;
+      record.__priorCycle = true;
+      openingCredits -= 1;
+    }
+
+    const latestPaymentDate = String(sortedPaymentsAsc[sortedPaymentsAsc.length - 1] || '').trim();
+    let sameDayPriorCycleCount = Math.max(0, Math.floor(Number(student?.carryOverBeforePayment) || 0));
+    for (let index = 0; index < workingClasses.length && sameDayPriorCycleCount > 0; index += 1) {
+      const record = workingClasses[index];
+      if (record.__priorCycle) continue;
+      if (String(record?.date || '').trim() !== latestPaymentDate) continue;
+      record.__priorCycle = true;
+      sameDayPriorCycleCount -= 1;
+    }
   }
 
   function buildMonthlyStartPaymentClassGroups(paymentDates, classRecords) {
@@ -1087,8 +1484,7 @@
         start: String(event.start || ''),
         end: String(event.end || ''),
         kind: String(event.kind || ''),
-        classType: String(event.classType || ''),
-        absent: isEventAbsentOnDate(event, dateKey)
+        classType: String(event.classType || '')
       });
     };
 
@@ -1215,13 +1611,6 @@
       .replace(/'/g, '&#39;');
   }
 
-  function isEventAbsentOnDate(event, dateKey) {
-    const key = String(dateKey || '').trim();
-    if (!key) return false;
-    const absenceDates = Array.isArray(event?.absenceDates) ? event.absenceDates : [];
-    return absenceDates.includes(key);
-  }
-
   function applyWonInputFormat(inputEl, options = {}) {
     if (!inputEl) return;
     const withSuffix = Boolean(options.withSuffix);
@@ -1255,7 +1644,6 @@
 
       if (!event.repeatWeekly) {
         const key = String(event.date || '').trim();
-        if (isEventAbsentOnDate(event, key)) return;
         const endAt = getOccurrenceEndDateTime(key, event.start, event.end);
         if (!endAt || endAt > now) return;
         completedCount += 1;
@@ -1277,7 +1665,7 @@
         const key = formatDateInput(cursor);
         const endAt = getOccurrenceEndDateTime(key, event.start, event.end);
         if (!endAt || endAt > now) break;
-        if (!skipDates.includes(key) && !isEventAbsentOnDate(event, key)) {
+        if (!skipDates.includes(key)) {
           completedCount += 1;
           if (!mostRecentClassDate || key > mostRecentClassDate) {
             mostRecentClassDate = key;
@@ -1313,7 +1701,6 @@
 
       if (!event.repeatWeekly) {
         const key = String(event.date || '').trim();
-        if (isEventAbsentOnDate(event, key)) return;
         const d = new Date(`${key}T00:00:00`);
         if (Number.isNaN(d.getTime())) return;
         const endAt = getOccurrenceEndDateTime(key, event.start, event.end);
@@ -1336,9 +1723,8 @@
         const endAt = getOccurrenceEndDateTime(key, event.start, event.end);
         if (!endAt || endAt > now) break;
         const notSkipped = !skipDates.includes(key);
-        const notAbsent = !isEventAbsentOnDate(event, key);
         const afterPayment = !startDate || cursor >= startDate;
-        if (notSkipped && notAbsent && afterPayment) {
+        if (notSkipped && afterPayment) {
           completedCount += 1;
         }
         cursor = addDays(cursor, 7);
@@ -1346,6 +1732,27 @@
     });
 
     return completedCount;
+  }
+
+  function getCompletedClassCountForBalance(student, paymentDateOverride) {
+    const explicitPaymentDate = typeof paymentDateOverride === 'string'
+      ? paymentDateOverride
+      : String(student?.mostRecentPaymentDate || '');
+    const startDate = String(explicitPaymentDate || '').trim() || getStudentCreditTrackingStartDate(student);
+    return getCompletedClassCountSince(student?.name, startDate);
+  }
+
+  function getStudentCreditTrackingStartDate(student) {
+    const explicit = String(student?.creditTrackingStartDate || '').trim();
+    if (isValidDateString(explicit)) return explicit;
+
+    const idMatch = String(student?.id || '').match(/^stu-(\d+)-/);
+    const createdAtMs = idMatch ? Number(idMatch[1]) : NaN;
+    if (Number.isFinite(createdAtMs) && createdAtMs > 0) {
+      return formatDateInput(new Date(createdAtMs));
+    }
+
+    return '2026-08-01';
   }
 
   function loadCalendarState() {
@@ -1625,10 +2032,13 @@
       state.students = Array.isArray(parsed)
         ? parsed.map((student) => ({
             ...student,
+            studentGroup: normalizeStudentGroup(student?.studentGroup),
             instructor: String(student?.instructor || '').trim(),
             paymentHistory: Array.isArray(student?.paymentHistory)
               ? student.paymentHistory.map((d) => String(d || '').trim()).filter(Boolean)
               : (student?.mostRecentPaymentDate ? [String(student.mostRecentPaymentDate).trim()] : []),
+            paymentRecords: normalizePaymentRecords(student),
+            creditTrackingStartDate: getStudentCreditTrackingStartDate(student),
             carryOverBeforePayment: Number(student.carryOverBeforePayment ?? 0),
             manualUsedAdjustment: Number(student.manualUsedAdjustment ?? 0),
             paymentCycleCredits: Number(
