@@ -835,36 +835,15 @@
       byStudent.set(studentName, list);
     };
 
-    state.calendarEvents.forEach((event) => {
-      if (!event || String(event.kind || '').trim() !== '수강') return;
-      if (!event.date) return;
-
-      const baseDate = parseDateOnly(event.date);
-      if (!baseDate) return;
-
-      if (!event.repeatWeekly) {
-        pushOccurrence(event, event.date);
-        return;
-      }
-
-      const skipDates = Array.isArray(event.repeatSkipDates) ? event.repeatSkipDates : [];
-      let horizon = monthEnd;
-      if (event.repeatEndDate) {
-        const repeatEnd = parseDateOnly(event.repeatEndDate);
-        if (repeatEnd) {
-          horizon = repeatEnd < monthEnd ? addDays(repeatEnd, 1) : monthEnd;
-        }
-      }
-
-      let cursor = new Date(baseDate);
-      while (cursor < horizon) {
-        const key = formatDateInput(cursor);
-        if (!skipDates.includes(key)) {
-          pushOccurrence(event, key);
-        }
-        cursor = addDays(cursor, 7);
-      }
+    const classEvents = state.calendarEvents.filter((event) => {
+      return event && String(event.kind || '').trim() === '수강';
     });
+    globalThis.MasterCalendarOccurrences.expandOccurrences({
+      events: classEvents,
+      rangeStart: formatDateInput(monthStart),
+      rangeEnd: formatDateInput(addDays(monthEnd, -1)),
+      invalidRepeatEnd: 'ignore'
+    }).forEach((occurrence) => pushOccurrence(occurrence.event, occurrence.date));
 
     byStudent.forEach((list, studentName) => {
       list.sort((a, b) => {

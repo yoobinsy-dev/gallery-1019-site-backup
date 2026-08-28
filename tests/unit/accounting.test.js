@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 
 const { exposeIifeFunctions } = require('../helpers/load-source');
 const autoEntries = require('../../accounting/auto-entries');
+const calendarOccurrences = require('../../master-calendar/occurrences');
 const { buildGallerySalesAutoEntriesLegacy } = require('../fixtures/accounting-gallery-sales-legacy');
 
 function getMonthStart(date) {
@@ -21,8 +22,13 @@ function loadAccounting() {
     'parsePriceToNumber',
     'roundWon',
     'normalizeDateInput',
-    'normalizeNameKey'
-  ], { globals: { getMonthStart, PotteryAccountingAutoEntries: autoEntries } }).exposed;
+    'normalizeNameKey',
+    'collectClassOccurrencesByStudentInMonth'
+  ], { globals: {
+    getMonthStart,
+    MasterCalendarOccurrences: calendarOccurrences,
+    PotteryAccountingAutoEntries: autoEntries
+  } }).exposed;
 }
 
 function getGallerySalesHelpers(accounting) {
@@ -224,4 +230,41 @@ test('extracted material order totals preserve strict numeric and order-wide beh
   assert.equal(autoEntries.getMaterialOrderTotal(orders[4]), 0);
   assert.equal(autoEntries.getMaterialOrderTotal(orders[5]), 29000);
   assert.equal(autoEntries.getMaterialOrderTotal(orders[6]), 29500);
+});
+
+test('accounting characterizes monthly class occurrence grouping and dedupe', () => {
+  const RealDate = Date;
+  const fixedTime = new RealDate('2026-08-15T12:00:00').getTime();
+  class FixedDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length ? args : [fixedTime]));
+    }
+
+    static now() {
+      return fixedTime;
+    }
+  }
+  const accounting = exposeIifeFunctions('pottery-accounting.js', [
+    'state', 'collectClassOccurrencesByStudentInMonth'
+  ], { globals: {
+    Date: FixedDate,
+    getMonthStart,
+    MasterCalendarOccurrences: calendarOccurrences,
+    PotteryAccountingAutoEntries: autoEntries
+  } }).exposed;
+  accounting.state.calendarEvents = [
+    { kind: '수강', title: 'A', date: '2026-07-27', start: '10:00', end: '11:00', repeatWeekly: true, repeatEndDate: '2026-08-31', repeatSkipDates: ['2026-08-10'] },
+    { kind: '수강', title: 'A', date: '2026-08-03', start: '10:00', end: '11:00' },
+    { kind: '수강', title: 'B', date: '2026-08-15', start: '13:00', end: '14:00' },
+    { kind: '수강', title: 'B', date: '2026-08-15', start: '09:00', end: '10:00' },
+    { kind: '수강', title: 'C', date: '2026-08-04', start: '10:00', end: '11:00', repeatWeekly: true, repeatEndDate: 'invalid' },
+    { kind: '개인작업', title: 'ignored', date: '2026-08-01', start: '10:00', end: '11:00' },
+    { kind: '수강', title: 'next', date: '2026-09-01', start: '10:00', end: '11:00' }
+  ];
+  const grouped = accounting.collectClassOccurrencesByStudentInMonth('2026-08');
+  assert.deepEqual(JSON.parse(JSON.stringify(Array.from(grouped.entries()))), [
+    ['A', [{ date: '2026-08-03', start: '10:00' }]],
+    ['B', [{ date: '2026-08-15', start: '09:00' }]],
+    ['C', [{ date: '2026-08-04', start: '10:00' }, { date: '2026-08-11', start: '10:00' }]]
+  ]);
 });
