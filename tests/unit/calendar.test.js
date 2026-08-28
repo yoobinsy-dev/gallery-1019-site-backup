@@ -83,6 +83,12 @@ test('canonical calendar occurrences preserve weekly boundaries, skips, ranges, 
     invalidRepeatEnd: 'exclude'
   }).map((event) => event.id), []);
   assert.deepEqual(occurrences.expandOccurrences({ events, rangeStart: 'invalid', rangeEnd: '2026-08-01' }), []);
+  assert.deepEqual(occurrences.expandOccurrences({
+    events: [{ id: 'limited', date: '2026-01-01', repeatWeekly: true }],
+    rangeStart: '2026-01-15',
+    rangeEnd: '2026-02-28',
+    maxWeeklyIterations: 3
+  }).map(({ date }) => date), ['2026-01-15']);
 });
 
 test('canonical date query matches the retained Master Calendar recurrence implementation', () => {
@@ -140,4 +146,61 @@ test('master calendar characterizes workshop usage recurrence and exclusive boun
   ];
   assert.equal(calendar.getPersonalWorkUsageHoursForCycle('A', '2026-08-01', '2026-08-16'), 5);
   assert.equal(calendar.getPersonalWorkUsageHoursForCycle('A', '2026-08-01', '2026-08-15'), 4);
+});
+
+test('master calendar characterizes teaching log recurrence and inclusive horizon', () => {
+  const RealDate = Date;
+  const fixedTime = new RealDate('2026-08-15T12:00:00').getTime();
+  class FixedDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length ? args : [fixedTime]));
+    }
+
+    static now() {
+      return fixedTime;
+    }
+  }
+  const calendar = exposeIifeFunctions('pottery-master-calendar.js', [
+    'state', 'rebuildClassTeachingLog'
+  ], { globals: {
+    Date: FixedDate,
+    MasterCalendarDateTime: dateTime,
+    MasterCalendarOccurrences: occurrences
+  } }).exposed;
+  const duplicate = { id: 'repeat', kind: '수강', title: 'A', date: '2027-08-01', start: '11:00', end: '12:00', repeatWeekly: true, repeatEndDate: '2027-08-15', repeatSkipDates: ['2027-08-08'], classType: '정규', instructor: 'I' };
+  calendar.state.events = [
+    duplicate,
+    { ...duplicate },
+    { id: 'invalid-end', kind: '수강', title: 'B', date: '2027-08-02', start: '09:00', end: '10:00', repeatWeekly: true, repeatEndDate: 'invalid' },
+    { id: 'past', kind: '수강', title: 'C', date: '2026-01-01', start: '08:00', end: '09:00' },
+    { id: 'horizon', kind: '수강', title: 'D', date: '2027-08-15', start: '07:00', end: '08:00' },
+    { id: 'after', kind: '수강', title: 'E', date: '2027-08-16', start: '06:00', end: '07:00' },
+    { id: 'other', kind: '개인작업', title: 'F', date: '2027-08-01', start: '05:00', end: '06:00' }
+  ];
+  calendar.state.baseRules = [];
+  calendar.state.baseRuleTimeline = [];
+  calendar.state.baseWeekOverrides = {};
+  calendar.rebuildClassTeachingLog();
+
+  const log = JSON.parse(JSON.stringify(calendar.state.classTeachingLog));
+  assert.deepEqual(log.map((record) => [record.eventId, record.date]), [
+    ['past', '2026-01-01'],
+    ['repeat', '2027-08-01'],
+    ['invalid-end', '2027-08-02'],
+    ['invalid-end', '2027-08-09'],
+    ['horizon', '2027-08-15'],
+    ['repeat', '2027-08-15']
+  ]);
+  assert.deepEqual(log.at(-1), {
+    key: 'repeat|2027-08-15|11:00|12:00|A',
+    eventId: 'repeat',
+    date: '2027-08-15',
+    start: '11:00',
+    end: '12:00',
+    studentName: 'A',
+    classType: '정규',
+    instructor: 'I',
+    baseRuleId: '',
+    repeatWeekly: true
+  });
 });

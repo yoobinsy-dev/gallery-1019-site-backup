@@ -3048,7 +3048,8 @@
       events: personalEvents,
       rangeStart: formatDateInput(from),
       rangeEnd: formatDateInput(addDays(to, -1)),
-      invalidRepeatEnd: 'ignore'
+      invalidRepeatEnd: 'ignore',
+      maxWeeklyIterations: 520
     }).forEach((occurrence) => {
       const repeatEnd = occurrence.event.repeatEndDate
         ? new Date(`${occurrence.event.repeatEndDate}T00:00:00`)
@@ -3249,37 +3250,23 @@
       });
     };
 
-    (state.events || []).forEach((eventItem) => {
-      if (!eventItem || String(eventItem.kind || '') !== '수강') return;
-      const startDate = new Date(`${String(eventItem.date || '')}T00:00:00`);
-      if (Number.isNaN(startDate.getTime())) return;
-
-      if (!eventItem.repeatWeekly) {
-        if (startDate <= horizon) {
-          pushOccurrence(eventItem, formatDateInput(startDate));
-        }
-        return;
-      }
-
-      const skipDates = Array.isArray(eventItem.repeatSkipDates) ? eventItem.repeatSkipDates : [];
-      const repeatEndDate = eventItem.repeatEndDate
-        ? new Date(`${eventItem.repeatEndDate}T00:00:00`)
-        : horizon;
-      const effectiveEndDate = Number.isNaN(repeatEndDate.getTime())
-        ? horizon
-        : new Date(Math.min(repeatEndDate.getTime(), horizon.getTime()));
-
-      let cursor = new Date(startDate);
-      let safety = 0;
-      while (cursor <= effectiveEndDate && safety < 500) {
-        const keyDate = formatDateInput(cursor);
-        if (!skipDates.includes(keyDate)) {
-          pushOccurrence(eventItem, keyDate);
-        }
-        cursor = addDays(cursor, 7);
-        safety += 1;
-      }
+    const classEvents = (state.events || []).filter((eventItem) => {
+      return eventItem && String(eventItem.kind || '') === '수강';
     });
+    const rangeStart = classEvents.reduce((earliest, eventItem) => {
+      const startDate = new Date(`${String(eventItem.date || '')}T00:00:00`);
+      if (Number.isNaN(startDate.getTime())) return earliest;
+      return !earliest || startDate < earliest ? startDate : earliest;
+    }, null);
+    if (rangeStart) {
+      globalThis.MasterCalendarOccurrences.expandOccurrences({
+        events: classEvents,
+        rangeStart: formatDateInput(rangeStart),
+        rangeEnd: formatDateInput(horizon),
+        invalidRepeatEnd: 'ignore',
+        maxWeeklyIterations: 500
+      }).forEach((occurrence) => pushOccurrence(occurrence.event, occurrence.date));
+    }
 
     records.sort((a, b) => {
       const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));

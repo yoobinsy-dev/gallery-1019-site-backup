@@ -39,12 +39,20 @@
       }
       const last = repeatEnd && repeatEnd < rangeEnd ? repeatEnd : rangeEnd;
       const skipDates = Array.isArray(event.repeatSkipDates) ? event.repeatSkipDates : [];
+      const maxWeeklyIterations = Number.isInteger(options?.maxWeeklyIterations)
+        ? Math.max(0, options.maxWeeklyIterations)
+        : Infinity;
       let cursor = new Date(baseDate);
-      while (cursor < rangeStart) cursor = addDays(cursor, 7);
-      while (cursor <= last) {
+      let weeklyIterations = 0;
+      while (cursor < rangeStart && weeklyIterations < maxWeeklyIterations) {
+        cursor = addDays(cursor, 7);
+        weeklyIterations += 1;
+      }
+      while (cursor <= last && weeklyIterations < maxWeeklyIterations) {
         const date = formatDate(cursor);
         if (!skipDates.includes(date)) occurrences.push({ event, date });
         cursor = addDays(cursor, 7);
+        weeklyIterations += 1;
       }
     });
     return occurrences;
