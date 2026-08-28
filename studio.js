@@ -2797,10 +2797,7 @@
   }
 
   function getDayIndexFromDateString(date) {
-    const d = new Date(`${date}T00:00:00`);
-    if (Number.isNaN(d.getTime())) return -1;
-    const jsDay = d.getDay();
-    return jsDay === 0 ? 6 : jsDay - 1;
+    return globalThis.MasterCalendarDateTime.getDayIndexFromDateString(date);
   }
 
   function getClassBaseRuleForRange(date, startTime, endTime) {
@@ -5568,53 +5565,31 @@
   }
 
   function getWeekStart(date) {
-    const base = new Date(date);
-    const day = base.getDay();
-    const delta = day === 0 ? -6 : 1 - day;
-    base.setHours(0, 0, 0, 0);
-    base.setDate(base.getDate() + delta);
-    return base;
+    return globalThis.MasterCalendarDateTime.getWeekStart(date);
   }
 
   function getMonthStart(date) {
-    const base = new Date(date);
-    base.setHours(0, 0, 0, 0);
-    base.setDate(1);
-    return base;
+    return globalThis.MasterCalendarDateTime.getMonthStart(date);
   }
 
   function addDays(date, diff) {
-    const next = new Date(date);
-    next.setDate(next.getDate() + diff);
-    return next;
+    return globalThis.MasterCalendarDateTime.addDays(date, diff);
   }
 
   function addMonths(date, diff) {
-    const current = new Date(date);
-    const day = current.getDate();
-    current.setDate(1);
-    current.setMonth(current.getMonth() + diff);
-    const lastDay = new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate();
-    current.setDate(Math.min(day, lastDay));
-    return getMonthStart(current);
+    return globalThis.MasterCalendarDateTime.addMonths(date, diff);
   }
 
   function slotToTime(slot) {
-    const bounded = Math.max(0, Math.min(SLOTS_PER_DAY, slot));
-    const hour = Math.floor((bounded * SLOT_MINUTES) / 60);
-    const minute = (bounded * SLOT_MINUTES) % 60;
-    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    return globalThis.MasterCalendarDateTime.slotToTime(slot);
   }
 
   function timeToSlot(timeStr) {
-    const [h, m] = String(timeStr || '').split(':').map(Number);
-    if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
-    return Math.max(0, Math.min(SLOTS_PER_DAY, Math.floor((h * 60 + m) / SLOT_MINUTES)));
+    return globalThis.MasterCalendarDateTime.timeToSlot(timeStr);
   }
 
   function formatDateInput(date) {
-    const d = new Date(date);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return globalThis.MasterCalendarDateTime.formatDateInput(date);
   }
 
   function formatDateDisplay(date) {
