@@ -1,23 +1,6 @@
 const { query } = require('./db');
 const { getStateMapWithMeta, setStateValue } = require('./state-store');
 
-const TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS app_state_snapshots (
-    id BIGSERIAL PRIMARY KEY,
-    snapshot_date_kst DATE NOT NULL,
-    snapshot_type TEXT NOT NULL DEFAULT 'daily-19-kst',
-    state_payload JSONB NOT NULL,
-    source TEXT NOT NULL DEFAULT 'system',
-    note TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    restored_at TIMESTAMPTZ,
-    restored_by TEXT,
-    UNIQUE (snapshot_date_kst, snapshot_type)
-  );
-`;
-
-let initialized = false;
-
 function getKstDateString(date = new Date()) {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Seoul',
@@ -27,12 +10,6 @@ function getKstDateString(date = new Date()) {
   });
 
   return formatter.format(date);
-}
-
-async function ensureSnapshotTable() {
-  if (initialized) return;
-  await query(TABLE_SQL);
-  initialized = true;
 }
 
 async function buildSnapshotPayload() {
@@ -48,8 +25,6 @@ async function buildSnapshotPayload() {
 }
 
 async function getSnapshotById(id) {
-  await ensureSnapshotTable();
-
   const result = await query(
     `
       SELECT id, snapshot_date_kst, snapshot_type, state_payload, source, note, created_at, restored_at, restored_by
@@ -69,8 +44,6 @@ async function createSnapshot({
   note = null,
   dedupeByKstDate = true
 } = {}) {
-  await ensureSnapshotTable();
-
   const snapshotDateKst = getKstDateString();
   const payload = await buildSnapshotPayload();
 
@@ -126,8 +99,6 @@ async function createSnapshot({
 }
 
 async function listSnapshots(limit = 30) {
-  await ensureSnapshotTable();
-
   const safeLimit = Math.max(1, Math.min(200, Number(limit) || 30));
   const result = await query(
     `
@@ -143,8 +114,6 @@ async function listSnapshots(limit = 30) {
 }
 
 async function restoreSnapshot(snapshotId, restoredBy = 'manual') {
-  await ensureSnapshotTable();
-
   const snapshot = await getSnapshotById(snapshotId);
   if (!snapshot) {
     throw new Error('Snapshot not found.');
@@ -175,7 +144,6 @@ async function restoreSnapshot(snapshotId, restoredBy = 'manual') {
 }
 
 module.exports = {
-  ensureSnapshotTable,
   createSnapshot,
   listSnapshots,
   restoreSnapshot,

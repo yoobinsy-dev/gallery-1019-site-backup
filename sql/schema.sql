@@ -62,6 +62,25 @@ CREATE TABLE IF NOT EXISTS exhibition_state_snapshots (
   undo_consumed_at TIMESTAMPTZ
 );
 
+ALTER TABLE exhibition_state_snapshots ADD COLUMN IF NOT EXISTS archive_url TEXT;
+ALTER TABLE exhibition_state_snapshots ADD COLUMN IF NOT EXISTS archive_path TEXT;
+ALTER TABLE exhibition_state_snapshots ADD COLUMN IF NOT EXISTS archive_stored_at TIMESTAMPTZ;
+
+DO $$
+DECLARE
+  constraint_name TEXT;
+BEGIN
+  FOR constraint_name IN
+    SELECT conname
+    FROM pg_constraint
+    WHERE conrelid = 'exhibition_state_snapshots'::regclass
+      AND contype = 'u'
+      AND pg_get_constraintdef(oid) ILIKE '%(exhibition_id, snapshot_date_kst, snapshot_type)%'
+  LOOP
+    EXECUTE format('ALTER TABLE exhibition_state_snapshots DROP CONSTRAINT IF EXISTS %I', constraint_name);
+  END LOOP;
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS exhibition_state_snapshots_auto_slot_unique_idx
   ON exhibition_state_snapshots (exhibition_id, snapshot_date_kst, snapshot_type)
   WHERE snapshot_type IN ('auto-07-kst', 'auto-19-kst', 'daily-19-kst');
