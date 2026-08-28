@@ -177,3 +177,53 @@ test('extracted personal work cycles match the retained legacy calculations exac
     );
   }
 });
+
+test('personal work row projection preserves active and dormant display decisions', () => {
+  const active = personalWorkCycles.buildRowProjection({
+    entry: {
+      startDate: '2026-07-15', maxHours: 3, monthlyFee: 100000,
+      lastPaymentDate: '2026-07-15', paymentHistory: ['2026-07-15']
+    },
+    isDormant: false,
+    usageRows: [{ durationHours: 2 }],
+    asOfDate: '2026-08-15',
+    formatFee: (value) => `${Number(value).toLocaleString('en-US')}원`,
+    formatHours: String
+  });
+  assert.deepEqual(active, {
+    cycle: { start: '2026-08-15', end: '2026-09-15' },
+    usageHours: 2,
+    remainingHours: 1,
+    needsPayment: true,
+    periodText: '2026-08-15 ~ 2026-09-15',
+    feeText: '100,000원',
+    paymentText: '2026-07-15',
+    usageText: '2시간',
+    remainingText: '1시간',
+    remainingIsLow: true
+  });
+
+  const dormant = personalWorkCycles.buildRowProjection({
+    entry: {
+      dormantCycleStart: '2026-07-01', dormantCycleEnd: '2026-08-01',
+      maxHours: 20, monthlyFee: 0, lastPaymentDate: '2026-07-01'
+    },
+    isDormant: true,
+    usageRows: [{ durationHours: 3 }],
+    asOfDate: '2026-08-15',
+    formatFee: () => '',
+    formatHours: String
+  });
+  assert.deepEqual(dormant, {
+    cycle: { start: '2026-07-01', end: '2026-08-01' },
+    usageHours: 3,
+    remainingHours: 17,
+    needsPayment: false,
+    periodText: '2026-07-01 ~ 2026-08-01',
+    feeText: '-',
+    paymentText: '',
+    usageText: '3시간',
+    remainingText: '17시간',
+    remainingIsLow: false
+  });
+});

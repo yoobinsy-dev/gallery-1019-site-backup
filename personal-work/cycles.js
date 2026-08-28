@@ -12,6 +12,29 @@
     };
   }
 
+  function buildRowProjection(options) {
+    const entry = options?.entry || {};
+    const isDormant = Boolean(options?.isDormant);
+    const cycle = isDormant
+      ? { start: String(entry.dormantCycleStart || ''), end: String(entry.dormantCycleEnd || '') }
+      : getCurrentCycleRange(entry.startDate, options?.asOfDate);
+    const usage = calculateUsageSummary({ usageRows: options?.usageRows, maxHours: entry.maxHours });
+    const formatFee = options?.formatFee;
+    const formatHours = options?.formatHours;
+    return {
+      cycle,
+      usageHours: usage.usageHours,
+      remainingHours: usage.remainingHours,
+      needsPayment: !isDormant && isPaymentRequired({ entry, asOfDate: options?.asOfDate }),
+      periodText: cycle.start && cycle.end ? `${cycle.start} ~ ${cycle.end}` : '-',
+      feeText: typeof formatFee === 'function' ? (formatFee(entry.monthlyFee) || '-') : String(entry.monthlyFee || '-'),
+      paymentText: Number(entry.monthlyFee || 0) <= 0 ? '' : (entry.lastPaymentDate || '-'),
+      usageText: `${typeof formatHours === 'function' ? formatHours(usage.usageHours) : usage.usageHours}시간`,
+      remainingText: `${typeof formatHours === 'function' ? formatHours(usage.remainingHours) : usage.remainingHours}시간`,
+      remainingIsLow: usage.remainingHours <= 10
+    };
+  }
+
   function getCurrentCycleRange(startDateStr, asOfDate) {
     const anchor = new Date(`${startDateStr}T00:00:00`);
     const now = new Date(asOfDate || new Date());
@@ -113,6 +136,7 @@
   }
 
   const api = Object.freeze({
+    buildRowProjection,
     calculateUsageSummary,
     getCurrentCycleRange,
     getEffectivePaymentDates,

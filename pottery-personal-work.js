@@ -336,20 +336,24 @@
     const tr = document.createElement('tr');
     tr.dataset.id = entry.id;
 
-    const cycle = isDormant
+    const provisionalCycle = isDormant
       ? {
           start: String(entry.dormantCycleStart || ''),
           end: String(entry.dormantCycleEnd || '')
         }
       : getCurrentCycleRange(entry.startDate, new Date());
 
-    const usageRows = cycle.start && cycle.end
-      ? collectPersonalWorkUsageRows(entry.userName, { pastOnly: true, from: cycle.start, to: cycle.end })
+    const usageRows = provisionalCycle.start && provisionalCycle.end
+      ? collectPersonalWorkUsageRows(entry.userName, { pastOnly: true, from: provisionalCycle.start, to: provisionalCycle.end })
       : [];
-    const usageSummary = personalWorkCycles.calculateUsageSummary({ usageRows, maxHours: entry.maxHours });
-    const usage = usageSummary.usageHours;
-    const remaining = usageSummary.remainingHours;
-    const needsPayment = !isDormant && isPaymentRequired(entry);
+    const projection = personalWorkCycles.buildRowProjection({
+      entry,
+      isDormant,
+      usageRows,
+      asOfDate: new Date(),
+      formatFee: (value) => formatWon(value, true),
+      formatHours: formatHourText
+    });
     const isEditing = !isDormant && state.editingId === entry.id;
 
     const checkboxTd = document.createElement('td');
@@ -364,7 +368,7 @@
     const nameText = document.createElement('span');
     nameText.textContent = entry.userName;
     nameWrap.appendChild(nameText);
-    if (needsPayment) {
+    if (projection.needsPayment) {
       const badge = document.createElement('span');
       badge.className = 'personal-need-payment';
       badge.textContent = '결제 필요';
@@ -382,7 +386,7 @@
       startInput.id = `edit-start-${entry.id}`;
       periodTd.appendChild(startInput);
     } else {
-      periodTd.textContent = cycle.start && cycle.end ? `${cycle.start} ~ ${cycle.end}` : '-';
+      periodTd.textContent = projection.periodText;
     }
     tr.appendChild(periodTd);
 
@@ -399,7 +403,7 @@
       feeTd.appendChild(feeInput);
       feeInputRef = feeInput;
     } else {
-      feeTd.textContent = formatWon(entry.monthlyFee, true) || '-';
+      feeTd.textContent = projection.feeText;
     }
     tr.appendChild(feeTd);
 
@@ -441,7 +445,7 @@
 
       paymentTd.appendChild(inlineWrap);
     } else {
-      paymentTd.textContent = Number(entry.monthlyFee || 0) <= 0 ? '' : (entry.lastPaymentDate || '-');
+      paymentTd.textContent = projection.paymentText;
     }
     tr.appendChild(paymentTd);
 
@@ -449,7 +453,7 @@
     usedTd.className = 'used-col';
     const usedBadge = document.createElement('span');
     usedBadge.className = 'personal-hours-badge';
-    usedBadge.textContent = `${formatHourText(usage)}시간`;
+    usedBadge.textContent = projection.usageText;
     usedTd.appendChild(usedBadge);
     tr.appendChild(usedTd);
 
@@ -457,8 +461,8 @@
     remainTd.className = 'remain-col';
     const remainBadge = document.createElement('span');
     remainBadge.className = 'personal-hours-badge remain';
-    if (remaining <= 10) remainBadge.classList.add('low');
-    remainBadge.textContent = `${formatHourText(remaining)}시간`;
+    if (projection.remainingIsLow) remainBadge.classList.add('low');
+    remainBadge.textContent = projection.remainingText;
     remainTd.appendChild(remainBadge);
     tr.appendChild(remainTd);
 
