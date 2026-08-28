@@ -928,42 +928,7 @@
   }
 
   function getMaterialOrderTotal(order) {
-    if (!order || !Array.isArray(order.items)) return 0;
-
-    const items = order.items;
-    const orderWideDiscount = Boolean(order.orderWideDiscount);
-    const orderWideShipping = Boolean(order.orderWideShipping);
-
-    let totalPrice = 0;
-    let totalDiscount = 0;
-    let totalShipping = 0;
-
-    items.forEach((item, index) => {
-      const price = Number(item?.price);
-      const discount = Number(item?.discount);
-      const shipping = Number(item?.shippingFee);
-
-      if (Number.isFinite(price) && price > 0) {
-        totalPrice += Math.floor(price);
-      }
-
-      if (Number.isFinite(discount) && discount > 0) {
-        const shouldCount = orderWideDiscount ? index === 0 : true;
-        if (shouldCount) {
-          totalDiscount += Math.floor(discount);
-        }
-      }
-
-      if (Number.isFinite(shipping) && shipping > 0) {
-        const shouldCount = orderWideShipping ? index === 0 : true;
-        if (shouldCount) {
-          totalShipping += Math.floor(shipping);
-        }
-      }
-    });
-
-    const total = totalPrice - totalDiscount + totalShipping;
-    return total > 0 ? total : 0;
+    return globalThis.PotteryAccountingAutoEntries.getMaterialOrderTotal(order);
   }
 
   function buildGallerySalesAutoEntries(itemType, monthKey) {

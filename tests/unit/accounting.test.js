@@ -188,3 +188,40 @@ test('accounting characterizes material totals and manual/automatic override pre
     [manual[0], manual[1]]
   );
 });
+
+test('extracted material order totals preserve strict numeric and order-wide behavior', () => {
+  const accounting = loadAccounting();
+  const orders = [
+    null,
+    {},
+    { items: [] },
+    { items: [{ price: '1,000원', discount: 1, shippingFee: 1 }] },
+    { items: [{ price: 10.9, discount: 20.1, shippingFee: 2.9 }] },
+    {
+      items: [
+        { price: 10000.9, discount: 1000.8, shippingFee: 500.9 },
+        { price: 20000.2, discount: 1000, shippingFee: 500 }
+      ]
+    },
+    {
+      orderWideDiscount: true,
+      orderWideShipping: true,
+      items: [
+        { price: 10000.9, discount: 1000.8, shippingFee: 500.9 },
+        { price: 20000.2, discount: 9999, shippingFee: 9999 }
+      ]
+    },
+    { items: [{ price: -1, discount: -2, shippingFee: -3 }, null, 'bad'] }
+  ];
+
+  orders.forEach((order) => {
+    assert.equal(
+      autoEntries.getMaterialOrderTotal(order),
+      accounting.getMaterialOrderTotal(order)
+    );
+  });
+  assert.equal(autoEntries.getMaterialOrderTotal(orders[3]), 0);
+  assert.equal(autoEntries.getMaterialOrderTotal(orders[4]), 0);
+  assert.equal(autoEntries.getMaterialOrderTotal(orders[5]), 29000);
+  assert.equal(autoEntries.getMaterialOrderTotal(orders[6]), 29500);
+});

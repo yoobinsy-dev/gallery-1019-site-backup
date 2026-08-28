@@ -50,6 +50,32 @@
     return entries;
   }
 
+  function getMaterialOrderTotal(order) {
+    if (!order || !Array.isArray(order.items)) return 0;
+
+    const orderWideDiscount = Boolean(order.orderWideDiscount);
+    const orderWideShipping = Boolean(order.orderWideShipping);
+    let totalPrice = 0;
+    let totalDiscount = 0;
+    let totalShipping = 0;
+
+    order.items.forEach((item, index) => {
+      const price = Number(item?.price);
+      const discount = Number(item?.discount);
+      const shipping = Number(item?.shippingFee);
+      if (Number.isFinite(price) && price > 0) totalPrice += Math.floor(price);
+      if (Number.isFinite(discount) && discount > 0 && (!orderWideDiscount || index === 0)) {
+        totalDiscount += Math.floor(discount);
+      }
+      if (Number.isFinite(shipping) && shipping > 0 && (!orderWideShipping || index === 0)) {
+        totalShipping += Math.floor(shipping);
+      }
+    });
+
+    const total = totalPrice - totalDiscount + totalShipping;
+    return total > 0 ? total : 0;
+  }
+
   function getExhibitionEndDate(exhibition, helpers) {
     if (!exhibition || typeof exhibition !== 'object') return '';
     return helpers.normalizeDateInput(exhibition.endDate || exhibition.date || '');
@@ -102,7 +128,7 @@
     return `${base}|${itemType}|${soldDate}|${soldDateTime}|${price}|${qty}`;
   }
 
-  const api = Object.freeze({ buildGallerySalesAutoEntries });
+  const api = Object.freeze({ buildGallerySalesAutoEntries, getMaterialOrderTotal });
   root.PotteryAccountingAutoEntries = api;
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
