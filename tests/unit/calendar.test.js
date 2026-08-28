@@ -111,3 +111,33 @@ test('canonical date query matches the retained Master Calendar recurrence imple
       assert.deepEqual(canonicalIds, legacyIds, date);
     });
 });
+
+test('master calendar characterizes workshop usage recurrence and exclusive boundaries', () => {
+  const RealDate = Date;
+  const fixedTime = new RealDate('2026-08-15T12:00:00').getTime();
+  class FixedDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length ? args : [fixedTime]));
+    }
+
+    static now() {
+      return fixedTime;
+    }
+  }
+  const calendar = exposeIifeFunctions('pottery-master-calendar.js', [
+    'state', 'getPersonalWorkUsageHoursForCycle'
+  ], { globals: {
+    Date: FixedDate,
+    MasterCalendarDateTime: dateTime,
+    MasterCalendarOccurrences: occurrences
+  } }).exposed;
+  calendar.state.events = [
+    { kind: '개인작업', title: 'A', date: '2026-08-01', start: '10:00', end: '11:00', repeatWeekly: true, repeatEndDate: '2026-08-15', repeatSkipDates: ['2026-08-08'] },
+    { kind: '강사 지도 하 개인작업', title: 'A', date: '2026-08-04', start: '10:00', end: '11:30', repeatWeekly: true, repeatEndDate: 'invalid' },
+    { kind: '개인작업', title: 'A', date: '2026-08-15', start: '18:00', end: '19:00' },
+    { kind: '개인작업', title: 'A', date: '2026-08-16', start: '10:00', end: '11:00' },
+    { kind: '개인작업', title: 'B', date: '2026-08-01', start: '10:00', end: '11:00' }
+  ];
+  assert.equal(calendar.getPersonalWorkUsageHoursForCycle('A', '2026-08-01', '2026-08-16'), 5);
+  assert.equal(calendar.getPersonalWorkUsageHoursForCycle('A', '2026-08-01', '2026-08-15'), 4);
+});

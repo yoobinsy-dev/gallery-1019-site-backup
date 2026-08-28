@@ -3038,40 +3038,26 @@
       total += ((endSlot - startSlot) * SLOT_MINUTES) / 60;
     };
 
-    (state.events || []).forEach((eventItem) => {
+    const personalEvents = (state.events || []).filter((eventItem) => {
       const kind = String(eventItem?.kind || '').trim();
-      if (!eventItem || !personalKinds.has(kind)) return;
-      if (String(eventItem.title || '').trim() !== targetName) return;
-
-      const eventDate = String(eventItem.date || '').trim();
-      if (!eventDate) return;
-
-      if (!eventItem.repeatWeekly) {
-        addOccurrence(eventItem, eventDate);
-        return;
-      }
-
-      const startDate = new Date(`${eventDate}T00:00:00`);
-      if (Number.isNaN(startDate.getTime())) return;
-
-      const skipDates = Array.isArray(eventItem.repeatSkipDates) ? eventItem.repeatSkipDates : [];
-      const repeatEndDate = eventItem.repeatEndDate
-        ? new Date(`${eventItem.repeatEndDate}T00:00:00`)
+      return eventItem
+        && personalKinds.has(kind)
+        && String(eventItem.title || '').trim() === targetName;
+    });
+    globalThis.MasterCalendarOccurrences.expandOccurrences({
+      events: personalEvents,
+      rangeStart: formatDateInput(from),
+      rangeEnd: formatDateInput(addDays(to, -1)),
+      invalidRepeatEnd: 'ignore'
+    }).forEach((occurrence) => {
+      const repeatEnd = occurrence.event.repeatEndDate
+        ? new Date(`${occurrence.event.repeatEndDate}T00:00:00`)
         : null;
-      const horizon = Number.isNaN(repeatEndDate?.getTime?.() ?? NaN)
-        ? to
-        : new Date(Math.min(repeatEndDate.getTime(), to.getTime()));
-
-      let cursor = new Date(startDate);
-      let safety = 0;
-      while (cursor < horizon && safety < 520) {
-        const key = formatDateInput(cursor);
-        if (!skipDates.includes(key)) {
-          addOccurrence(eventItem, key);
-        }
-        cursor = addDays(cursor, 7);
-        safety += 1;
+      if (occurrence.event.repeatWeekly && repeatEnd && !Number.isNaN(repeatEnd.getTime())) {
+        const occurrenceDate = new Date(`${occurrence.date}T00:00:00`);
+        if (occurrenceDate >= repeatEnd) return;
       }
+      addOccurrence(occurrence.event, occurrence.date);
     });
 
     return Math.round(total * 10) / 10;
