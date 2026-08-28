@@ -4,6 +4,15 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
+    "test": "node --test tests/unit/*.test.js tests/api/*.test.js",
+    "test:unit": "node --test tests/unit/*.test.js",
+    "test:api": "node --test tests/api/*.test.js",
+    "test:browser": "playwright test",
+    "test:all": "npm test && npm run test:browser",
+    "test:dev:image": "node tests/e2e/dev-image-upload.js",
+    "test:dev:snapshots": "node tests/e2e/dev-snapshot-dml.js",
+    "test:dev:clean": "node tests/e2e/verify-dev-clean.js",
+    "test:ddl": "node --test tests/unit/runtime-ddl.test.js",
     "dev": "vercel dev",
     "start": "vercel dev",
     "db:migrate": "node scripts/migrate-database.js",
@@ -20,6 +29,7 @@
     "pg": "^8.12.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "vercel": "58.9.4"
   }
 }
