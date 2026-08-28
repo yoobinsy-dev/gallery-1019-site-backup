@@ -967,100 +967,19 @@
   }
 
   function buildGallerySalesAutoEntries(itemType, monthKey) {
-    const entries = [];
-
-    state.exhibitions.forEach((exhibition) => {
-      if (!exhibition || typeof exhibition !== 'object') return;
-
-      const endDate = getExhibitionEndDate(exhibition);
-      if (!endDate || !endDate.startsWith(`${monthKey}-`)) return;
-
-      const soldWorks = getExhibitionSoldRecords(exhibition);
-      let sum = 0;
-
-      soldWorks.forEach((sold) => {
-        const soldType = normalizeSoldItemType(sold);
-        if (soldType !== itemType) return;
-        const unit = parsePriceToNumber(sold.price);
-        const quantity = soldType === '굿즈' ? parseSoldQuantity(sold.soldQuantity) : 1;
-        sum += unit * quantity;
-      });
-
-      if (sum <= 0) return;
-
-      const title = String(exhibition.title || exhibition.name || '전시').trim() || '전시';
-      entries.push({
-        id: `auto-sales-${itemType}-${exhibition.id || title}-${endDate}`,
-        source: 'auto',
-        side: 'revenue',
-        category: itemType === '작품' ? '작품 판매' : '굿즈 판매',
-        date: endDate,
-        title,
-        amount: roundWon(sum),
-        fixed: false,
-        tab: TAB_GALLERY
-      });
+    return globalThis.PotteryAccountingAutoEntries.buildGallerySalesAutoEntries({
+      exhibitions: state.exhibitions,
+      itemType,
+      monthKey,
+      helpers: {
+        normalizeSoldItemType,
+        parseSoldQuantity,
+        parsePriceToNumber,
+        roundWon,
+        normalizeDateInput,
+        normalizeNameKey
+      }
     });
-
-    entries.sort((a, b) => {
-      const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
-      if (dateCompare !== 0) return dateCompare;
-      return String(a.title || '').localeCompare(String(b.title || ''), 'ko');
-    });
-
-    return entries;
-  }
-
-  function getExhibitionEndDate(exhibition) {
-    if (!exhibition || typeof exhibition !== 'object') return '';
-    return normalizeDateInput(exhibition.endDate || exhibition.date || '');
-  }
-
-  function getExhibitionSoldRecords(exhibition) {
-    if (!exhibition || typeof exhibition !== 'object') return [];
-
-    const soldWorks = Array.isArray(exhibition.soldWorks) ? exhibition.soldWorks : [];
-    if (soldWorks.length > 0) {
-      return dedupeSoldRecords(soldWorks.map((item) => ({ ...item })));
-    }
-
-    const artSoldWorks = Array.isArray(exhibition.artSoldWorks) ? exhibition.artSoldWorks : [];
-    const soldGoods = Array.isArray(exhibition.soldGoods) ? exhibition.soldGoods : [];
-    return dedupeSoldRecords([
-      ...artSoldWorks.map((item) => ({ ...item, __forcedItemType: '작품' })),
-      ...soldGoods.map((item) => ({ ...item, __forcedItemType: '굿즈' }))
-    ]);
-  }
-
-  function dedupeSoldRecords(records) {
-    const list = Array.isArray(records) ? records : [];
-    const seen = new Set();
-    const deduped = [];
-
-    list.forEach((record, index) => {
-      if (!record || typeof record !== 'object') return;
-      const key = getSoldRecordIdentity(record, index);
-      if (seen.has(key)) return;
-      seen.add(key);
-      deduped.push(record);
-    });
-
-    return deduped;
-  }
-
-  function getSoldRecordIdentity(record, _index) {
-    const id = String(record?.id || '').trim();
-    if (id) return `id:${id}`;
-
-    const workId = Number(record?.workId);
-    const title = normalizeNameKey(record?.title || '');
-    const soldDate = normalizeDateInput(record?.soldDate || '');
-    const soldDateTime = String(record?.soldDateTime || '').trim();
-    const itemType = normalizeSoldItemType(record);
-    const price = parsePriceToNumber(record?.price);
-    const qty = parseSoldQuantity(record?.soldQuantity);
-    const base = Number.isFinite(workId) && workId > 0 ? `work:${workId}` : `title:${title}`;
-    return `${base}|${itemType}|${soldDate}|${soldDateTime}|${price}|${qty}`;
   }
 
   function buildManualEntries(tab, side, category, monthKey) {

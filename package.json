@@ -12,6 +12,7 @@
     "test:dev:image": "node tests/e2e/dev-image-upload.js",
     "test:dev:snapshots": "node tests/e2e/dev-snapshot-dml.js",
     "test:dev:clean": "node tests/e2e/verify-dev-clean.js",
+    "test:dev:accounting": "node tests/e2e/dev-accounting-smoke.js",
     "test:ddl": "node --test tests/unit/runtime-ddl.test.js",
     "dev": "vercel dev",
     "start": "vercel dev",

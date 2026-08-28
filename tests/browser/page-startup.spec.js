@@ -19,7 +19,15 @@ const exhibitions = [{
   startDate: '2026-08-01',
   endDate: '2026-08-31',
   managers: [currentUser.name],
-  works: [], artWorks: [], goods: [], soldWorks: [], artSoldWorks: [], soldGoods: []
+  works: [],
+  artWorks: [],
+  goods: [],
+  soldWorks: [
+    { id: 1, itemType: '작품', price: 250001 },
+    { id: 2, itemType: '굿즈', price: 5000, soldQuantity: 2 }
+  ],
+  artSoldWorks: [],
+  soldGoods: []
 }];
 
 test.beforeEach(async ({ page, baseURL }) => {
@@ -170,4 +178,55 @@ test('login accepts a synthetic local fixture and stores the current user', asyn
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('currentUser') || 'null'));
   expect(stored && stored.username).toBe('CHARACTERIZATION_TEST_ADMIN');
   await expect(page.locator('#auth-message')).toContainText('로그인 성공');
+});
+
+test('gallery accounting preserves category totals, export, state, and reload', async ({ page }) => {
+  await page.addInitScript(() => {
+    const RealDate = Date;
+    const fixedTime = new RealDate('2026-08-15T12:00:00').getTime();
+    class FixedDate extends RealDate {
+      constructor(...args) {
+        super(...(args.length > 0 ? args : [fixedTime]));
+      }
+
+      static now() {
+        return fixedTime;
+      }
+    }
+    window.Date = FixedDate;
+  });
+
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.goto('/pottery-accounting.html', { waitUntil: 'networkidle' });
+  const accountingBefore = await page.evaluate(() => localStorage.getItem('pottery-accounting-v1'));
+
+  await page.locator('#accounting-tab-gallery').click();
+  await expect(page.locator('#accounting-month-label')).toHaveText('2026년 8월');
+  await expect(page.locator('#accounting-total-revenue')).toHaveText('260,001원');
+  await expect(page.locator('#accounting-total-expense')).toHaveText('158,001원');
+  await expect(page.locator('#accounting-total-profit')).toHaveText('102,000원');
+
+  const artRow = page.locator('#accounting-revenue-body .accounting-category-row').filter({ hasText: '작품 판매' });
+  const goodsRow = page.locator('#accounting-revenue-body .accounting-category-row').filter({ hasText: '굿즈 판매' });
+  await expect(artRow.locator('.accounting-category-amount')).toHaveText('250,001원');
+  await expect(goodsRow.locator('.accounting-category-amount')).toHaveText('10,000원');
+  await artRow.locator('button[data-action="toggle-category"]').click();
+  await expect(artRow.locator('.accounting-status-cell')).toHaveText('상세 열림');
+
+  await page.locator('#accounting-tab-pottery').click();
+  await page.locator('#accounting-tab-gallery').click();
+  await expect(page.locator('#accounting-total-revenue')).toHaveText('260,001원');
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#accounting-export-btn').click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^갤러리-회계-2026-08\.(xlsx|csv)$/);
+  expect(await page.evaluate(() => localStorage.getItem('pottery-accounting-v1'))).toBe(accountingBefore);
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.locator('#accounting-tab-gallery').click();
+  await expect(page.locator('#accounting-total-revenue')).toHaveText('260,001원');
+  expect(await page.evaluate(() => localStorage.getItem('pottery-accounting-v1'))).toBe(accountingBefore);
+  expect(pageErrors).toEqual([]);
 });
