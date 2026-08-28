@@ -37,7 +37,7 @@ Postgres `app_state` is the authoritative shared copy. Browser `localStorage` is
 | File | Lines | Named function estimate | Main responsibility | Risk |
 | --- | ---: | ---: | --- | --- |
 | `exhibition-detail.js` | 9,086 | 477 | Exhibition workspace, inventory, sales, files, images, certificates, snapshots, exports, dialogs | Critical |
-| `studio.js` | 5,645 | 261 | Week/month calendar, recurring events, occupancy, pointer editing, base rules | Critical |
+| `pottery-master-calendar.js` | 5,645 | 261 | Week/month calendar, recurring events, occupancy, pointer editing, base rules | Critical |
 | `pottery-material-orders.js` | 3,144 | 134 | Order state, editable grids, merges, keyboard behavior, exports | High |
 | `pottery-students.js` | 2,062 | 101 | Student records, payments, credits, attendance, slot selection | High |
 | `pottery-accounting.js` | 1,743 | 86 | Multi-domain accounting aggregation and manual entries | High |
@@ -56,7 +56,7 @@ The five largest browser page controllers total 21,680 lines and mix business ru
 ### Styles and pages
 
 - Fourteen HTML entry points compose the site.
-- `style.css` is 2,569 lines and `studio.css` is 1,484 lines; pottery feature stylesheets range from roughly 500 to 750 lines.
+- `style.css` is 2,569 lines and `pottery-master-calendar.css` is 1,484 lines; pottery feature stylesheets range from roughly 500 to 750 lines.
 - `mobile-draft.css` is loaded by all fourteen pages and overlays both shared and page-specific CSS.
 - Common responsive breakpoints include 980px, 920px, and 700px.
 - Cache-busting query strings differ by page and asset; Vercel also applies asset caching rules.
@@ -73,7 +73,7 @@ The five largest browser page controllers total 21,680 lines and mix business ru
 | Exhibition list | `exhibitions.html`, `exhibitions.js` | `exhibitions`, `currentUser` | Permissions, rendering, creation, persistence |
 | Exhibition workspace | `exhibition-detail.html`, `exhibition-detail.js` | `exhibitions`, `users`, snapshots, upload | Almost every gallery subdomain in one global controller |
 | Inventory summary | `inventory.html`, `inventory.js` | `/api/state?...view=summary`, local fallback | API/fallback/rendering in one loader |
-| Studio calendar | `pottery-master-calendar.html`, `studio.js` | calendar, students, personal work | Domain state machine embedded in pointer/DOM code |
+| Studio calendar | `pottery-master-calendar.html`, `pottery-master-calendar.js` | calendar, students, personal work | Domain state machine embedded in pointer/DOM code |
 | Students | `pottery-students.html`, `pottery-students.js` | students and calendar | Payment/credit rules embedded in rendering and modals |
 | Personal work | `pottery-personal-work.html`, `pottery-personal-work.js` | personal work, calendar, users | Membership/payment/usage/rendering mixed |
 | Material orders | `pottery-material-orders.html`, `pottery-material-orders.js` | orders plus local product options | State, grid layout, rowspans, keyboard model, exports mixed |
@@ -110,7 +110,7 @@ These are data-contract concerns, not cleanup opportunities. Structural refactor
 
 ### 5. Authorization is duplicated and client-heavy
 
-Role normalization and effective-access calculations recur in `auth.js`, `users.js`, gallery pages, pottery pages, `script.js`, and `studio.js`. This is dangerous business duplication because drift changes page access. However, extracting it before role-matrix characterization could centralize the wrong behavior. Server endpoint authorization is a separate security architecture topic and is explicitly outside structural stages.
+Role normalization and effective-access calculations recur in `auth.js`, `users.js`, gallery pages, pottery pages, `script.js`, and `pottery-master-calendar.js`. This is dangerous business duplication because drift changes page access. However, extracting it before role-matrix characterization could centralize the wrong behavior. Server endpoint authorization is a separate security architecture topic and is explicitly outside structural stages.
 
 ### 6. Error and rollback behavior is inconsistent
 
@@ -147,7 +147,7 @@ No `*.test.*`, `*.spec.*`, `test/`, or `tests/` files and no test dependencies/s
 1. **`cloud-sync.js` + `api/state.js`:** shared protocol for all authoritative data; defects can lose or overwrite cross-domain state.
 2. **`auth.js`:** loaded by nearly every authenticated page; owns session behavior, profile mutation, local preview behavior, and quota recovery.
 3. **`exhibition-detail.js`:** largest mutable domain surface; includes inventory and financial data plus image/file and snapshot operations.
-4. **`studio.js`:** high-frequency pointer interactions and recurring-calendar mutation rules shared with downstream accounting/student calculations.
+4. **`pottery-master-calendar.js`:** high-frequency pointer interactions and recurring-calendar mutation rules shared with downstream accounting/student calculations.
 5. **`pottery-accounting.js`:** read fan-in across six datasets; silent calculation drift directly changes financial views/exports.
 6. **`api/_lib/exhibition-snapshot-store.js`:** recovery mechanism with database and Blob side effects; errors can compromise rollback confidence.
 7. **`users.js`:** account/role mutation and administrative invariants.

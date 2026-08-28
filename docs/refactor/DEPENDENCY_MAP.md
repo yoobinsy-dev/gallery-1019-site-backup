@@ -17,7 +17,7 @@ This document describes runtime dependency direction, not a proposed import grap
 | `users.html` | `cloud-sync.js`, `auth.js`, `users.js` | `style.css`, `mobile-draft.css` | `users` R/W, `currentUser` R/W |
 | `pottery-workshop.html` | `auth.js`, `pottery-landing.js` | `pottery-landing.css`, `mobile-draft.css` | role-based navigation |
 | `pottery-exhibition-works.html` | `auth.js`, `pottery-landing.js` | `pottery-section.css`, `mobile-draft.css` | role-based placeholder page |
-| `pottery-master-calendar.html` | `cloud-sync.js`, `auth.js`, `studio.js` | `studio.css`, `mobile-draft.css` | calendar R/W; users/personal work R |
+| `pottery-master-calendar.html` | `cloud-sync.js`, `auth.js`, `pottery-master-calendar.js` | `pottery-master-calendar.css`, `mobile-draft.css` | calendar R/W; users/personal work R |
 | `pottery-students.html` | `cloud-sync.js`, `auth.js`, `pottery-landing.js`, `pottery-students.js` | `pottery-students.css`, `mobile-draft.css` | students R/W; calendar R/W |
 | `pottery-personal-work.html` | `cloud-sync.js`, `auth.js`, `pottery-landing.js`, `pottery-personal-work.js` | `pottery-personal-work.css`, `mobile-draft.css` | personal work R/W; calendar/users R |
 | `pottery-material-orders.html` | `cloud-sync.js`, `auth.js`, `pottery-landing.js`, `pottery-material-orders.js` | `pottery-material-orders.css`, `mobile-draft.css` | material orders R/W; local product options |
@@ -33,7 +33,7 @@ Query-string versions are omitted above. Their inconsistent values are deploymen
 | `exhibitions` | `exhibitions.js`, `exhibition-detail.js` | Detail, list, inventory fallback, accounting, auth quota recovery | Delta/full merge, timestamps, preview preservation, inventory-drop safeguard, transfer-safe response |
 | `pottery-students-v1` | `pottery-students.js` | Students, studio, accounting | Student identity/payment merge |
 | `pottery-personal-work-v1` | `pottery-personal-work.js` | Personal work, studio, accounting | Version/conflict handling; full value path |
-| `studio-calendar-state-v1` | `studio.js`, student workflows | Studio, students, personal work, accounting | Calendar collection merge/full-overwrite semantics requiring fixtures |
+| `studio-calendar-state-v1` | `pottery-master-calendar.js`, student workflows | Studio, students, personal work, accounting | Calendar collection merge/full-overwrite semantics requiring fixtures |
 | `pottery-material-orders-v1` | `pottery-material-orders.js` | Orders, accounting | Browser order merge; server version/conflict handling |
 | `pottery-accounting-v1` | `pottery-accounting.js` | Accounting | Version/conflict handling; full value path |
 
@@ -52,7 +52,7 @@ Local-only state includes `currentUser`, page UI preferences/backups, cloud meta
 | `exhibitions.js` | `exhibitions.html` | Auth conventions, cloud interception, DOM | `exhibitions` R/W; navigation | Permissions, list rendering, creation, persistence |
 | `exhibition-detail.js` | `exhibition-detail.html` | Auth/storage globals, cloud events, XLSX Populate, JSZip, browser file/image APIs | State/snapshot/upload requests; `exhibitions` R/W; `users` R; extensive DOM/download/print | Multiple gallery bounded contexts and duplicate controlling definitions |
 | `inventory.js` | `inventory.html` | Auth conventions, `fetch`, DOM | GET summary state; local fallback | Loader, access filtering, summary rendering |
-| `studio.js` | Master calendar | Auth conventions, cloud events, DOM pointer APIs | Calendar R/W; user/personal-work reads; timers | Calendar domain, occurrence rules, pointer state machine, rendering, modals, persistence |
+| `pottery-master-calendar.js` | Master calendar | Auth conventions, cloud events, DOM pointer APIs | Calendar R/W; user/personal-work reads; timers | Calendar domain, occurrence rules, pointer state machine, rendering, modals, persistence |
 | `pottery-students.js` | Students page | Role helpers, cloud events, DOM | Students/calendar R/W; timer | Student/payment domain, attendance projections, slot-grid UI, modals, persistence |
 | `pottery-personal-work.js` | Personal-work page | Role helpers, cloud events, DOM | Personal work R/W; calendar/users R; timer | Contract/payment state, usage calculations, rendering/modals |
 | `pottery-material-orders.js` | Material-orders page | Role helpers, cloud events, DOM/file APIs | Orders R/W; product-option local cache; download | Order domain, edit buffers, grid navigation, cell merges, exports |

@@ -6,7 +6,7 @@ const dateTime = require('../../master-calendar/date-time');
 const occurrences = require('../../master-calendar/occurrences');
 
 function loadCalendar() {
-  return exposeIifeFunctions('studio.js', [
+  return exposeIifeFunctions('pottery-master-calendar.js', [
     'slotToTime', 'timeToSlot', 'getWeekStart', 'getMonthStart', 'addDays', 'addMonths', 'formatDateInput',
     'getDayIndexFromDateString', 'getEventsForDate', 'state', 'isExhibitionKind'
   ], { globals: {

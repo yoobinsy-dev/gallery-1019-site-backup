@@ -108,7 +108,7 @@ Snapshot extraction must preserve transaction ordering, deduplication results, K
 ## Studio calendar
 
 - **Authority:** `studio-calendar-state-v1` with events, base rules, timelines, week overrides, studio users, and teaching log structures.
-- **Read/projection:** `studio.js` normalizes state, expands occurrences for week/month dates, calculates occupancy/lanes, and renders calendar cells/bubbles.
+- **Read/projection:** `pottery-master-calendar.js` normalizes state, expands occurrences for week/month dates, calculates occupancy/lanes, and renders calendar cells/bubbles.
 - **Interaction:** pointer/touch/modal state records draft create/move/resize operations; preview functions validate and mutate DOM; finalizers update calendar state and save.
 - **Recurring operations:** one/following/all behaviors may split or truncate series and interact with base rules/overrides.
 - **Downstream readers:** students derive attendance/credits; personal work derives usage; accounting derives monthly class revenue.

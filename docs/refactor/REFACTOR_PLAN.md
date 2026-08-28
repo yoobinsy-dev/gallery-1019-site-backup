@@ -79,7 +79,7 @@ This is the executable sequence. Stage 0 is not authorized by this revision. Eve
 
 ### Stage 8: Canonical date and slot primitives
 - **Branch/objective:** `refactor/08-calendar-primitives`; establish primitives for one occurrence engine.
-- **Source/targets/modules:** compare `studio.js` and consumers; proven-equivalent slot/time/date/range functions; create `core/date-time.js` or calendar-local module.
+- **Source/targets/modules:** compare `pottery-master-calendar.js` and consumers; proven-equivalent slot/time/date/range functions; create `core/date-time.js` or calendar-local module.
 - **Identical behavior:** timezone, invalid input, mutation, `24:00`, boundaries.
 - **Before/after tests:** cross-file semantic matrix before; pure old/new parity after; no consumer switch required.
 - **DEV/acceptance:** no DEV deploy if no caller changes, otherwise required; combine only equivalent contracts.
@@ -87,7 +87,7 @@ This is the executable sequence. Stage 0 is not authorized by this revision. Eve
 
 ### Stage 9: Canonical occurrence expansion
 - **Branch/objective:** `refactor/09-calendar-occurrences`; create one canonical engine without adoption.
-- **Source/targets/modules:** `studio.js` as owner, consumers as comparisons; event/date/weekly/end/override/exclusion family; create `studio/calendar-occurrences.js`.
+- **Source/targets/modules:** `pottery-master-calendar.js` as owner, consumers as comparisons; event/date/weekly/end/override/exclusion family; create `studio/calendar-occurrences.js`.
 - **Identical behavior:** studio inclusion/order/ranges/recurrence/overnight/overrides.
 - **Before/after tests:** shared consumer semantics corpus before; canonical parity and immutability after.
 - **DEV/acceptance:** no deploy until adoption; explicit events/rules/overrides/range/timezone inputs and no consumer forks.
@@ -119,7 +119,7 @@ This is the executable sequence. Stage 0 is not authorized by this revision. Eve
 
 ### Stage 13: Adopt occurrences in studio
 - **Branch/objective:** `refactor/13-occurrences-studio`; switch week/month query paths last.
-- **Source/targets/modules:** `studio.js`; rendering occurrence queries; no second engine or new module.
+- **Source/targets/modules:** `pottery-master-calendar.js`; rendering occurrence queries; no second engine or new module.
 - **Identical behavior:** visible events, lanes/order, selection, pointer targets.
 - **Before/after tests:** projection goldens/screenshots/pointer E2E before; unit/browser/visual/pointer suites after.
 - **DEV/acceptance:** isolated DEV calendar workflow required; all four consumers share one engine.
@@ -303,7 +303,7 @@ This is the executable sequence. Stage 0 is not authorized by this revision. Eve
 
 ### Stage 36: Studio page repository
 - **Branch/objective:** `refactor/36-repository-studio`; migrate calendar load/save after occurrence adoption.
-- **Source/targets/modules:** `studio.js`; calendar serialization; repository only for meaningful compatibility handling.
+- **Source/targets/modules:** `pottery-master-calendar.js`; calendar serialization; repository only for meaningful compatibility handling.
 - **Identical behavior:** calendar shape/order/unknown fields, push/no-echo/offline/errors.
 - **Before/after tests:** serialization/cloud/pointer E2E before; state parity and calendar workflow after.
 - **DEV/acceptance:** isolated DEV required; repository owns no occurrence or command policy.
@@ -319,7 +319,7 @@ This is the executable sequence. Stage 0 is not authorized by this revision. Eve
 
 ### Stage 38: Calendar occupancy queries
 - **Branch/objective:** `refactor/38-calendar-occupancy`; isolate occupancy/capacity/placement queries.
-- **Source/targets/modules:** `studio.js`; `buildDailyOccupancyMap` and pure conflict queries; create `studio/calendar-occupancy.js`.
+- **Source/targets/modules:** `pottery-master-calendar.js`; `buildDailyOccupancyMap` and pure conflict queries; create `studio/calendar-occupancy.js`.
 - **Identical behavior:** exclusions, capacity, base rules, ranges, reasons.
 - **Before/after tests:** occupancy/preview goldens before; old/new and preview parity after.
 - **DEV/acceptance:** isolated DEV placement smoke required; explicit inputs and no DOM/storage.
@@ -327,7 +327,7 @@ This is the executable sequence. Stage 0 is not authorized by this revision. Eve
 
 ### Stage 39: Calendar modal command planning
 - **Branch/objective:** `refactor/39-calendar-modal-commands`; separate modal command plan from effects.
-- **Source/targets/modules:** `studio.js`; pure portions of `saveEventFromModal`; create `studio/calendar-commands.js`.
+- **Source/targets/modules:** `pottery-master-calendar.js`; pure portions of `saveEventFromModal`; create `studio/calendar-commands.js`.
 - **Identical behavior:** fields/IDs/ranges/repeat/validation/next state.
 - **Before/after tests:** create/edit/invalid goldens before; command and modal E2E after.
 - **DEV/acceptance:** isolated DEV modal workflow required; page reads DOM/applies/saves, module has no effects.
@@ -335,7 +335,7 @@ This is the executable sequence. Stage 0 is not authorized by this revision. Eve
 
 ### Stage 40: Calendar pointer edit planning
 - **Branch/objective:** `refactor/40-calendar-pointer-commands`; separate pointer edit result from mutation.
-- **Source/targets/modules:** `studio.js`; pure planning in `finalizeMasterCalendarEdit`; extend commands module.
+- **Source/targets/modules:** `pottery-master-calendar.js`; pure planning in `finalizeMasterCalendarEdit`; extend commands module.
 - **Identical behavior:** targets, validation, preview/final position, cancellation, IDs.
 - **Before/after tests:** week/month pointer goldens before; parity and pointer/touch/visual E2E after.
 - **DEV/acceptance:** isolated DEV desktop/mobile required; explicit inputs, no DOM/storage in planner.
@@ -343,7 +343,7 @@ This is the executable sequence. Stage 0 is not authorized by this revision. Eve
 
 ### Stage 41: Calendar recurring operations
 - **Branch/objective:** `refactor/41-calendar-recurring`; isolate one/following/all plans.
-- **Source/targets/modules:** `studio.js`; recurring delete/move/update and base-rule effects; extend commands module rather than tiny files.
+- **Source/targets/modules:** `pottery-master-calendar.js`; recurring delete/move/update and base-rule effects; extend commands module rather than tiny files.
 - **Identical behavior:** IDs/order/shape, splits/truncation, orphan handling, prompts, occurrences.
 - **Before/after tests:** exhaustive recurring/downstream totals before; unit, pointer/modal and all consumer regressions after.
 - **DEV/acceptance:** isolated DEV recurring workflow required; pure plans and page-owned prompts/persistence.

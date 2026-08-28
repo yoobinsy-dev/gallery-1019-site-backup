@@ -62,7 +62,7 @@ Every implemented candidate requires a before/after extraction record. The befor
 
 ### 7. `renderCalendar`
 
-- **Location/environment/size:** `studio.js:887-1092`; browser; approximately 205 lines, with month rendering delegated separately.
+- **Location/environment/size:** `pottery-master-calendar.js:887-1092`; browser; approximately 205 lines, with month rendering delegated separately.
 - **Responsibility/callers/callees:** week/month calendar composition; called by `renderAll` and navigation/state changes; calls date/occurrence/occupancy/lane/cell/event render helpers.
 - **Contract:** calendar/view/week state -> calendar DOM and interactive elements. Reads events/base rules/overrides, role, selection, viewport state; writes DOM and transient element references.
 - **Globals/errors/rollback:** studio state and fixed DOM structure. Render failure has no DOM rollback; rerender is recovery.
@@ -70,7 +70,7 @@ Every implemented candidate requires a before/after extraction record. The befor
 
 ### 8. `saveEventFromModal`
 
-- **Location/environment/size:** `studio.js:2391` through the next modal/calendar operation; browser; approximately 100+ lines.
+- **Location/environment/size:** `pottery-master-calendar.js:2391` through the next modal/calendar operation; browser; approximately 100+ lines.
 - **Responsibility/callers/callees:** validates and creates/updates event/modal state, including recurring behavior; called by modal save; calls date/slot/occupancy/base-rule validation, ID creation, save, render, and modal cleanup.
 - **Contract:** modal fields plus edit context -> changed calendar state or validation message. Reads/writes events/rules/edit state and local calendar storage; indirect network write; mutates DOM.
 - **Globals/errors/rollback:** studio state, DOM controls, role/context. Validation aborts before save; post-mutation storage failure has no general transaction rollback.
@@ -78,7 +78,7 @@ Every implemented candidate requires a before/after extraction record. The befor
 
 ### 9. `finalizeMasterCalendarEdit`
 
-- **Location/environment/size:** `studio.js:1745` through the next pointer finalizer/helper section; browser; approximately 80+ lines.
+- **Location/environment/size:** `pottery-master-calendar.js:1745` through the next pointer finalizer/helper section; browser; approximately 80+ lines.
 - **Responsibility/callers/callees:** commits pointer move/resize; called on pointer/touch completion; calls coordinate conversion, placement validation, recurring decision/UI, save/render/reset.
 - **Contract:** client coordinates plus active edit state -> committed event change, recurring prompt, or cancellation. Reads/writes event/edit state and DOM previews; indirect storage/network effects.
 - **Globals/errors/rollback:** pointer IDs, viewport geometry, active preview elements. Invalid placement resets preview; committed state relies on undo/next edit rather than transaction rollback.
