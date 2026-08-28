@@ -29,6 +29,46 @@ const exhibitions = [{
   artSoldWorks: [],
   soldGoods: []
 }];
+const studentFixtures = [{
+  id: 'CHARACTERIZATION_TEST_STUDENT_ID',
+  name: 'CHARACTERIZATION_TEST_STUDENT',
+  studentGroup: '정규반',
+  classTime: '수 10:00~11:00',
+  classType: '정규 수강',
+  instructor: currentUser.name,
+  tuition: 120000,
+  tuitionBasis: '4회',
+  mostRecentPaymentDate: '2026-07-01',
+  paymentHistory: ['2026-07-01'],
+  paymentRecords: [{
+    id: 'CHARACTERIZATION_TEST_PAYMENT',
+    date: '2026-07-01',
+    tuition: 120000,
+    basis: '4회',
+    credits: 4
+  }],
+  creditTrackingStartDate: '2026-07-01',
+  carryOverBeforePayment: 1,
+  paymentCycleCredits: 4,
+  manualUsedAdjustment: 1
+}];
+const calendarFixture = {
+  events: [{
+    id: 'CHARACTERIZATION_TEST_STUDENT_CLASS',
+    kind: '수강',
+    title: 'CHARACTERIZATION_TEST_STUDENT',
+    instructor: currentUser.name,
+    date: '2026-07-01',
+    start: '10:00',
+    end: '11:00',
+    repeatWeekly: true,
+    repeatEndDate: '2026-07-15',
+    repeatSkipDates: ['2026-07-08']
+  }],
+  baseRules: [],
+  baseRuleTimeline: [],
+  baseWeekOverrides: {}
+};
 
 test.beforeEach(async ({ page, baseURL }) => {
   expect(new URL(baseURL).hostname).toBe('127.0.0.1');
@@ -43,9 +83,9 @@ test.beforeEach(async ({ page, baseURL }) => {
         data: {
           users: [currentUser],
           exhibitions,
-          'pottery-students-v1': [],
+          'pottery-students-v1': studentFixtures,
           'pottery-personal-work-v1': [],
-          'studio-calendar-state-v1': { events: [], baseRules: [], baseRuleTimeline: [], baseWeekOverrides: {} },
+          'studio-calendar-state-v1': calendarFixture,
           'pottery-material-orders-v1': [],
           'pottery-accounting-v1': []
         },
@@ -60,16 +100,21 @@ test.beforeEach(async ({ page, baseURL }) => {
     }
     await route.continue();
   });
-  await page.addInitScript(({ user, fixtureExhibitions }) => {
+  await page.addInitScript(({ user, fixtureExhibitions, fixtureStudents, fixtureCalendar }) => {
     localStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('users', JSON.stringify([user]));
     localStorage.setItem('exhibitions', JSON.stringify(fixtureExhibitions));
-    localStorage.setItem('pottery-students-v1', '[]');
+    localStorage.setItem('pottery-students-v1', JSON.stringify(fixtureStudents));
     localStorage.setItem('pottery-personal-work-v1', '[]');
     localStorage.setItem('pottery-material-orders-v1', '[]');
     localStorage.setItem('pottery-accounting-v1', '[]');
-    localStorage.setItem('studio-calendar-state-v1', JSON.stringify({ events: [], baseRules: [], baseRuleTimeline: [], baseWeekOverrides: {} }));
-  }, { user: currentUser, fixtureExhibitions: exhibitions });
+    localStorage.setItem('studio-calendar-state-v1', JSON.stringify(fixtureCalendar));
+  }, {
+    user: currentUser,
+    fixtureExhibitions: exhibitions,
+    fixtureStudents: studentFixtures,
+    fixtureCalendar: calendarFixture
+  });
 });
 
 const pages = [
@@ -228,5 +273,65 @@ test('gallery accounting preserves category totals, export, state, and reload', 
   await page.locator('#accounting-tab-gallery').click();
   await expect(page.locator('#accounting-total-revenue')).toHaveText('260,001원');
   expect(await page.evaluate(() => localStorage.getItem('pottery-accounting-v1'))).toBe(accountingBefore);
+  expect(pageErrors).toEqual([]);
+});
+
+test('student payment credits preserve row, detail, role actions, recomputation, and reload', async ({ page }) => {
+  await page.addInitScript(() => {
+    const RealDate = Date;
+    const fixedTime = new RealDate('2026-08-15T12:00:00').getTime();
+    class FixedDate extends RealDate {
+      constructor(...args) {
+        super(...(args.length > 0 ? args : [fixedTime]));
+      }
+
+      static now() {
+        return fixedTime;
+      }
+    }
+    window.Date = FixedDate;
+  });
+
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.goto('/pottery-students.html', { waitUntil: 'networkidle' });
+  const stateBefore = await page.evaluate(() => ({
+    students: localStorage.getItem('pottery-students-v1'),
+    calendar: localStorage.getItem('studio-calendar-state-v1')
+  }));
+  const studentRow = page.locator('#students-tbody tr').filter({ hasText: 'CHARACTERIZATION_TEST_STUDENT' });
+  await expect(studentRow).toHaveCount(1);
+  const cells = studentRow.locator('td');
+  await expect(cells.nth(5)).toContainText('2026-07-15');
+  await expect(studentRow.locator('.remaining-badge')).toHaveText('2');
+  await expect(studentRow.locator('.row-action-btn.payment-add')).toBeVisible();
+  await expect(studentRow.locator('.row-action-btn.edit')).toBeVisible();
+  await expect(studentRow.locator('.row-action-btn.delete')).toBeVisible();
+
+  await studentRow.locator('.row-action-btn.detail').click();
+  await expect(page.locator('#student-detail-modal')).toHaveClass(/open/);
+  await expect(page.locator('#student-detail-title')).toContainText('CHARACTERIZATION_TEST_STUDENT');
+  const detailText = await page.locator('#student-detail-payment-class-body').innerText();
+  expect(detailText).toContain('2026-07-01');
+  expect(detailText).toContain('4회');
+  expect(detailText).toContain('120,000원');
+  expect(detailText).toContain('2026-07-15');
+  expect(detailText).not.toContain('2026-07-08');
+  await page.locator('#student-detail-close-btn').click();
+
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(studentRow.locator('.remaining-badge')).toHaveText('2');
+  expect(await page.evaluate(() => ({
+    students: localStorage.getItem('pottery-students-v1'),
+    calendar: localStorage.getItem('studio-calendar-state-v1')
+  }))).toEqual(stateBefore);
+
+  await page.reload({ waitUntil: 'networkidle' });
+  const reloadedRow = page.locator('#students-tbody tr').filter({ hasText: 'CHARACTERIZATION_TEST_STUDENT' });
+  await expect(reloadedRow.locator('.remaining-badge')).toHaveText('2');
+  expect(await page.evaluate(() => ({
+    students: localStorage.getItem('pottery-students-v1'),
+    calendar: localStorage.getItem('studio-calendar-state-v1')
+  }))).toEqual(stateBefore);
   expect(pageErrors).toEqual([]);
 });

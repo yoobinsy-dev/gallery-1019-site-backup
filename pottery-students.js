@@ -993,30 +993,11 @@
   }
 
   function normalizePaymentRecords(student) {
-    const records = Array.isArray(student?.paymentRecords) ? student.paymentRecords : [];
-    const normalized = records
-      .map((record) => ({
-        id: String(record?.id || '').trim() || `legacy-payment-${String(record?.date || '').trim()}`,
-        date: String(record?.date || '').trim(),
-        tuition: Number(record?.tuition) || 0,
-        basis: String(record?.basis || '').trim(),
-        credits: Math.max(0, Math.floor(Number(record?.credits) || 0))
-      }))
-      .filter((record) => isValidDateString(record.date));
-
-    getStudentPaymentHistory(student).forEach((date) => {
-      if (normalized.some((record) => record.date === date)) return;
-      const isLatest = date === String(student?.mostRecentPaymentDate || '').trim();
-      normalized.push({
-        id: `legacy-payment-${date}`,
-        date,
-        tuition: isLatest ? Number(student?.tuition) || 0 : 0,
-        basis: isLatest ? String(student?.tuitionBasis || '').trim() : '',
-        credits: isLatest ? getStudentPaymentCycleSize(student) : 0
-      });
+    return globalThis.StudentPaymentCredits.normalizePaymentRecords({
+      student,
+      isValidDateString,
+      paymentCycleSize: getStudentPaymentCycleSize(student)
     });
-
-    return normalized.sort((a, b) => b.date.localeCompare(a.date));
   }
 
   function updateLatestPaymentRecordForCorrection(student, previousPaymentDate) {
@@ -1079,40 +1060,26 @@
   }
 
   function getRemainingClassCount(student, completedSincePayment) {
-    const carry = Number(student?.carryOverBeforePayment || 0);
-    const cycleCredits = Number(
-      student?.paymentCycleCredits
-      ?? basisToCount(student?.tuitionBasis)
-      ?? 0
-    );
-    const used = Number(completedSincePayment || 0);
-
-    const safeCarry = Number.isFinite(carry) ? carry : 0;
-    const safeCycle = Number.isFinite(cycleCredits) ? cycleCredits : 0;
-    const safeUsed = Number.isFinite(used) ? used : 0;
-    const manualUsedAdjustment = getManualUsedAdjustment(student);
-
-    return safeCarry + safeCycle - safeUsed - manualUsedAdjustment;
+    return globalThis.StudentPaymentCredits.getRemainingClassCount({
+      student,
+      completedSincePayment,
+      basisCount: basisToCount(student?.tuitionBasis)
+    });
   }
 
   function getManualUsedAdjustment(student) {
-    const parsed = Number(student?.manualUsedAdjustment || 0);
-    if (!Number.isFinite(parsed)) return 0;
-    return Math.floor(parsed);
+    return globalThis.StudentPaymentCredits.getManualUsedAdjustment(student);
   }
 
   function computeCarryOverForNewPaymentCycle(student, previousPaymentDate, nextPaymentDate, previousRemaining) {
     const nextDate = String(nextPaymentDate || '').trim();
     if (!nextDate) return 0;
 
-    const sameDayCompleted = getCompletedClassCountOnDate(student?.name, nextDate);
-    const balanceAfterSameDayClasses = Number(previousRemaining) || 0;
-    const balanceBeforeSameDayClasses = balanceAfterSameDayClasses + sameDayCompleted;
-    const outstandingBalance = Math.min(0, balanceBeforeSameDayClasses);
-    const oldCreditsAvailable = Math.max(0, balanceBeforeSameDayClasses);
-    const oldPlanClasses = Math.min(sameDayCompleted, oldCreditsAvailable);
-
-    return outstandingBalance + oldPlanClasses;
+    return globalThis.StudentPaymentCredits.computeCarryOverForNewPaymentCycle({
+      nextPaymentDate: nextDate,
+      previousRemaining,
+      sameDayCompleted: getCompletedClassCountOnDate(student?.name, nextDate)
+    });
   }
 
   function getCompletedClassCountOnDate(studentName, targetDate) {
@@ -1252,215 +1219,26 @@
   }
 
   function getStudentPaymentCycleSize(student) {
-    const direct = Number(student?.paymentCycleCredits);
-    const fromBasis = basisToCount(student?.tuitionBasis);
-    const safeDirect = Number.isFinite(direct) && direct > 0 ? Math.floor(direct) : 0;
-    const safeBasis = Number.isFinite(fromBasis) && fromBasis > 0 ? Math.floor(fromBasis) : 0;
-    return Math.max(1, safeDirect, safeBasis);
+    return globalThis.StudentPaymentCredits.getStudentPaymentCycleSize({
+      student,
+      basisCount: basisToCount(student?.tuitionBasis)
+    });
   }
 
   function buildPaymentClassGroups(student, paymentDates, classRecords) {
-    const paymentRecordByDate = new Map(
-      normalizePaymentRecords(student).map((record) => [record.date, record])
-    );
-    if (isMonthlyStartBasis(student?.tuitionBasis)) {
-      const monthlyGroups = buildMonthlyStartPaymentClassGroups(paymentDates, classRecords);
-      monthlyGroups.groups.forEach((group) => {
-        group.paymentRecord = paymentRecordByDate.get(group.paymentDate) || null;
-      });
-      return monthlyGroups;
-    }
-
-    const sortedPaymentsAsc = (Array.isArray(paymentDates) ? paymentDates : [])
-      .map((d) => String(d || '').trim())
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b));
-
-    const workingClasses = (Array.isArray(classRecords) ? classRecords : [])
-      .map((record) => ({ ...record, __assignedPayment: false }))
-      .sort((a, b) => {
-        const ak = `${a.date} ${a.start}`;
-        const bk = `${b.date} ${b.start}`;
-        return ak.localeCompare(bk);
-      });
-
-    reservePriorCycleClasses(student, sortedPaymentsAsc, workingClasses);
-
-    const groupsAsc = [];
-    sortedPaymentsAsc.forEach((paymentDate, index) => {
-      const nextPaymentDate = sortedPaymentsAsc[index + 1] || '';
-      const paymentRecord = paymentRecordByDate.get(paymentDate) || null;
-      const recordCredits = Number(paymentRecord?.credits);
-      const cycleSize = Number.isFinite(recordCredits) && recordCredits > 0
-        ? Math.floor(recordCredits)
-        : getStudentPaymentCycleSize(student);
-      const assigned = [];
-      let paidCount = 0;
-
-      const assignRecord = (record) => {
-        if (!record) return;
-        record.__assignedPayment = true;
-        assigned.push(record);
-        paidCount += 1;
-      };
-
-      // Primary pass: classes in this payment window [paymentDate, nextPaymentDate)
-      for (let i = 0; i < workingClasses.length; i += 1) {
-        const record = workingClasses[i];
-        const classDate = String(record?.date || '');
-        if (!classDate || record.__assignedPayment || record.__priorCycle) continue;
-        if (classDate < paymentDate) continue;
-        if (nextPaymentDate && classDate >= nextPaymentDate) continue;
-        assignRecord(record);
-        if (paidCount >= cycleSize) break;
-      }
-
-      // Boundary-day fallback: if a cycle is short, allow borrowing classes that happened on
-      // the next payment date only. This keeps same-day payment boundaries consistent with
-      // remaining-count carry logic.
-      if (paidCount < cycleSize && nextPaymentDate) {
-        for (let i = 0; i < workingClasses.length; i += 1) {
-          const record = workingClasses[i];
-          const classDate = String(record?.date || '');
-          if (!classDate || record.__assignedPayment || record.__priorCycle) continue;
-          if (classDate !== nextPaymentDate) continue;
-          assignRecord(record);
-          if (paidCount >= cycleSize) break;
-        }
-      }
-
-      groupsAsc.push({
-        paymentDate,
-        paymentRecord,
-        classRecords: assigned
-      });
+    return globalThis.StudentPaymentCredits.buildPaymentClassGroups({
+      student,
+      paymentDates,
+      classRecords,
+      paymentRecords: normalizePaymentRecords(student),
+      isMonthlyStart: isMonthlyStartBasis(student?.tuitionBasis),
+      paymentCycleSize: getStudentPaymentCycleSize(student),
+      manualUsedAdjustment: getManualUsedAdjustment(student)
     });
-
-    const groups = groupsAsc.slice().sort((a, b) => String(b.paymentDate || '').localeCompare(String(a.paymentDate || '')));
-    return {
-      groups,
-      unassigned: workingClasses.filter((record) => !record.__assignedPayment)
-    };
-  }
-
-  function reservePriorCycleClasses(student, sortedPaymentsAsc, workingClasses) {
-    if (!Array.isArray(workingClasses) || workingClasses.length === 0) return;
-    if (!Array.isArray(sortedPaymentsAsc) || sortedPaymentsAsc.length === 0) return;
-
-    const firstPaymentDate = String(sortedPaymentsAsc[0] || '').trim();
-    let openingCredits = Math.max(0, -getManualUsedAdjustment(student));
-
-    for (let index = 0; index < workingClasses.length && openingCredits > 0; index += 1) {
-      const record = workingClasses[index];
-      const classDate = String(record?.date || '').trim();
-      if (!classDate || classDate < firstPaymentDate) continue;
-      record.__priorCycle = true;
-      openingCredits -= 1;
-    }
-
-    const latestPaymentDate = String(sortedPaymentsAsc[sortedPaymentsAsc.length - 1] || '').trim();
-    let sameDayPriorCycleCount = Math.max(0, Math.floor(Number(student?.carryOverBeforePayment) || 0));
-    for (let index = 0; index < workingClasses.length && sameDayPriorCycleCount > 0; index += 1) {
-      const record = workingClasses[index];
-      if (record.__priorCycle) continue;
-      if (String(record?.date || '').trim() !== latestPaymentDate) continue;
-      record.__priorCycle = true;
-      sameDayPriorCycleCount -= 1;
-    }
-  }
-
-  function buildMonthlyStartPaymentClassGroups(paymentDates, classRecords) {
-    const sortedPaymentsAsc = (Array.isArray(paymentDates) ? paymentDates : [])
-      .map((d) => String(d || '').trim())
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b));
-
-    const monthToPaymentDate = new Map();
-    const paymentEntries = [];
-
-    sortedPaymentsAsc.forEach((paymentDate) => {
-      const parsed = new Date(`${paymentDate}T00:00:00`);
-      if (Number.isNaN(parsed.getTime())) return;
-
-      const currentMonthKey = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}`;
-      let targetMonthKey = currentMonthKey;
-
-      // Early payment rule: payment after 23rd can cover next month
-      // only when payment for current month already exists.
-      if (parsed.getDate() >= 24 && monthToPaymentDate.has(currentMonthKey)) {
-        const nextMonth = new Date(parsed.getFullYear(), parsed.getMonth() + 1, 1);
-        targetMonthKey = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}`;
-      }
-
-      if (!monthToPaymentDate.has(targetMonthKey)) {
-        monthToPaymentDate.set(targetMonthKey, paymentDate);
-      }
-
-      paymentEntries.push({
-        paymentDate,
-        targetMonthKey
-      });
-    });
-
-    const groupsByPaymentDate = new Map();
-    paymentEntries.forEach((entry) => {
-      if (!groupsByPaymentDate.has(entry.paymentDate)) {
-        groupsByPaymentDate.set(entry.paymentDate, []);
-      }
-    });
-
-    const sortedClassesDesc = (Array.isArray(classRecords) ? classRecords : [])
-      .slice()
-      .sort((a, b) => {
-        const ak = `${a.date} ${a.start}`;
-        const bk = `${b.date} ${b.start}`;
-        return bk.localeCompare(ak);
-      });
-
-    const unassigned = [];
-    sortedClassesDesc.forEach((record) => {
-      const classDate = String(record?.date || '').trim();
-      if (!classDate) return;
-      const classMonthKey = classDate.slice(0, 7);
-
-      const paymentDate = monthToPaymentDate.get(classMonthKey);
-      if (!paymentDate) {
-        unassigned.push(record);
-        return;
-      }
-
-      const bucket = groupsByPaymentDate.get(paymentDate);
-      if (!bucket) {
-        unassigned.push(record);
-        return;
-      }
-
-      bucket.push(record);
-    });
-
-    const groups = Array.from(groupsByPaymentDate.entries())
-      .map(([paymentDate, records]) => ({
-        paymentDate,
-        classRecords: records
-      }))
-      .sort((a, b) => String(b.paymentDate || '').localeCompare(String(a.paymentDate || '')));
-
-    return {
-      groups,
-      unassigned
-    };
   }
 
   function getStudentPaymentHistory(student) {
-    const history = Array.isArray(student?.paymentHistory) ? student.paymentHistory.slice() : [];
-    const recent = String(student?.mostRecentPaymentDate || '').trim();
-    if (recent && !history.includes(recent)) {
-      history.push(recent);
-    }
-    return history
-      .map((d) => String(d || '').trim())
-      .filter(Boolean)
-      .sort((a, b) => b.localeCompare(a));
+    return globalThis.StudentPaymentCredits.getStudentPaymentHistory(student);
   }
 
   function collectStudentEventOccurrences(studentName, targetKinds, options = {}) {
