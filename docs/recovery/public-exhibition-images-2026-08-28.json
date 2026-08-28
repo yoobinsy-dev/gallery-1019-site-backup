@@ -1,0 +1,1298 @@
+{
+  "checkpointDate": "2026-08-28",
+  "generatedAt": "2026-08-28T02:50:56.459Z",
+  "inventoryMode": "read-only",
+  "store": {
+    "id": "store_8GrgABDn7KW6YuH3",
+    "name": "gallery-1019-exhibition-images-public",
+    "access": "public",
+    "region": "iad1",
+    "binding": {
+      "variable": "EXHIBITION_IMAGE_READ_WRITE_TOKEN",
+      "scope": "production",
+      "projectId": "prj_YCn5F9fEsMGHpBBKInqNNkbvPuwG"
+    }
+  },
+  "objectCount": 182,
+  "totalSize": 2588974,
+  "fields": {
+    "contentType": "null when the Vercel Blob list API did not provide it",
+    "url": "public Blob URL as returned by Vercel"
+  },
+  "objects": [
+    {
+      "pathname": "exhibition-images/1785595618294/full/public-batch2-1785595631924-449b20d4dc40e620.webp",
+      "size": 120002,
+      "uploadedAt": "2026-08-11T13:23:03.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785595618294/full/public-batch2-1785595631924-449b20d4dc40e620-9eCw6FehcnrD6aOkcdMRe1zVOZpkpX.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785595618294/full/public-batch2-1785595750773-449b20d4dc40e620.webp",
+      "size": 120002,
+      "uploadedAt": "2026-08-11T13:23:06.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785595618294/full/public-batch2-1785595750773-449b20d4dc40e620-h71CcaDFwmmo374Um4njy7mI9Y24dH.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785595618294/full/public-batch2-1785595750773-449b20d4dc40e620.webp",
+      "size": 120002,
+      "uploadedAt": "2026-08-11T13:23:05.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785595618294/full/public-batch2-1785595750773-449b20d4dc40e620-uiWA9jfAZBZVgQJFjI3hA9wePqVlm0.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785595618294/full/public-smoke-1785595631924-449b20d4dc40e620.webp",
+      "size": 120002,
+      "uploadedAt": "2026-08-11T12:57:55.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785595618294/full/public-smoke-1785595631924-449b20d4dc40e620-AuPYWSdT1odvCqJ1a18HokZUpETwjR.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785732872450-829813b895b74f02.webp",
+      "size": 4026,
+      "uploadedAt": "2026-08-11T13:23:02.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785732872450-829813b895b74f02-RkjJ7taXy4LzPtDNZYeowTjUMPAcL6.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785732960324-4158bf67eebb0979.webp",
+      "size": 3510,
+      "uploadedAt": "2026-08-11T13:23:04.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785732960324-4158bf67eebb0979-a1HhhAYGiCV7FbG8LBEbKhXPgbkqJQ.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785733047520-3b0e35eafb24249d.webp",
+      "size": 3966,
+      "uploadedAt": "2026-08-11T13:23:05.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785733047520-3b0e35eafb24249d-aN2SuqVKgmNPehkcBKC2kYi8yLBk5T.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785733129772-79199d5465c302f8.webp",
+      "size": 16016,
+      "uploadedAt": "2026-08-11T13:23:08.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785733129772-79199d5465c302f8-Pw9kUxssZiBurapyFYLJDlt0zqjFQM.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785733180375-92707f9e2038430b.webp",
+      "size": 9126,
+      "uploadedAt": "2026-08-11T13:23:07.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785733180375-92707f9e2038430b-DRJfRfJv5Xb20EClPRvERxofebvtDe.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785733343896-fbd73ec5e650040a.webp",
+      "size": 15586,
+      "uploadedAt": "2026-08-11T13:23:09.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785733343896-fbd73ec5e650040a-AdCzHKonWnUTQooMjluaWN6U8S74pK.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785733614392-a09092791c30c447.webp",
+      "size": 9658,
+      "uploadedAt": "2026-08-11T13:23:11.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785733614392-a09092791c30c447-VVgTjKKwIPg3b2ZOWgDyocMiN1JTPR.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785733615282-a5b3c4999a97cfd9.webp",
+      "size": 12212,
+      "uploadedAt": "2026-08-11T13:23:12.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785733615282-a5b3c4999a97cfd9-H7XlIvTltMeWgtROdfOlwTnp23z8HT.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785733637844-5477d3d2832ee9fc.webp",
+      "size": 4780,
+      "uploadedAt": "2026-08-11T13:23:15.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785733637844-5477d3d2832ee9fc-IsCPeE5yVfdclZT6z2fzJjhlTrZ6GP.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785733640997-4e701c078aa1a364.webp",
+      "size": 9214,
+      "uploadedAt": "2026-08-11T13:29:28.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785733640997-4e701c078aa1a364-SpKE4tiP0VPH2wJjGYU7TvvtxcMoAC.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785733655559-8c1ff0ac57cd0100.webp",
+      "size": 8980,
+      "uploadedAt": "2026-08-11T13:23:14.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785733655559-8c1ff0ac57cd0100-xZPFfZ9YLGTMqSawR7bw9dOho2KBHP.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734309849-29d8bf69495fa157.webp",
+      "size": 2338,
+      "uploadedAt": "2026-08-11T13:29:30.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734309849-29d8bf69495fa157-9afSaRHlvw6zFT7akfEwObNH2JSvkU.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734424074-db7ab290c79bfee0.webp",
+      "size": 1850,
+      "uploadedAt": "2026-08-11T13:29:44.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734424074-db7ab290c79bfee0-GZHvGxuxRmr2vY6CHqLveHXbfE5tjY.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734428604-afd10f5b9d2f7f9d.webp",
+      "size": 2198,
+      "uploadedAt": "2026-08-11T13:29:40.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734428604-afd10f5b9d2f7f9d-BCDHCjmJW0uTabwfsHy1yhS24N1Tor.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734439470-aa77a4e9a4aa9090.webp",
+      "size": 2358,
+      "uploadedAt": "2026-08-11T13:29:37.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734439470-aa77a4e9a4aa9090-EtQinu2OSAUQOm0iX9UXoQuklK3XT5.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734439531-184a902474705318.webp",
+      "size": 2466,
+      "uploadedAt": "2026-08-11T13:29:41.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734439531-184a902474705318-HViJoOgxbSpE9K0IB3ingoUomWE8ME.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734440002-d72cb6fd01b5201b.webp",
+      "size": 2292,
+      "uploadedAt": "2026-08-11T13:29:35.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734440002-d72cb6fd01b5201b-FbxcMqKkxjM2qrVcOK4jcqN6a2EOa9.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734452159-b5d694260d7baf52.webp",
+      "size": 2576,
+      "uploadedAt": "2026-08-11T13:29:36.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734452159-b5d694260d7baf52-zW3X173k6T8kwOCW42OaLMeFKgkkzF.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734458538-2fa785e214752126.webp",
+      "size": 7176,
+      "uploadedAt": "2026-08-11T13:29:42.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734458538-2fa785e214752126-f3YCMsjdtVn7xlyaEsBfkW37PUERuz.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734462905-fde47f1a7d4236cd.webp",
+      "size": 2790,
+      "uploadedAt": "2026-08-11T13:29:31.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734462905-fde47f1a7d4236cd-vPJb0Jcm5yfc4LCXyXemi64QJTzavg.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734472611-197b8756ba339e49.webp",
+      "size": 3432,
+      "uploadedAt": "2026-08-11T13:29:33.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734472611-197b8756ba339e49-qCt2Xp0zgpYYtdmnSJYYNKJ8CjScOY.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734478026-699d94abdc36d013.webp",
+      "size": 2094,
+      "uploadedAt": "2026-08-11T13:29:32.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734478026-699d94abdc36d013-ndqhaEV9bxIrt9OBCaGBWZew2951p1.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734492815-9e503994c265b44e.webp",
+      "size": 2220,
+      "uploadedAt": "2026-08-11T13:29:38.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734492815-9e503994c265b44e-ZRK7e7wH1QgDQZg8VRjORxrn9yWA3u.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734675374-b31994ded011ca50.webp",
+      "size": 1684,
+      "uploadedAt": "2026-08-11T13:29:46.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734675374-b31994ded011ca50-Z7g0iyKaHiSMOlbRtbiFIyRDNeG6O0.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734704394-c5973da1258b0688.webp",
+      "size": 2272,
+      "uploadedAt": "2026-08-11T13:29:52.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734704394-c5973da1258b0688-BSM5nXgqelT05dnZDAw62P6I0bKbbe.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734767599-912b2a6dc65766a3.webp",
+      "size": 2140,
+      "uploadedAt": "2026-08-11T13:29:51.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734767599-912b2a6dc65766a3-yk0GZGek65n5750plsD9oIdSWOj5Lx.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734773478-4520667a410eaed1.webp",
+      "size": 1438,
+      "uploadedAt": "2026-08-11T13:29:50.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734773478-4520667a410eaed1-bhjXgGpgsZj5oeKX1iYSt97rL4gA5m.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734787876-34e105ae718ae256.webp",
+      "size": 1412,
+      "uploadedAt": "2026-08-11T13:29:49.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734787876-34e105ae718ae256-LgLec0Rg3sCt72bxkub3WRQG8jAhQP.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734796676-be86e3d387446ab3.webp",
+      "size": 1454,
+      "uploadedAt": "2026-08-11T13:29:48.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734796676-be86e3d387446ab3-2MPbiH4QwOsSP7WBajC8e65fe0XCoS.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734814443-466a9cd23b165f7a.webp",
+      "size": 2730,
+      "uploadedAt": "2026-08-11T13:29:54.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734814443-466a9cd23b165f7a-dWMOEjEYCttqxeEtfYZofqCxVaEegq.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734823558-8d0991525ff1f0cc.webp",
+      "size": 2946,
+      "uploadedAt": "2026-08-11T13:29:56.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734823558-8d0991525ff1f0cc-cCU8VkKkQ2fuhOhFGDQTy6PSDKu2qr.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734834105-3995172aca0a4f5b.webp",
+      "size": 2006,
+      "uploadedAt": "2026-08-11T13:30:00.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734834105-3995172aca0a4f5b-JeLvDm2FvIWjbJqQjwKZwcbS3HVmh8.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734836254-e30c6cbceaf5ca96.webp",
+      "size": 3198,
+      "uploadedAt": "2026-08-11T13:29:57.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734836254-e30c6cbceaf5ca96-9Jp3oB5GdtQ2ctygtj8fBbwaZuodaI.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734843320-1bcc7f7afc19cc0e.webp",
+      "size": 2978,
+      "uploadedAt": "2026-08-11T13:29:58.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734843320-1bcc7f7afc19cc0e-ydINz6JF57nuaYea3T8C5bDpOpHT9W.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-batch2-1785734851299-07f9a244c20644cc.webp",
+      "size": 2272,
+      "uploadedAt": "2026-08-11T13:29:59.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-batch2-1785734851299-07f9a244c20644cc-BToKL1OWtXblo8qbnU3OTOkHGoyNLO.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785734841495-c1255d52529be9db.webp",
+      "size": 1276,
+      "uploadedAt": "2026-08-11T14:36:07.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785734841495-c1255d52529be9db-bJonHZJLpPzbUX0J40qDAo0u3893ao.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785734841495-c1255d52529be9db.webp",
+      "size": 1276,
+      "uploadedAt": "2026-08-11T14:36:32.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785734841495-c1255d52529be9db-xaXABwkZw37st94jB2mJD5C8JBp0ME.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785734970000-409c9230c4ba71f6.webp",
+      "size": 1430,
+      "uploadedAt": "2026-08-11T14:36:33.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785734970000-409c9230c4ba71f6-0KPHklo7p9XLysySbVsDPUEZHfGwfn.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785734970000-409c9230c4ba71f6.webp",
+      "size": 1430,
+      "uploadedAt": "2026-08-11T14:36:08.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785734970000-409c9230c4ba71f6-U1uJg9qJa7YTKTA34K4G3ODZwwJWKG.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785734976243-babed6073f3cdb91.webp",
+      "size": 2222,
+      "uploadedAt": "2026-08-11T14:36:10.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785734976243-babed6073f3cdb91-1WGEBMP0CDXglsUMojpvQ9w3FqhJZ2.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785734976243-babed6073f3cdb91.webp",
+      "size": 2222,
+      "uploadedAt": "2026-08-11T14:36:34.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785734976243-babed6073f3cdb91-cHAwbduhOX05W4wqCCXKcQ07qeclht.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785734978316-600f2bdff11bb10f.webp",
+      "size": 1404,
+      "uploadedAt": "2026-08-11T14:36:33.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785734978316-600f2bdff11bb10f-08EwyPIDNBXlXaFbbq2ZgQmuRNu4WT.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785734978316-600f2bdff11bb10f.webp",
+      "size": 1404,
+      "uploadedAt": "2026-08-11T14:36:09.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785734978316-600f2bdff11bb10f-RAUUIKY7Qzey6APWTyko2NTW0HoTvO.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785734982890-45681076597fb265.webp",
+      "size": 1504,
+      "uploadedAt": "2026-08-11T14:36:09.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785734982890-45681076597fb265-MUmt8mcAM5TOLQSI9VwoTrlhd971Zm.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785734982890-45681076597fb265.webp",
+      "size": 1504,
+      "uploadedAt": "2026-08-11T14:36:34.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785734982890-45681076597fb265-Q28rUbd5mKtgY6X4QrD12FCzZ47ZVe.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735066508-d886cd4234c6d7c0.webp",
+      "size": 1770,
+      "uploadedAt": "2026-08-11T14:36:12.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735066508-d886cd4234c6d7c0-41AVrvEaOFQTT7VgAKZjDOEVZmH7He.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735066508-d886cd4234c6d7c0.webp",
+      "size": 1770,
+      "uploadedAt": "2026-08-11T14:36:36.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735066508-d886cd4234c6d7c0-sRobZXIoq8kGc0U6yA7mHIelcBejQ3.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735072313-a6b1b9d3a4830905.webp",
+      "size": 1664,
+      "uploadedAt": "2026-08-11T14:36:11.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735072313-a6b1b9d3a4830905-jvz8zXdyGAB8YW3c3Ex6WmdQRft6Oo.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735072313-a6b1b9d3a4830905.webp",
+      "size": 1664,
+      "uploadedAt": "2026-08-11T14:36:36.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735072313-a6b1b9d3a4830905-rlHxFi9gcbQxSbXAAobAJwmhl3wUDP.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735072859-eb5bd11eb2be5728.webp",
+      "size": 5166,
+      "uploadedAt": "2026-08-11T14:36:35.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735072859-eb5bd11eb2be5728-hGTchKaqcbSyGEwEQGPhq4UDWq8Klp.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735072859-eb5bd11eb2be5728.webp",
+      "size": 5166,
+      "uploadedAt": "2026-08-11T14:36:10.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735072859-eb5bd11eb2be5728-qka7ayRE7jRkYub5rbyhijRm98eqV6.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735086863-235332ef291f1c95.webp",
+      "size": 1946,
+      "uploadedAt": "2026-08-11T14:36:15.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735086863-235332ef291f1c95-DWEsGY38URLU0gScaEMHtQmoYj94Gt.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735086863-235332ef291f1c95.webp",
+      "size": 1946,
+      "uploadedAt": "2026-08-11T14:36:39.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735086863-235332ef291f1c95-UW34Y8Ru7CdEjUV6QGgVYpYSFnmR5d.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735090844-bd214238654d5bd2.webp",
+      "size": 1860,
+      "uploadedAt": "2026-08-11T14:36:14.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735090844-bd214238654d5bd2-OIRAsDBPzaxEYkPfT7bIzRClDNhsr2.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735090844-bd214238654d5bd2.webp",
+      "size": 1860,
+      "uploadedAt": "2026-08-11T14:36:38.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735090844-bd214238654d5bd2-Ooye2hSkhFH0iXygcxQK4ZN16lCykz.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735107548-cf8482372711e374.webp",
+      "size": 2218,
+      "uploadedAt": "2026-08-11T14:36:38.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735107548-cf8482372711e374-EE7N9mnpkynekNxvjEiZKTokNumEvK.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735107548-cf8482372711e374.webp",
+      "size": 2218,
+      "uploadedAt": "2026-08-11T14:36:13.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735107548-cf8482372711e374-KIwmPmgYGGxdfemUqgLLNtA8b6QCNL.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735133692-d7e5426f8c1cafa9.webp",
+      "size": 1576,
+      "uploadedAt": "2026-08-11T14:36:37.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735133692-d7e5426f8c1cafa9-1asvNEbniRskqdStnUzGhlokFtk4IM.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735133692-d7e5426f8c1cafa9.webp",
+      "size": 1576,
+      "uploadedAt": "2026-08-11T14:36:12.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735133692-d7e5426f8c1cafa9-WLSoqCz55ie6cwHe2h2DWMD1ILcudx.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735142197-ce881b64353d5718.webp",
+      "size": 1780,
+      "uploadedAt": "2026-08-11T14:36:39.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735142197-ce881b64353d5718-km2hcLvqrYc7ud06tkmTUscw6YpngS.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735142197-ce881b64353d5718.webp",
+      "size": 1780,
+      "uploadedAt": "2026-08-11T14:36:15.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735142197-ce881b64353d5718-vgNgrWNXFeEW3eJqcYcXZaiWF9ScHw.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735174131-1e0fcdbc8452b2b5.webp",
+      "size": 3314,
+      "uploadedAt": "2026-08-11T14:36:16.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735174131-1e0fcdbc8452b2b5-LqCMwL4JWuNVfO57SeVhFAf5389wWR.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735174131-1e0fcdbc8452b2b5.webp",
+      "size": 3314,
+      "uploadedAt": "2026-08-11T14:36:40.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735174131-1e0fcdbc8452b2b5-vRG8XiyvajBpRlbn9P3hdBEEpraXX2.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735186481-1df515fdb919fdec.webp",
+      "size": 3258,
+      "uploadedAt": "2026-08-11T14:36:41.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735186481-1df515fdb919fdec-Fm1yeoIIddlIxrosPseW6LylripTxW.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735186481-1df515fdb919fdec.webp",
+      "size": 3258,
+      "uploadedAt": "2026-08-11T14:36:17.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735186481-1df515fdb919fdec-w5uKpLbyhwQFrZAsaPvSR4G9JSJYe4.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735208960-0ecb9b8069d80fe9.webp",
+      "size": 3578,
+      "uploadedAt": "2026-08-11T14:36:43.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735208960-0ecb9b8069d80fe9-q4DWpqGaXNTIeUH3H5d5lzR5hwJRrB.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735208960-0ecb9b8069d80fe9.webp",
+      "size": 3578,
+      "uploadedAt": "2026-08-11T14:36:19.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735208960-0ecb9b8069d80fe9-yIJze7OlKEVwb5nFMEhK4NORclpkOR.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735213641-52a51688ba421e13.webp",
+      "size": 3572,
+      "uploadedAt": "2026-08-11T14:36:41.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735213641-52a51688ba421e13-3oPf7isyrk9zhAq9IbWqqMX26nmiVp.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735213641-52a51688ba421e13.webp",
+      "size": 3572,
+      "uploadedAt": "2026-08-11T14:36:17.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735213641-52a51688ba421e13-Vr4zCIFsrME2zN83iyrlqkBC4nxJVt.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735268645-ca43753ccc9f3f55.webp",
+      "size": 2096,
+      "uploadedAt": "2026-08-11T14:36:22.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735268645-ca43753ccc9f3f55-97DkFeq6Cr0USAOUDESjQJwR6qd7uQ.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735268645-ca43753ccc9f3f55.webp",
+      "size": 2096,
+      "uploadedAt": "2026-08-11T14:36:45.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735268645-ca43753ccc9f3f55-SX0zX84Z5TgyqDPLXLCeZQMxjL6zbT.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735296863-045f80af55e8d3be.webp",
+      "size": 6230,
+      "uploadedAt": "2026-08-11T14:36:42.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735296863-045f80af55e8d3be-CT7tHRJPtogChk7ptpSdiEysOSwWgN.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735296863-045f80af55e8d3be.webp",
+      "size": 6230,
+      "uploadedAt": "2026-08-11T14:36:19.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735296863-045f80af55e8d3be-smExD1cZI7OcVXzXqMOF4BcfBNt9y2.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735297308-6a358ba0e170f15b.webp",
+      "size": 3618,
+      "uploadedAt": "2026-08-11T14:36:42.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735297308-6a358ba0e170f15b-fvt2iv2QJ19uM4pksXlODBoGhzV5Gr.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735297308-6a358ba0e170f15b.webp",
+      "size": 3618,
+      "uploadedAt": "2026-08-11T14:36:18.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735297308-6a358ba0e170f15b-qAvcc4Pya6P04IfssLSquHW3gV4f4h.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735302553-dee9fbafc5b6565a.webp",
+      "size": 2586,
+      "uploadedAt": "2026-08-11T14:36:21.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735302553-dee9fbafc5b6565a-KPA6zyTRCrQj6Arb8CFiiHKN1SFK6G.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735302553-dee9fbafc5b6565a.webp",
+      "size": 2586,
+      "uploadedAt": "2026-08-11T14:36:44.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735302553-dee9fbafc5b6565a-uMxuFhzGoLkbdiUUGY2QGRUqcfJVM3.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735328196-055db35ebc8cc4eb.webp",
+      "size": 1538,
+      "uploadedAt": "2026-08-11T14:36:21.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735328196-055db35ebc8cc4eb-nKdq6D0kzAo4jC2KB9j0wwoRcO3EyO.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735328196-055db35ebc8cc4eb.webp",
+      "size": 1538,
+      "uploadedAt": "2026-08-11T14:36:44.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735328196-055db35ebc8cc4eb-vaJpy9bS5fRsMzS4agpXTC4Pa4ETST.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735342516-ffcaf2a99ddae2a9.webp",
+      "size": 4440,
+      "uploadedAt": "2026-08-11T14:36:23.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735342516-ffcaf2a99ddae2a9-Coy1i088hVmpWE4tcNjutnZjRZUmM9.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1785735342516-ffcaf2a99ddae2a9.webp",
+      "size": 4440,
+      "uploadedAt": "2026-08-11T14:36:46.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1785735342516-ffcaf2a99ddae2a9-FU161oiVogpOnRGi1n8rJfZwPq7SWN.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034272455-2ad3d4b32aeb01a0.webp",
+      "size": 19108,
+      "uploadedAt": "2026-08-11T14:36:24.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034272455-2ad3d4b32aeb01a0-ZKi2Bj9AV9IWKcvjkkz8NjRhhGTKlw.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034272455-2ad3d4b32aeb01a0.webp",
+      "size": 19108,
+      "uploadedAt": "2026-08-11T14:36:47.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034272455-2ad3d4b32aeb01a0-s3C1nzARVP7qvofLBByAtc7bx8VjNQ.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034307868-413298a3d7d195b6.webp",
+      "size": 16972,
+      "uploadedAt": "2026-08-11T14:36:47.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034307868-413298a3d7d195b6-WfLHL8AMEtz1wKfuwKtKUKLYVKkWT7.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034307868-413298a3d7d195b6.webp",
+      "size": 16972,
+      "uploadedAt": "2026-08-11T14:36:24.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034307868-413298a3d7d195b6-rlJnwAU3DoNQIjaGLaY94hYWaGuSNK.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034345964-1ad8f24fb26ff5d2.webp",
+      "size": 9648,
+      "uploadedAt": "2026-08-11T14:36:25.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034345964-1ad8f24fb26ff5d2-g2tkjO6aaOhvuGYORq5KJCsn29WQSm.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034345964-1ad8f24fb26ff5d2.webp",
+      "size": 9648,
+      "uploadedAt": "2026-08-11T14:36:49.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034345964-1ad8f24fb26ff5d2-uEXIa9oRUJn3C8wIkXC4NhIuIaLqcu.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034385935-1e91be6aaf955801.webp",
+      "size": 2910,
+      "uploadedAt": "2026-08-11T14:36:26.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034385935-1e91be6aaf955801-QiEim7Yw51rtUNeK0iGrPzJMQ4eQzg.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034385935-1e91be6aaf955801.webp",
+      "size": 2910,
+      "uploadedAt": "2026-08-11T14:36:49.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034385935-1e91be6aaf955801-id9CToFcsP4wOfDf7A3GPB1rrMXLkp.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034394456-3c541e88ca89b20c.webp",
+      "size": 5478,
+      "uploadedAt": "2026-08-11T14:36:25.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034394456-3c541e88ca89b20c-DXDBvHFTdd35gqV6OWxAkSW5Ljc3vA.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034394456-3c541e88ca89b20c.webp",
+      "size": 5478,
+      "uploadedAt": "2026-08-11T14:36:48.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034394456-3c541e88ca89b20c-k6ZEuX98ZwKSbd7W6ZwSUpk6OAiEAv.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034475772-468cc52578708346.webp",
+      "size": 8446,
+      "uploadedAt": "2026-08-11T14:36:27.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034475772-468cc52578708346-Kly2nG2vFdnRcF3C6p00ZOLTPHVKSf.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034475772-468cc52578708346.webp",
+      "size": 8446,
+      "uploadedAt": "2026-08-11T14:36:51.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034475772-468cc52578708346-VB4497OxSFQ31YZhDSiphWhCRVmKlq.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034475981-afd24dd6a1b16f76.webp",
+      "size": 8076,
+      "uploadedAt": "2026-08-11T14:36:50.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034475981-afd24dd6a1b16f76-BabmzA0qaKrXV04N2EZjRix5UhSrMe.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786034475981-afd24dd6a1b16f76.webp",
+      "size": 8076,
+      "uploadedAt": "2026-08-11T14:36:26.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786034475981-afd24dd6a1b16f76-klz4oa5KrODs5G9wYCrgfPmLaSjpOq.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786035237311-03b3e804c338a0df.webp",
+      "size": 1272,
+      "uploadedAt": "2026-08-11T14:36:30.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786035237311-03b3e804c338a0df-KxB3H16UyuNjEFTXESCiNC9G2YWZN8.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786035237311-03b3e804c338a0df.webp",
+      "size": 1272,
+      "uploadedAt": "2026-08-11T14:36:54.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786035237311-03b3e804c338a0df-dyzMGihyKTXHu1PHn7LvjsIfBiAkGD.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786035238879-d8b77b90b7e7818e.webp",
+      "size": 1462,
+      "uploadedAt": "2026-08-11T14:36:53.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786035238879-d8b77b90b7e7818e-IGjL2sDgtnr2eVUMQrPZb2MIGLUjTZ.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786035238879-d8b77b90b7e7818e.webp",
+      "size": 1462,
+      "uploadedAt": "2026-08-11T14:36:29.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786035238879-d8b77b90b7e7818e-fkVfcSwAkWYrhWAT43vKS2FBmm0fCb.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786035298090-8e27dfd386183b38.webp",
+      "size": 1994,
+      "uploadedAt": "2026-08-11T14:36:52.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786035298090-8e27dfd386183b38-TecwssxTJzpyPCUKz0AYE4uzCK0IFk.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786035298090-8e27dfd386183b38.webp",
+      "size": 1994,
+      "uploadedAt": "2026-08-11T14:36:28.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786035298090-8e27dfd386183b38-Yr2UuJZCZrl4spYPcjc5YUaOEFrbEI.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786035299738-0f3a5e4d932e2d9b.webp",
+      "size": 1638,
+      "uploadedAt": "2026-08-11T14:36:29.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786035299738-0f3a5e4d932e2d9b-0dmUi4XsPuWo1Ed8IE16cyfzEEiUFd.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786035299738-0f3a5e4d932e2d9b.webp",
+      "size": 1638,
+      "uploadedAt": "2026-08-11T14:36:52.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786035299738-0f3a5e4d932e2d9b-A1Lr7Fte8lKuJfQk3IzEAyHLo6DiWy.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786063731074-2e084bacf4f734ad.webp",
+      "size": 1394,
+      "uploadedAt": "2026-08-11T14:36:30.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786063731074-2e084bacf4f734ad-XCJ70H6jhM5ylhvRsDyNDcCflleWGO.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786063731074-2e084bacf4f734ad.webp",
+      "size": 1394,
+      "uploadedAt": "2026-08-11T14:36:54.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786063731074-2e084bacf4f734ad-mKYt3ddR2YFKmSjA1tmFAsRmtM7pJg.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786063773039-dc5d3e3895e00eb0.webp",
+      "size": 3122,
+      "uploadedAt": "2026-08-11T14:36:55.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786063773039-dc5d3e3895e00eb0-1fEX2b24LYJEj7p8MXbCg5KavKbobl.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786063773039-dc5d3e3895e00eb0.webp",
+      "size": 3122,
+      "uploadedAt": "2026-08-11T14:36:31.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786063773039-dc5d3e3895e00eb0-istcgWQ8hR3UGipfo8QKHQdqbkQgD7.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786063876180-9541a58879514f77.webp",
+      "size": 4978,
+      "uploadedAt": "2026-08-11T14:36:32.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786063876180-9541a58879514f77-nVlc5FlvcSHpWrF6oYOtdkYbC9zimJ.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786063876180-9541a58879514f77.webp",
+      "size": 4978,
+      "uploadedAt": "2026-08-11T14:36:55.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786063876180-9541a58879514f77-q1aebzKzTlIdZX6003cC10Gr8lVTBK.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786169433618-8e27dfd386183b38.webp",
+      "size": 1994,
+      "uploadedAt": "2026-08-11T14:37:02.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786169433618-8e27dfd386183b38-AWTjSlCR7G5Upcb9dYMbM43VJp7lXQ.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786169433618-8e27dfd386183b38.webp",
+      "size": 1994,
+      "uploadedAt": "2026-08-11T14:36:57.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786169433618-8e27dfd386183b38-nq1svyv0LtIUsOz5fk8MeQ1G5C9zwN.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786169443568-055db35ebc8cc4eb.webp",
+      "size": 1538,
+      "uploadedAt": "2026-08-11T14:36:56.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786169443568-055db35ebc8cc4eb-5JmZVTo5yzMmpRpRTh7a7JMwmlUPgC.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786169443568-055db35ebc8cc4eb.webp",
+      "size": 1538,
+      "uploadedAt": "2026-08-11T14:37:01.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786169443568-055db35ebc8cc4eb-8uPXLN4PiBJ1mQUOlGGJVqlF3N75Hy.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786169972012-9541a58879514f77.webp",
+      "size": 4978,
+      "uploadedAt": "2026-08-11T14:36:58.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786169972012-9541a58879514f77-VfeyM0yQtggBkjeis8TPuDLy7gigqZ.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786169972012-9541a58879514f77.webp",
+      "size": 4978,
+      "uploadedAt": "2026-08-11T14:37:03.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786169972012-9541a58879514f77-dtxz5VN2EhUkD63z6i3btwMYrbqaGV.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786169981367-197b8756ba339e49.webp",
+      "size": 3432,
+      "uploadedAt": "2026-08-11T14:36:58.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786169981367-197b8756ba339e49-BUHC2puAelOJ5w5AxmIT4a0dRjCm7s.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786169981367-197b8756ba339e49.webp",
+      "size": 3432,
+      "uploadedAt": "2026-08-11T14:37:04.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786169981367-197b8756ba339e49-UusF5OzEqRIq0coATIMErNui4n35os.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786170006282-babed6073f3cdb91.webp",
+      "size": 2222,
+      "uploadedAt": "2026-08-11T14:36:57.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786170006282-babed6073f3cdb91-ILHRMgRYGLHjkgec5Ic0ineIvW7A61.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786170006282-babed6073f3cdb91.webp",
+      "size": 2222,
+      "uploadedAt": "2026-08-11T14:37:02.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786170006282-babed6073f3cdb91-QIsorqJMV57FzyUUrzQEfyTq7VuaiV.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786170238563-d7e5426f8c1cafa9.webp",
+      "size": 1576,
+      "uploadedAt": "2026-08-11T14:37:05.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786170238563-d7e5426f8c1cafa9-s7WNCFJRcod9cKno4EerdH8OOMa3Fu.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786170238563-d7e5426f8c1cafa9.webp",
+      "size": 1576,
+      "uploadedAt": "2026-08-11T14:36:59.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786170238563-d7e5426f8c1cafa9-wgs6doV9r133T10IiMslxwxjR8uz5k.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786170259274-d886cd4234c6d7c0.webp",
+      "size": 1770,
+      "uploadedAt": "2026-08-11T14:37:05.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786170259274-d886cd4234c6d7c0-J5NmNLCBuoTU3pXkHI2JLQY4cpV42V.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786170259274-d886cd4234c6d7c0.webp",
+      "size": 1770,
+      "uploadedAt": "2026-08-11T14:36:59.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786170259274-d886cd4234c6d7c0-JwCKWUB4jHzmFOk7k9ytJOK7K5ccbp.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786253572497-2e084bacf4f734ad.webp",
+      "size": 1394,
+      "uploadedAt": "2026-08-11T14:37:06.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786253572497-2e084bacf4f734ad-SVELiNkgqz0qCoh6w4nmnEzCmhIDUj.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786253572497-2e084bacf4f734ad.webp",
+      "size": 1394,
+      "uploadedAt": "2026-08-11T14:37:00.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786253572497-2e084bacf4f734ad-dUK7jBFw3gQnBoA7K2PoJ1fYvDAuBN.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786335822143-29d8bf69495fa157.webp",
+      "size": 2338,
+      "uploadedAt": "2026-08-11T14:37:06.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786335822143-29d8bf69495fa157-PHMEKoJ7mTjJTqvbUz00PPuUZj4yfU.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-final-1786335822143-29d8bf69495fa157.webp",
+      "size": 2338,
+      "uploadedAt": "2026-08-11T14:37:01.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-final-1786335822143-29d8bf69495fa157-wg16lfBzF2tsUygIfiwbVy18vRUjQr.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-smoke-1785732777057-d991a4cbe25d7c23.webp",
+      "size": 7438,
+      "uploadedAt": "2026-08-11T12:57:57.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-smoke-1785732777057-d991a4cbe25d7c23-6Erf7R3fOkPn3leIKVopOVqGoZloEw.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/public-smoke-1785732855044-4cd93c02128a835a.webp",
+      "size": 4730,
+      "uploadedAt": "2026-08-11T12:57:57.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785642780070/preview/public-smoke-1785732855044-4cd93c02128a835a-YeNaQTdZujOgManKxpxp917BQ9DrOd.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785657051282-1f43ac800eb5425e.webp",
+      "size": 27764,
+      "uploadedAt": "2026-08-11T13:23:08.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785657051282-1f43ac800eb5425e-cvx0ADKgvnhciYjHVffwFKtv3ap2h3.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785657051282-1f43ac800eb5425e.webp",
+      "size": 27764,
+      "uploadedAt": "2026-08-11T13:29:52.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785657051282-1f43ac800eb5425e-dAFMeXHRNXvVN1J5hsZsp3iSfUfggH.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686331038-1876be3442680999.webp",
+      "size": 31566,
+      "uploadedAt": "2026-08-11T13:29:53.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686331038-1876be3442680999-1PEr6KampgQJGWSIeiz4VXnl7WpaDJ.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686331038-1876be3442680999.webp",
+      "size": 31566,
+      "uploadedAt": "2026-08-11T13:23:09.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686331038-1876be3442680999-4llmWwJ8IpZe3rbE5zgnSKqgNwRKOy.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686793150-7b0a1bee21eab03c.jpg",
+      "size": 262161,
+      "uploadedAt": "2026-08-11T13:29:55.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686793150-7b0a1bee21eab03c-eqxUJtGErZ8IZeVoywLtbLloP7MWCR.jpg"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686793150-7b0a1bee21eab03c.jpg",
+      "size": 262161,
+      "uploadedAt": "2026-08-11T13:23:11.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686793150-7b0a1bee21eab03c-jS55Y9XdWu9v2jqaosAEa2oJkIhCO6.jpg"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686875914-a5cc59f476431289.webp",
+      "size": 19616,
+      "uploadedAt": "2026-08-11T13:23:12.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686875914-a5cc59f476431289-0ddW6P2YANyaVDIKZ5k1yIEyl8I2Ic.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686875914-a5cc59f476431289.webp",
+      "size": 19616,
+      "uploadedAt": "2026-08-11T13:29:56.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686875914-a5cc59f476431289-O7l7hub9hdC8gZRfzoIPwAex8eJJq2.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686876138-ae4f03f696f1e841.webp",
+      "size": 20944,
+      "uploadedAt": "2026-08-11T13:23:15.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686876138-ae4f03f696f1e841-5nZ8Oqu3X3gxfdso5ZZkCQZjvk8OwV.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686876138-ae4f03f696f1e841.webp",
+      "size": 20944,
+      "uploadedAt": "2026-08-11T13:30:00.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686876138-ae4f03f696f1e841-M0203ZioVgcrysjWffU1g9OMcVeCO5.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686891088-a1a414280c499bb5.webp",
+      "size": 25534,
+      "uploadedAt": "2026-08-11T13:29:58.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686891088-a1a414280c499bb5-vmQN5kVc3z4po0kAxMuKLJqAn8r0M4.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686891088-a1a414280c499bb5.webp",
+      "size": 25534,
+      "uploadedAt": "2026-08-11T13:23:14.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686891088-a1a414280c499bb5-xWIk9DbPrLCNnWRKAU6PX6dRKrJCFt.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686918990-4a35d7e4182cfa38.webp",
+      "size": 32892,
+      "uploadedAt": "2026-08-11T13:29:57.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686918990-4a35d7e4182cfa38-MkjmO4wWnAk9GCuzo2yG1k2vmUj4bK.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686918990-4a35d7e4182cfa38.webp",
+      "size": 32892,
+      "uploadedAt": "2026-08-11T13:23:13.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686918990-4a35d7e4182cfa38-piVgNxoQkqwHWihqOHGoyN2yDgk4X9.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686956396-ef1f8cf8bad2ac8f.webp",
+      "size": 45242,
+      "uploadedAt": "2026-08-11T13:29:29.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686956396-ef1f8cf8bad2ac8f-Ux09sFmgoauUDpchjJZFmVIczOiRzf.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785686956396-ef1f8cf8bad2ac8f.webp",
+      "size": 45242,
+      "uploadedAt": "2026-08-11T13:30:01.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785686956396-ef1f8cf8bad2ac8f-efSWHrEDja4r6rbD3MORY4kUDkSeYE.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687012369-1cbb7be66b69ffea.webp",
+      "size": 23396,
+      "uploadedAt": "2026-08-11T13:29:34.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687012369-1cbb7be66b69ffea-zggJ6pqZUig5N6lw3LgicRefmxb9p0.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687074644-8979334ef74ecaf3.webp",
+      "size": 28788,
+      "uploadedAt": "2026-08-11T13:29:33.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687074644-8979334ef74ecaf3-zYwMJzyfrcEsG9HeLzzkaorwLaN3tO.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687092140-a7ba7745abd784ea.webp",
+      "size": 25766,
+      "uploadedAt": "2026-08-11T13:29:32.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687092140-a7ba7745abd784ea-3NWNskoXJv03ryioO85MLuhusLdko6.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687094747-6bb2e25df445e668.webp",
+      "size": 16578,
+      "uploadedAt": "2026-08-11T13:29:30.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687094747-6bb2e25df445e668-GcVpcxeRElde0WbJePGGUS0rJs77OH.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687345438-0d8cdc78fbcefb43.webp",
+      "size": 19626,
+      "uploadedAt": "2026-08-11T13:29:35.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687345438-0d8cdc78fbcefb43-5vxYsKgLwb2qLB4GSsSgY0jhFswozY.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687524421-5debfb269d2fc2ac.webp",
+      "size": 24330,
+      "uploadedAt": "2026-08-11T13:29:39.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687524421-5debfb269d2fc2ac-dFjKuYrgZ8ztQZOGurrwcivPPUmQqQ.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687526228-0c289880ce3dc835.webp",
+      "size": 19954,
+      "uploadedAt": "2026-08-11T13:29:37.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687526228-0c289880ce3dc835-XHlEGeZ899YWIXDDFsNagJwTxjwV1M.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687587622-cdb85cf4014600ac.webp",
+      "size": 24068,
+      "uploadedAt": "2026-08-11T13:29:38.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687587622-cdb85cf4014600ac-adpCc9DX9Dh5naK7sM2fCWKifq7TYh.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687592018-662914118b50e4df.webp",
+      "size": 39284,
+      "uploadedAt": "2026-08-11T13:29:41.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687592018-662914118b50e4df-HpGpxmjnCx1kDN6G675tY00EFeY1kT.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687593480-adb9e489f26a8f78.webp",
+      "size": 96412,
+      "uploadedAt": "2026-08-11T13:29:43.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687593480-adb9e489f26a8f78-py3TdcB0I7j28fpGSFU9e2rzpJBVlf.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687629205-13fd227285d083a4.webp",
+      "size": 24210,
+      "uploadedAt": "2026-08-11T13:29:40.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687629205-13fd227285d083a4-7iieOXge3hSKdLzpYiEBmAaYEPs0cQ.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687639325-e5e6c16eb6086bf8.webp",
+      "size": 73046,
+      "uploadedAt": "2026-08-11T13:29:45.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687639325-e5e6c16eb6086bf8-j6m8wNoxvodWaEf0BTirCba23psW2j.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687641498-45dd43555cae825d.webp",
+      "size": 25160,
+      "uploadedAt": "2026-08-11T13:29:47.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687641498-45dd43555cae825d-IuZvr3BTLFRX72fF6x6DPgH1Fhqq0r.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687654515-fd38227fb0e6c7f2.webp",
+      "size": 37780,
+      "uploadedAt": "2026-08-11T13:29:48.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687654515-fd38227fb0e6c7f2-2X4o1vSib8mSTE8KwUibsTPvMy5X1i.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687691483-641636a6a04628f9.webp",
+      "size": 37388,
+      "uploadedAt": "2026-08-11T13:29:49.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687691483-641636a6a04628f9-0Z5FHGnwsXWEsrvQaBBk73OmcXRCa0.webp"
+    },
+    {
+      "pathname": "exhibition-images/1785656102446/full/public-batch2-1785687848778-34b91d69b75bafc1.webp",
+      "size": 40358,
+      "uploadedAt": "2026-08-11T13:29:51.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/exhibition-images/1785656102446/full/public-batch2-1785687848778-34b91d69b75bafc1-NyPgXHv5d2tY5GXxUrUOQ5k30WfHnB.webp"
+    },
+    {
+      "pathname": "uploads/1786457966626-phase-a-endpoint-check.png",
+      "size": 122,
+      "uploadedAt": "2026-08-11T14:19:27.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1786457966626-phase-a-endpoint-check-vc7sDGdzs3KaHjLYDOsORIpuPBuW66.png"
+    },
+    {
+      "pathname": "uploads/1786458794264-phaseA-replace-1786458794074-preview.png",
+      "size": 158,
+      "uploadedAt": "2026-08-11T14:33:15.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1786458794264-phaseA-replace-1786458794074-preview-qn2ekNSZEHgQvRoO4RccJLbGS6Ylg2.png"
+    },
+    {
+      "pathname": "uploads/1786458794834-phaseA-replace-1786458794074-full.png",
+      "size": 158,
+      "uploadedAt": "2026-08-11T14:33:15.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1786458794834-phaseA-replace-1786458794074-full-SRuXmHNg5voib51f3ibQWOPUpKUMXa.png"
+    },
+    {
+      "pathname": "uploads/1786458795773-phaseA-new-1786458795631-preview.png",
+      "size": 160,
+      "uploadedAt": "2026-08-11T14:33:16.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1786458795773-phaseA-new-1786458795631-preview-T7Z3Cc1iLDauWs0zrLEw2GxvI2dJwb.png"
+    },
+    {
+      "pathname": "uploads/1786458796200-phaseA-new-1786458795631-full.png",
+      "size": 160,
+      "uploadedAt": "2026-08-11T14:33:17.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1786458796200-phaseA-new-1786458795631-full-TtHFoUICtuVxqo0nfnDf03MSkNuZMG.png"
+    },
+    {
+      "pathname": "uploads/1786459140658-postFinal-replace-1786459138396-preview.png",
+      "size": 170,
+      "uploadedAt": "2026-08-11T14:39:01.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1786459140658-postFinal-replace-1786459138396-preview-1lbEMNp6aiO4zmHEQW0BR32A6RVGA7.png"
+    },
+    {
+      "pathname": "uploads/1786459141146-postFinal-replace-1786459138396-full.png",
+      "size": 170,
+      "uploadedAt": "2026-08-11T14:39:02.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1786459141146-postFinal-replace-1786459138396-full-7RbsHbkbBsXqxw4OxSm7uza1IMji2m.png"
+    },
+    {
+      "pathname": "uploads/1786459142277-postFinal-new-1786459139779-preview.png",
+      "size": 172,
+      "uploadedAt": "2026-08-11T14:39:03.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1786459142277-postFinal-new-1786459139779-preview-THOljTFKK8u2oQSTPO9aeRT2JTbheK.png"
+    },
+    {
+      "pathname": "uploads/1786459142626-postFinal-new-1786459139779-full.png",
+      "size": 172,
+      "uploadedAt": "2026-08-11T14:39:03.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1786459142626-postFinal-new-1786459139779-full-nIvI9NIH3LJHBsRnkljVsswdmrShlu.png"
+    },
+    {
+      "pathname": "uploads/1786459180000-post-migration-new-1786459177777-preview.png",
+      "size": 174,
+      "uploadedAt": "2026-08-11T14:39:41.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1786459180000-post-migration-new-1786459177777-preview-PRz0cG523ioSMP3tj53TV2CijchgIm.png"
+    },
+    {
+      "pathname": "uploads/1786459180338-post-migration-new-1786459177777-full.png",
+      "size": 174,
+      "uploadedAt": "2026-08-11T14:39:41.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1786459180338-post-migration-new-1786459177777-full-XqqZQWqwjHZlGVZVcwpt0Q5ktTyfDQ.png"
+    },
+    {
+      "pathname": "uploads/1787578819223-credential-restore-smoke-1787578818679.png",
+      "size": 68,
+      "uploadedAt": "2026-08-24T13:40:20.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1787578819223-credential-restore-smoke-1787578818679-1EApDPuBnHthXA9xWhDS51l3Xl0vqF.png"
+    },
+    {
+      "pathname": "uploads/1787578997539-credential-durability-smoke-1787578997291.png",
+      "size": 68,
+      "uploadedAt": "2026-08-24T13:43:18.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1787578997539-credential-durability-smoke-1787578997291-kp2zFFSGuHVqYgan0S9hp1YeC0ahkW.png"
+    },
+    {
+      "pathname": "uploads/1787579190083-__________________SET-preview.webp",
+      "size": 2158,
+      "uploadedAt": "2026-08-24T13:46:31.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1787579190083-__________________SET-preview-JaqEeVP78yyCkAUGUID4vVcJIwAPNs.webp"
+    },
+    {
+      "pathname": "uploads/1787579190933-__________________SET-full.webp",
+      "size": 22082,
+      "uploadedAt": "2026-08-24T13:46:31.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1787579190933-__________________SET-full-ujRaArCX7pHcgfQ8haUXraiwzXtYj8.webp"
+    },
+    {
+      "pathname": "uploads/1787579198658-_________________SET-preview.webp",
+      "size": 3490,
+      "uploadedAt": "2026-08-24T13:46:39.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1787579198658-_________________SET-preview-t9NSqvPme6VxI2YSQyrxEM3G7FbkvI.webp"
+    },
+    {
+      "pathname": "uploads/1787579199616-_________________SET-full.webp",
+      "size": 86594,
+      "uploadedAt": "2026-08-24T13:46:40.000Z",
+      "contentType": null,
+      "url": "https://8grgabdn7kw6yuh3.public.blob.vercel-storage.com/uploads/1787579199616-_________________SET-full-jxwWGXHIqyKhyFJRhqLxIs93l1ex5s.webp"
+    }
+  ]
+}

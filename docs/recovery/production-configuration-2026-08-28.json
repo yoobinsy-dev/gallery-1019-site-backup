@@ -1,0 +1,108 @@
+{
+  "checkpointDate": "2026-08-28",
+  "secretsIncluded": false,
+  "vercel": {
+    "team": {
+      "name": "1019Gallery",
+      "slug": "1019-gallery",
+      "id": "team_pLAV9RSL1pTmVUlpjZITNGc9"
+    },
+    "project": {
+      "name": "gallery-1019-site",
+      "id": "prj_YCn5F9fEsMGHpBBKInqNNkbvPuwG"
+    },
+    "deployment": {
+      "id": "dpl_7HgdbmtTZmfnKyL2Lx6LgCnJ87Sa",
+      "status": "READY",
+      "target": "production",
+      "sourceCommit": "43c0ac9b099e6fb7b7b22da6bc6fbe68342e20d1"
+    },
+    "canonicalAlias": "gallery-1019-site.vercel.app",
+    "aliases": [
+      "gallery-1019-site.vercel.app",
+      "gallery-1019-site-nine.vercel.app",
+      "gallery-1019-site-1019-gallery.vercel.app"
+    ]
+  },
+  "neon": {
+    "project": {
+      "name": "neon-purple-ball",
+      "id": "calm-glitter-93873921",
+      "region": "aws-us-east-1"
+    },
+    "productionBranch": {
+      "name": "main",
+      "id": "br-crimson-flower-auah6zwc",
+      "endpointId": "ep-autumn-brook-aum5q7ch",
+      "database": "neondb"
+    },
+    "recoveryBranch": {
+      "name": "backup-pre-refactor-2026-08-28",
+      "id": "br-calm-hat-au74cbb0",
+      "parentBranchId": "br-crimson-flower-auah6zwc",
+      "parentLsn": "1/E2B44598",
+      "parentTimestamp": "2026-08-28T02:03:32Z",
+      "computeCreated": false
+    }
+  },
+  "blobStores": [
+    {
+      "role": "public exhibition images",
+      "name": "gallery-1019-exhibition-images-public",
+      "id": "store_8GrgABDn7KW6YuH3",
+      "access": "public",
+      "region": "iad1",
+      "objectCount": 182,
+      "totalSize": 2588974,
+      "manifest": "docs/recovery/public-exhibition-images-2026-08-28.json"
+    },
+    {
+      "role": "private archive",
+      "name": "gallery-1019-files",
+      "id": "store_0ZIuNusQlsmfHXmW",
+      "access": "private",
+      "region": "iad1",
+      "objectCount": 3,
+      "totalSize": 132170,
+      "manifest": "docs/recovery/private-archive-2026-08-28.json"
+    }
+  ],
+  "environmentVariables": [
+    {
+      "name": "DATABASE_URL",
+      "exists": true,
+      "scope": ["production"],
+      "intendedResource": "Neon project calm-glitter-93873921, production branch br-crimson-flower-auah6zwc, database neondb"
+    },
+    {
+      "name": "POSTGRES_URL",
+      "exists": true,
+      "scope": ["production"],
+      "intendedResource": "Neon project calm-glitter-93873921, production branch br-crimson-flower-auah6zwc, database neondb"
+    },
+    {
+      "name": "POSTGRES_PRISMA_URL",
+      "exists": true,
+      "scope": ["production"],
+      "intendedResource": "Neon project calm-glitter-93873921, production branch br-crimson-flower-auah6zwc, database neondb"
+    },
+    {
+      "name": "POSTGRES_URL_NON_POOLING",
+      "exists": true,
+      "scope": ["production"],
+      "intendedResource": "Neon project calm-glitter-93873921, production branch br-crimson-flower-auah6zwc, database neondb"
+    },
+    {
+      "name": "EXHIBITION_IMAGE_READ_WRITE_TOKEN",
+      "exists": true,
+      "scope": ["production"],
+      "intendedResource": "public Blob store store_8GrgABDn7KW6YuH3"
+    },
+    {
+      "name": "BLOB_READ_WRITE_TOKEN",
+      "exists": true,
+      "scope": ["production"],
+      "intendedResource": "private Blob store store_0ZIuNusQlsmfHXmW"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "checkpointDate": "2026-08-28",
+  "generatedAt": "2026-08-28T02:50:56.459Z",
+  "inventoryMode": "read-only",
+  "store": {
+    "id": "store_0ZIuNusQlsmfHXmW",
+    "name": "gallery-1019-files",
+    "access": "private",
+    "region": "iad1",
+    "binding": {
+      "variable": "BLOB_READ_WRITE_TOKEN",
+      "scope": "production",
+      "projectId": "prj_YCn5F9fEsMGHpBBKInqNNkbvPuwG"
+    }
+  },
+  "objectCount": 3,
+  "totalSize": 132170,
+  "fields": {
+    "contentType": "null when the Vercel Blob list API did not provide it",
+    "url": "omitted because this store is private"
+  },
+  "objects": [
+    {
+      "pathname": "exhibition-images/1785595618294/full/manual-smoke-1785595631924-449b20d4dc40e620.webp",
+      "size": 120002,
+      "uploadedAt": "2026-08-11T12:24:37.000Z",
+      "contentType": null
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/manual-smoke-1785732777057-d991a4cbe25d7c23.webp",
+      "size": 7438,
+      "uploadedAt": "2026-08-11T12:24:38.000Z",
+      "contentType": null
+    },
+    {
+      "pathname": "exhibition-images/1785642780070/preview/manual-smoke-1785732855044-4cd93c02128a835a.webp",
+      "size": 4730,
+      "uploadedAt": "2026-08-11T12:24:38.000Z",
+      "contentType": null
+    }
+  ]
+}
