@@ -578,42 +578,11 @@
   }
 
   function buildFinanceForTab(tab, monthKey) {
-    const definitions = FIXED_BY_TAB[tab] || { revenue: [], expense: [] };
-
-    const revenueCategories = definitions.revenue.map((category) => buildCategorySnapshot(tab, 'revenue', category, monthKey));
-    const expenseCategories = definitions.expense.map((category) => buildCategorySnapshot(tab, 'expense', category, monthKey));
-
-    const revenueTotal = revenueCategories.reduce((sum, category) => sum + category.total, 0);
-    const expenseTotal = expenseCategories.reduce((sum, category) => sum + category.total, 0);
-
-    return {
+    return globalThis.PotteryAccountingFinanceProjection.buildFinanceForTab({
+      ...getFinanceProjectionOptions(),
       tab,
-      monthKey,
-      revenueCategories,
-      expenseCategories,
-      revenueTotal,
-      expenseTotal,
-      profit: revenueTotal - expenseTotal
-    };
-  }
-
-  function buildCategorySnapshot(tab, side, category, monthKey) {
-    const categoryId = `${tab}:${side}:${category}`;
-    const autoEntries = buildAutoEntries(tab, side, category, monthKey);
-    const manualEntries = buildManualEntries(tab, side, category, monthKey);
-
-    const merged = mergeCategoryEntries(autoEntries, manualEntries);
-    const total = merged.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
-
-    return {
-      id: categoryId,
-      tab,
-      side,
-      category,
-      entries: merged,
-      total,
-      hasAuto: AUTO_CATEGORY_IDS.has(categoryId)
-    };
+      monthKey
+    });
   }
 
   function buildAutoEntries(tab, side, category, monthKey) {
@@ -813,113 +782,46 @@
   }
 
   function buildManualEntries(tab, side, category, monthKey) {
-    const exactMonth = [];
-    const fixedEntries = [];
-
-    state.entries.forEach((entry) => {
-      if (!entry) return;
-      if (entry.tab !== tab || entry.side !== side || entry.category !== category) return;
-      const entryMonth = getMonthKeyFromDate(parseDateOnly(entry.date) || state.monthStart);
-
-      if (entryMonth === monthKey) {
-        exactMonth.push(entry);
-      } else if (entry.fixed && entryMonth < monthKey && isFixedEntryActiveInMonth(entry, monthKey)) {
-        fixedEntries.push(entry);
-      }
+    return globalThis.PotteryAccountingFinanceProjection.buildManualEntries({
+      ...getFinanceProjectionOptions(),
+      tab,
+      side,
+      category,
+      monthKey
     });
-
-    const usedTitleInExactMonth = new Set(exactMonth.map((entry) => normalizeNameKey(entry.title)));
-    const scopedFixed = fixedEntries.filter((entry) => !usedTitleInExactMonth.has(normalizeNameKey(entry.title)));
-
-    const fixedByTitle = new Map();
-    scopedFixed.forEach((entry) => {
-      const key = normalizeNameKey(entry.title);
-      const previous = fixedByTitle.get(key);
-      if (!previous) {
-        fixedByTitle.set(key, entry);
-        return;
-      }
-
-      const prevMonth = getMonthKeyFromDate(parseDateOnly(previous.date) || state.monthStart);
-      const nextMonth = getMonthKeyFromDate(parseDateOnly(entry.date) || state.monthStart);
-      if (nextMonth > prevMonth) {
-        fixedByTitle.set(key, entry);
-      }
-    });
-
-    const result = [];
-    exactMonth.forEach((entry) => {
-      result.push({
-        id: entry.id,
-        source: 'manual',
-        side,
-        category,
-        date: entry.date,
-        title: entry.title,
-        amount: entry.amount,
-        fixed: Boolean(entry.fixed && (!entry.fixedThroughMonth || monthKey < entry.fixedThroughMonth)),
-        fixedThroughMonth: entry.fixedThroughMonth,
-        overrideKey: entry.overrideKey,
-        deleted: entry.deleted,
-        tab
-      });
-    });
-
-    fixedByTitle.forEach((entry) => {
-      result.push({
-        id: entry.id,
-        source: 'manual',
-        side,
-        category,
-        date: entry.date,
-        title: entry.title,
-        amount: entry.amount,
-        fixed: !entry.fixedThroughMonth || monthKey < entry.fixedThroughMonth,
-        fixedThroughMonth: entry.fixedThroughMonth,
-        overrideKey: entry.overrideKey,
-        deleted: entry.deleted,
-        tab
-      });
-    });
-
-    result.sort((a, b) => {
-      const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
-      if (dateCompare !== 0) return dateCompare;
-      return String(a.title || '').localeCompare(String(b.title || ''), 'ko');
-    });
-
-    return result;
   }
 
   function isFixedEntryActiveInMonth(entry, monthKey) {
-    const throughMonth = normalizeMonthKey(entry?.fixedThroughMonth);
-    return !throughMonth || monthKey <= throughMonth;
+    return globalThis.PotteryAccountingFinanceProjection.isFixedEntryActiveInMonth({
+      entry,
+      monthKey,
+      normalizeMonthKey
+    });
   }
 
   function mergeCategoryEntries(autoEntries, manualEntries) {
-    const merged = [];
-    const manualByKey = new Map();
+    return globalThis.PotteryAccountingFinanceProjection.mergeCategoryEntries({
+      autoEntries,
+      manualEntries,
+      getOverrideKey: getAccountingEntryOverrideKey
+    });
+  }
 
-    manualEntries.forEach((entry) => {
-      const key = entry.overrideKey || getAccountingEntryOverrideKey(entry);
-      manualByKey.set(key, entry);
-    });
-
-    autoEntries.forEach((entry) => {
-      const key = getAccountingEntryOverrideKey(entry);
-      if (manualByKey.has(key)) return;
-      merged.push(entry);
-    });
-
-    manualEntries.forEach((entry) => {
-      if (!entry.deleted) merged.push(entry);
-    });
-    merged.sort((a, b) => {
-      const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
-      if (dateCompare !== 0) return dateCompare;
-      return String(a.title || '').localeCompare(String(b.title || ''), 'ko');
-    });
-    return merged;
+  function getFinanceProjectionOptions() {
+    return {
+      definitionsByTab: FIXED_BY_TAB,
+      autoCategoryIds: AUTO_CATEGORY_IDS,
+      entries: state.entries,
+      monthStart: state.monthStart,
+      buildAutoEntries,
+      helpers: {
+        getMonthKeyFromDate,
+        parseDateOnly,
+        normalizeNameKey,
+        normalizeMonthKey,
+        getOverrideKey: getAccountingEntryOverrideKey
+      }
+    };
   }
 
   function getAccountingEntryOverrideKey(entry) {

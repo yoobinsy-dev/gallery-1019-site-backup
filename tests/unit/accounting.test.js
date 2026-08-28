@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 
 const { exposeIifeFunctions } = require('../helpers/load-source');
 const autoEntries = require('../../accounting/auto-entries');
+const financeProjection = require('../../accounting/finance-projection');
 const calendarOccurrences = require('../../master-calendar/occurrences');
 const { buildGallerySalesAutoEntriesLegacy } = require('../fixtures/accounting-gallery-sales-legacy');
 
@@ -23,11 +24,14 @@ function loadAccounting() {
     'roundWon',
     'normalizeDateInput',
     'normalizeNameKey',
-    'collectClassOccurrencesByStudentInMonth'
+    'collectClassOccurrencesByStudentInMonth',
+    'buildManualEntries',
+    'isFixedEntryActiveInMonth'
   ], { globals: {
     getMonthStart,
     MasterCalendarOccurrences: calendarOccurrences,
-    PotteryAccountingAutoEntries: autoEntries
+    PotteryAccountingAutoEntries: autoEntries,
+    PotteryAccountingFinanceProjection: financeProjection
   } }).exposed;
 }
 
@@ -195,6 +199,38 @@ test('accounting characterizes material totals and manual/automatic override pre
   );
 });
 
+test('accounting characterizes finance category order, fixed cutoffs, replacement, and totals', () => {
+  const accounting = loadAccounting();
+  accounting.state.monthStart = new Date('2026-08-01T00:00:00');
+  accounting.state.entries = [
+    { id: 'fixed-old', tab: 'pottery', side: 'expense', category: '관리비', date: '2026-06-01', title: 'Rent', amount: 100, fixed: true },
+    { id: 'fixed-new', tab: 'pottery', side: 'expense', category: '관리비', date: '2026-07-01', title: 'Rent', amount: 200, fixed: true },
+    { id: 'exact', tab: 'pottery', side: 'expense', category: '관리비', date: '2026-08-01', title: ' rent ', amount: 300, fixed: false },
+    { id: 'cutoff', tab: 'pottery', side: 'expense', category: '관리비', date: '2026-07-02', title: 'Internet', amount: 50, fixed: true, fixedThroughMonth: '2026-08' },
+    { id: 'expired', tab: 'pottery', side: 'expense', category: '관리비', date: '2026-07-03', title: 'Expired', amount: 75, fixed: true, fixedThroughMonth: '2026-07' },
+    { id: 'revenue', tab: 'pottery', side: 'revenue', category: '기타', date: '2026-08-04', title: 'Other income', amount: 1000, fixed: false }
+  ];
+  accounting.state.materialOrders = [{
+    id: 'order', orderDate: '2026-08-02', items: [{ price: 100, discount: 10, shippingFee: 5 }]
+  }];
+
+  assert.deepEqual(JSON.parse(JSON.stringify(accounting.buildManualEntries('pottery', 'expense', '관리비', '2026-08'))), [
+    { id: 'cutoff', source: 'manual', side: 'expense', category: '관리비', date: '2026-07-02', title: 'Internet', amount: 50, fixed: false, fixedThroughMonth: '2026-08', tab: 'pottery' },
+    { id: 'exact', source: 'manual', side: 'expense', category: '관리비', date: '2026-08-01', title: ' rent ', amount: 300, fixed: false, tab: 'pottery' }
+  ]);
+  assert.equal(accounting.isFixedEntryActiveInMonth({ fixedThroughMonth: '2026-08' }, '2026-08'), true);
+  assert.equal(accounting.isFixedEntryActiveInMonth({ fixedThroughMonth: '2026-08' }, '2026-09'), false);
+
+  const finance = accounting.buildFinanceForTab('pottery', '2026-08');
+  assert.deepEqual(JSON.parse(JSON.stringify(finance.revenueCategories.map((category) => category.category))), ['수강료', '작품 판매', '가마 소성비', '개인작업 이용료', '기타']);
+  assert.deepEqual(JSON.parse(JSON.stringify(finance.expenseCategories.map((category) => category.category))), ['수강료 강사 커미션', '재료비', '홍보비', '관리비', '청소, 공사 및 기타 작업비', 'ADT 이용료', '인터넷 + 통신료', '직원/스태프 식비', '기타']);
+  assert.deepEqual({ revenueTotal: finance.revenueTotal, expenseTotal: finance.expenseTotal, profit: finance.profit }, {
+    revenueTotal: 1000,
+    expenseTotal: 445,
+    profit: 555
+  });
+});
+
 test('extracted material order totals preserve strict numeric and order-wide behavior', () => {
   const accounting = loadAccounting();
   const orders = [
@@ -250,7 +286,8 @@ test('accounting characterizes monthly class occurrence grouping and dedupe', ()
     Date: FixedDate,
     getMonthStart,
     MasterCalendarOccurrences: calendarOccurrences,
-    PotteryAccountingAutoEntries: autoEntries
+    PotteryAccountingAutoEntries: autoEntries,
+    PotteryAccountingFinanceProjection: financeProjection
   } }).exposed;
   accounting.state.calendarEvents = [
     { kind: '수강', title: 'A', date: '2026-07-27', start: '10:00', end: '11:00', repeatWeekly: true, repeatEndDate: '2026-08-31', repeatSkipDates: ['2026-08-10'] },
@@ -288,7 +325,8 @@ test('accounting characterizes pottery automatic entries and commission rounding
     Date: FixedDate,
     getMonthStart,
     MasterCalendarOccurrences: calendarOccurrences,
-    PotteryAccountingAutoEntries: autoEntries
+    PotteryAccountingAutoEntries: autoEntries,
+    PotteryAccountingFinanceProjection: financeProjection
   } }).exposed;
   accounting.state.students = [
     { name: 'A', tuition: 100, tuitionBasis: '4회' },
