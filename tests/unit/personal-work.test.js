@@ -5,6 +5,7 @@ const { cloneCalendarEvents } = require('../fixtures/calendar');
 const { exposeIifeFunctions } = require('../helpers/load-source');
 const personalWorkCycles = require('../../personal-work/cycles');
 const legacyCycles = require('../fixtures/personal-work-cycles-legacy');
+const calendarOccurrences = require('../../master-calendar/occurrences');
 
 function loadPersonalWork() {
   return exposeIifeFunctions('pottery-personal-work.js', [
@@ -17,7 +18,10 @@ function loadPersonalWork() {
     'isPaymentRequired',
     'normalizePaymentHistory',
     'roundHour'
-  ], { globals: { PersonalWorkCycles: personalWorkCycles } }).exposed;
+  ], { globals: {
+    MasterCalendarOccurrences: calendarOccurrences,
+    PersonalWorkCycles: personalWorkCycles
+  } }).exposed;
 }
 
 test('personal work characterizes month-end cycles, invalid legacy anchors, and payment history', () => {
@@ -82,7 +86,11 @@ test('personal work characterizes free, current, overdue, legacy, and malformed 
     'isPaymentRequired',
     'getEffectivePaymentDates',
     'normalizePaymentHistory'
-  ], { globals: { Date: FixedDate, PersonalWorkCycles: personalWorkCycles } }).exposed;
+  ], { globals: {
+    Date: FixedDate,
+    MasterCalendarOccurrences: calendarOccurrences,
+    PersonalWorkCycles: personalWorkCycles
+  } }).exposed;
 
   assert.equal(personal.isPaymentRequired({ startDate: '2026-06-15', monthlyFee: 0 }), false);
   assert.equal(personal.isPaymentRequired({

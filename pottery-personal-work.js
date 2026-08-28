@@ -894,17 +894,10 @@
       if (String(event.title || '').trim() !== String(userName || '').trim()) return;
       if (!event.date) return;
 
-      if (!event.repeatWeekly) {
-        pushOccurrence(event, String(event.date || ''));
-        return;
-      }
-
-      const baseDate = new Date(`${event.date}T00:00:00`);
-      if (Number.isNaN(baseDate.getTime())) return;
-
-      const skipDates = Array.isArray(event.repeatSkipDates) ? event.repeatSkipDates : [];
       let horizon = null;
-      if (event.repeatEndDate) {
+      if (!event.repeatWeekly) {
+        horizon = new Date(`${event.date}T00:00:00`);
+      } else if (event.repeatEndDate) {
         horizon = new Date(`${event.repeatEndDate}T00:00:00`);
         if (Number.isNaN(horizon.getTime())) return;
       } else if (to) {
@@ -915,14 +908,12 @@
         horizon = addDays(now, 365);
       }
 
-      let cursor = new Date(baseDate);
-      while (cursor <= horizon) {
-        const key = formatDateInput(cursor);
-        if (!skipDates.includes(key)) {
-          pushOccurrence(event, key);
-        }
-        cursor = addDays(cursor, 7);
-      }
+      globalThis.MasterCalendarOccurrences.expandOccurrences({
+        events: [event],
+        rangeStart: event.date,
+        rangeEnd: formatDateInput(horizon),
+        invalidRepeatEnd: 'exclude'
+      }).forEach((occurrence) => pushOccurrence(occurrence.event, occurrence.date));
     });
 
     rows.sort((a, b) => `${b.date} ${b.start}`.localeCompare(`${a.date} ${a.start}`));
