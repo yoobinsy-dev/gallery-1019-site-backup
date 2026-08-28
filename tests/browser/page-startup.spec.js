@@ -72,6 +72,30 @@ const personalWorkFixtures = [{
   dormantCycleStart: '2026-07-01',
   dormantCycleEnd: '2026-08-01'
 }];
+const materialOrderFixtures = [{
+  id: 'CHARACTERIZATION_TEST_ORDER_A',
+  orderDate: '2025-04-02',
+  createdAt: '2025-04-02T00:00:00.000Z',
+  orderWideDiscount: false,
+  orderWideShipping: false,
+  items: [{
+    id: 'CHARACTERIZATION_TEST_ITEM_A', category: '흙', site: '클레이어', product: 'Clay A', quantity: 2,
+    price: 10000, discount: 1000, shippingFee: 500, status: '주문 완료'
+  }, {
+    id: 'CHARACTERIZATION_TEST_ITEM_B', category: '유약', site: '대원도재', product: 'Glaze B', quantity: 1,
+    price: 20000, discount: 2000, shippingFee: 1000, status: '배송중'
+  }]
+}, {
+  id: 'CHARACTERIZATION_TEST_ORDER_B',
+  orderDate: '2025-04-01',
+  createdAt: '2025-04-01T00:00:00.000Z',
+  orderWideDiscount: false,
+  orderWideShipping: false,
+  items: [{
+    id: 'CHARACTERIZATION_TEST_ITEM_C', category: '기타', site: '중앙도재', product: 'Tool C', quantity: 1,
+    price: 5000, discount: null, shippingFee: null, status: '배송 완료'
+  }]
+}];
 const calendarFixture = {
   events: [{
     id: 'CHARACTERIZATION_TEST_STUDENT_CLASS',
@@ -145,7 +169,7 @@ test.beforeEach(async ({ page, baseURL }) => {
           'pottery-students-v1': studentFixtures,
           'pottery-personal-work-v1': personalWorkFixtures,
           'studio-calendar-state-v1': calendarFixture,
-          'pottery-material-orders-v1': [],
+          'pottery-material-orders-v1': materialOrderFixtures,
           'pottery-accounting-v1': []
         },
         meta: {}
@@ -159,13 +183,13 @@ test.beforeEach(async ({ page, baseURL }) => {
     }
     await route.continue();
   });
-  await page.addInitScript(({ user, fixtureExhibitions, fixtureStudents, fixturePersonalWork, fixtureCalendar }) => {
+  await page.addInitScript(({ user, fixtureExhibitions, fixtureStudents, fixturePersonalWork, fixtureCalendar, fixtureMaterialOrders }) => {
     localStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('users', JSON.stringify([user]));
     localStorage.setItem('exhibitions', JSON.stringify(fixtureExhibitions));
     localStorage.setItem('pottery-students-v1', JSON.stringify(fixtureStudents));
     localStorage.setItem('pottery-personal-work-v1', JSON.stringify(fixturePersonalWork));
-    localStorage.setItem('pottery-material-orders-v1', '[]');
+    localStorage.setItem('pottery-material-orders-v1', JSON.stringify(fixtureMaterialOrders));
     localStorage.setItem('pottery-accounting-v1', '[]');
     localStorage.setItem('studio-calendar-state-v1', JSON.stringify(fixtureCalendar));
   }, {
@@ -173,7 +197,8 @@ test.beforeEach(async ({ page, baseURL }) => {
     fixtureExhibitions: exhibitions,
     fixtureStudents: studentFixtures,
     fixturePersonalWork: personalWorkFixtures,
-    fixtureCalendar: calendarFixture
+    fixtureCalendar: calendarFixture,
+    fixtureMaterialOrders: materialOrderFixtures
   });
 });
 
@@ -236,6 +261,58 @@ test('master calendar preserves recurrence across week and month navigation', as
   await page.locator('#prev-week-btn').click();
   await expect(page.locator('#week-label')).toHaveText('2026년 08월');
   await expect(page.locator('.month-mini-pill').filter({ hasText: 'CHARACTERIZATION_TEST_CALENDAR_WEEKLY' })).toHaveCount(1);
+});
+
+test('material orders preserve grouping, editing, merge overlap, undo, keyboard focus, and export', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2025-04-15T12:00:00'));
+  await page.goto('/pottery-material-orders.html', { waitUntil: 'networkidle' });
+
+  const firstRow = page.locator('tr[data-item-id="CHARACTERIZATION_TEST_ITEM_A"]');
+  const secondRow = page.locator('tr[data-item-id="CHARACTERIZATION_TEST_ITEM_B"]');
+  const thirdRow = page.locator('tr[data-item-id="CHARACTERIZATION_TEST_ITEM_C"]');
+  await expect(page.locator('#month-label')).toHaveText('2025년 4월');
+  await expect(firstRow.locator('td[data-merge-col="number"]')).toHaveText('2');
+  await expect(firstRow.locator('td[data-merge-col="number"]')).toHaveAttribute('rowspan', '2');
+  await expect(secondRow.locator('td[data-merge-col="number"]')).toHaveCount(0);
+  await expect(page.locator('.orders-total-row td').filter({ hasText: '33,500원' })).toHaveCount(1);
+
+  await firstRow.locator('[data-action="edit"]').click();
+  const firstProduct = firstRow.locator('.js-edit-product');
+  await firstProduct.fill('Clay A Edited');
+  await firstProduct.press('ArrowRight');
+  await expect(firstRow.locator('.js-edit-quantity')).toBeFocused();
+
+  await firstProduct.click();
+  await secondRow.locator('.js-edit-product').click({ modifiers: ['Shift'] });
+  await page.locator('#order-merge-cells-btn').click();
+  await expect(firstRow.locator('td[data-merge-col="product"]')).toHaveAttribute('rowspan', '2');
+  await expect(secondRow.locator('td[data-merge-col="product"]')).toHaveCSS('display', 'none');
+
+  await firstRow.locator('.js-edit-product').click();
+  await thirdRow.locator('td[data-merge-col="product"]').click({ modifiers: ['Shift'] });
+  await page.locator('#order-merge-cells-btn').click();
+  await expect(firstRow.locator('td[data-merge-col="product"]')).toHaveAttribute('rowspan', '3');
+
+  await page.locator('#order-undo-btn').click();
+  await expect(firstRow.locator('td[data-merge-col="product"]')).toHaveAttribute('rowspan', '2');
+  await expect(thirdRow.locator('td[data-merge-col="product"]')).not.toHaveCSS('display', 'none');
+  await expect(firstRow.locator('td[data-merge-col="product"]')).toContainText('Clay A Edited');
+
+  await firstRow.locator('[data-action="edit"]').click();
+  await firstRow.locator('.js-edit-product').fill('Clay A Saved');
+  await firstRow.locator('[data-action="save"]').click();
+  await expect(firstRow.locator('td[data-merge-col="product"]')).toContainText('Clay A Saved');
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#order-export-btn').click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('재료주문_2025-04.csv');
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  const csv = Buffer.concat(chunks).toString('utf8');
+  expect(csv).toContain('"1","2025-04-02","흙","클레이어","Clay A Saved"');
+  expect(csv).toContain('"2","2025-04-01","기타","중앙도재","Tool C"');
 });
 
 test('certificate generation resolves synthetic Blob-backed art and produces a valid XLSX archive', async ({ page }) => {

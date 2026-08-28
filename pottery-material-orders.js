@@ -2640,27 +2640,13 @@
   function buildVerticalMergeSelection(anchor, target) {
     const rows = getMergeRows(anchor.table)
       .filter((row) => getMergeCellByKey(row, anchor.colKey) instanceof HTMLTableCellElement);
-    const startIndex = rows.findIndex((row) => getMergeRowId(row, anchor.table) === anchor.rowId);
-    const endIndex = rows.findIndex((row) => getMergeRowId(row, anchor.table) === target.rowId);
-    if (startIndex < 0 || endIndex < 0) return null;
-
-    const [from, to] = startIndex <= endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
-
-    const selected = [];
-    for (let i = from; i <= to; i += 1) {
-      const row = rows[i];
-      const cell = getMergeCellByKey(row, anchor.colKey);
-      if (!(cell instanceof HTMLTableCellElement)) {
-        return null;
-      }
-      selected.push({ rowId: getMergeRowId(row, anchor.table), cell });
-    }
-
-    return {
+    return globalThis.PotteryMaterialOrdersMergePlanning.buildVerticalSelection({
       table: anchor.table,
       colKey: anchor.colKey,
-      rowIds: selected.map((entry) => entry.rowId)
-    };
+      orderedRowIds: rows.map((row) => getMergeRowId(row, anchor.table)),
+      startRowId: anchor.rowId,
+      endRowId: target.rowId
+    });
   }
 
   function getMergeCellByKey(row, colKey) {
@@ -2730,16 +2716,10 @@
 
     const preservedChanged = preserveTopValueForManualMerge(table, selection);
 
-    const rowIdSet = new Set(selection.rowIds);
-    state.manualCellMerges[table] = (state.manualCellMerges[table] || []).filter((entry) => {
-      if (entry.colKey !== selection.colKey) return true;
-      return !entry.rowIds.some((rowId) => rowIdSet.has(rowId));
-    });
-
-    state.manualCellMerges[table].push({
-      colKey: selection.colKey,
-      rowIds: selection.rowIds.slice()
-    });
+    state.manualCellMerges[table] = globalThis.PotteryMaterialOrdersMergePlanning.applyMergePlan(
+      state.manualCellMerges[table],
+      selection
+    );
 
     clearMergeSelection(true);
     updateMergeButtons();
@@ -2882,27 +2862,12 @@
     const eligibleRows = rows.filter((row) => getMergeCellByKey(row, colKey) instanceof HTMLTableCellElement);
     if (eligibleRows.length < 2) return null;
 
-    const selectedRowIdSet = new Set(selectedEntries.map((entry) => entry.rowId));
-    const selectedIndexes = eligibleRows
-      .map((row, index) => (selectedRowIdSet.has(getMergeRowId(row, table)) ? index : -1))
-      .filter((index) => index >= 0);
-
-    if (selectedIndexes.length < 2) return null;
-
-    const from = Math.min(...selectedIndexes);
-    const to = Math.max(...selectedIndexes);
-    for (let i = from; i <= to; i += 1) {
-      const rowId = getMergeRowId(eligibleRows[i], table);
-      if (!selectedRowIdSet.has(rowId)) {
-        return null;
-      }
-    }
-
-    return {
+    return globalThis.PotteryMaterialOrdersMergePlanning.buildContiguousSelection({
       table,
       colKey,
-      rowIds: eligibleRows.slice(from, to + 1).map((row) => getMergeRowId(row, table))
-    };
+      orderedRowIds: eligibleRows.map((row) => getMergeRowId(row, table)),
+      selectedRowIds: selectedEntries.map((entry) => entry.rowId)
+    });
   }
 
   function applyManualCellMerges(table) {
@@ -2925,9 +2890,12 @@
       rowMap.set(getMergeRowId(row, table), row);
     });
 
+    const applicableMerges = globalThis.PotteryMaterialOrdersMergePlanning.retainApplicablePlans(
+      state.manualCellMerges[table],
+      Array.from(rowMap.keys())
+    );
     const nextMerges = [];
-    (state.manualCellMerges[table] || []).forEach((mergeEntry) => {
-      if (!mergeEntry || !Array.isArray(mergeEntry.rowIds) || mergeEntry.rowIds.length < 2) return;
+    applicableMerges.forEach((mergeEntry) => {
 
       const mergeRows = mergeEntry.rowIds.map((rowId) => rowMap.get(rowId)).filter(Boolean);
       if (mergeRows.length !== mergeEntry.rowIds.length) return;

@@ -11,6 +11,7 @@ function loadOrders() {
     'state', 'normalizeOrder', 'normalizeItem', 'getLineTotal', 'getOrderTotal', 'getOrdersForMonth',
     'buildOrderNumberMap', 'compareOrders', 'inferOrderWideByPattern', 'normalizeDateISO'
   ], { globals: {
+    PotteryMaterialOrdersMergePlanning: mergePlanning,
     PotteryMaterialOrdersModel: model,
     PotteryMaterialOrdersRowProjection: rowProjection
   } }).exposed;
