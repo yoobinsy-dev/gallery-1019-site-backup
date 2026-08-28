@@ -9,7 +9,10 @@ function loadCalendar() {
   return exposeIifeFunctions('studio.js', [
     'slotToTime', 'timeToSlot', 'getWeekStart', 'getMonthStart', 'addDays', 'addMonths', 'formatDateInput',
     'getDayIndexFromDateString', 'getEventsForDate', 'state', 'isExhibitionKind'
-  ], { globals: { MasterCalendarDateTime: dateTime } }).exposed;
+  ], { globals: {
+    MasterCalendarDateTime: dateTime,
+    MasterCalendarOccurrences: occurrences
+  } }).exposed;
 }
 
 test('calendar characterizes slot conversion and clamping', () => {

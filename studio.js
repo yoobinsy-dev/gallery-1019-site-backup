@@ -2513,38 +2513,11 @@
   }
 
   function getEventsForDate(date) {
-    const target = new Date(`${date}T00:00:00`);
-    if (Number.isNaN(target.getTime())) return [];
-
-    return state.events.filter((event) => {
-      if (!event || !event.date) return false;
-
-      if (isExhibitionKind(event.kind)) {
-        const startDate = new Date(`${event.date}T00:00:00`);
-        const endDate = new Date(`${(event.endDate || event.date)}T00:00:00`);
-        if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return false;
-        return target >= startDate && target <= endDate;
-      }
-
-      if (!event.repeatWeekly) {
-        return event.date === date;
-      }
-
-      const skipDates = Array.isArray(event.repeatSkipDates) ? event.repeatSkipDates : [];
-      if (skipDates.includes(date)) return false;
-
-      const baseDate = new Date(`${event.date}T00:00:00`);
-      if (Number.isNaN(baseDate.getTime())) return false;
-      if (target < baseDate) return false;
-
-      if (event.repeatEndDate) {
-        const repeatEndDate = new Date(`${event.repeatEndDate}T00:00:00`);
-        if (!Number.isNaN(repeatEndDate.getTime()) && target > repeatEndDate) {
-          return false;
-        }
-      }
-
-      return baseDate.getDay() === target.getDay();
+    return globalThis.MasterCalendarOccurrences.getEventsForDate({
+      events: state.events,
+      date,
+      includeRangeEvents: true,
+      isRangeEvent: (event) => isExhibitionKind(event.kind)
     });
   }
 

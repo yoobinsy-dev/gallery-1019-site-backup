@@ -98,6 +98,31 @@ const calendarFixture = {
     date: '2026-07-10',
     start: '09:00',
     end: '12:00'
+  }, {
+    id: 'CHARACTERIZATION_TEST_CALENDAR_WEEKLY',
+    kind: '기타',
+    title: 'CHARACTERIZATION_TEST_CALENDAR_WEEKLY',
+    date: '2026-08-24',
+    start: '10:00',
+    end: '11:00',
+    repeatWeekly: true,
+    repeatEndDate: '2026-09-07',
+    repeatSkipDates: ['2026-08-31']
+  }, {
+    id: 'CHARACTERIZATION_TEST_CALENDAR_SINGLE',
+    kind: '기타',
+    title: 'CHARACTERIZATION_TEST_CALENDAR_SINGLE',
+    date: '2026-09-01',
+    start: '12:00',
+    end: '13:00'
+  }, {
+    id: 'CHARACTERIZATION_TEST_CALENDAR_EXHIBITION',
+    kind: '전시',
+    title: 'CHARACTERIZATION_TEST_CALENDAR_EXHIBITION',
+    date: '2026-08-30',
+    endDate: '2026-09-02',
+    start: '00:00',
+    end: '24:00'
   }],
   baseRules: [],
   baseRuleTimeline: [],
@@ -183,6 +208,35 @@ for (const [name, path] of pages) {
     await expect(page.locator('body')).toBeVisible();
   });
 }
+
+test('master calendar preserves recurrence across week and month navigation', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
+  await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+
+  await expect(page.locator('#week-label')).toHaveText('2026.08.24 ~ 2026.08.30');
+  await expect(page.getByText('CHARACTERIZATION_TEST_CALENDAR_WEEKLY', { exact: true })).toHaveCount(1);
+  await expect(page.getByText('CHARACTERIZATION_TEST_CALENDAR_EXHIBITION', { exact: true })).toHaveCount(1);
+
+  await page.locator('#next-week-btn').click();
+  await expect(page.locator('#week-label')).toHaveText('2026.08.31 ~ 2026.09.06');
+  await expect(page.getByText('CHARACTERIZATION_TEST_CALENDAR_WEEKLY', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('CHARACTERIZATION_TEST_CALENDAR_SINGLE', { exact: true })).toHaveCount(1);
+  await expect(page.getByText('CHARACTERIZATION_TEST_CALENDAR_EXHIBITION', { exact: true })).toHaveCount(1);
+
+  await page.locator('#next-week-btn').click();
+  await expect(page.locator('#week-label')).toHaveText('2026.09.07 ~ 2026.09.13');
+  await expect(page.getByText('CHARACTERIZATION_TEST_CALENDAR_WEEKLY', { exact: true })).toHaveCount(1);
+  await expect(page.getByText('CHARACTERIZATION_TEST_CALENDAR_EXHIBITION', { exact: true })).toHaveCount(0);
+
+  await page.locator('#month-view-btn').click();
+  await expect(page.locator('#week-label')).toHaveText('2026년 09월');
+  await expect(page.locator('.month-mini-pill').filter({ hasText: 'CHARACTERIZATION_TEST_CALENDAR_WEEKLY' })).toHaveCount(1);
+  await expect(page.locator('.month-span-pill').getByText('CHARACTERIZATION_TEST_CALENDAR_EXHIBITION', { exact: true })).toHaveCount(1);
+
+  await page.locator('#prev-week-btn').click();
+  await expect(page.locator('#week-label')).toHaveText('2026년 08월');
+  await expect(page.locator('.month-mini-pill').filter({ hasText: 'CHARACTERIZATION_TEST_CALENDAR_WEEKLY' })).toHaveCount(1);
+});
 
 test('certificate generation resolves synthetic Blob-backed art and produces a valid XLSX archive', async ({ page }) => {
   const blobUrl = 'https://characterization-test.public.blob.vercel-storage.com/exhibition-images/900001/full/test.png';
