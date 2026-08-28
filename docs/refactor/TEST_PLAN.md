@@ -27,6 +27,22 @@ Suggested scripts:
 
 Exact scripts are an implementation decision for Stage 0. The test process must fail if production URLs or owner/migration database credentials are present.
 
+## Stage 0 acceptance gate
+
+Stage 0 is complete only when the harness proves the following against isolated DEV with synthetic, reversible fixtures:
+
+- exhibition list and exhibition detail load;
+- exhibition state read and write;
+- artwork edit and artwork-image upload;
+- uploaded image persistence after reload;
+- Blob URL/reference preservation through transfer-safe state;
+- certificate generation with both legacy and Blob-backed artwork images;
+- snapshot creation/read and authorized snapshot cron paths;
+- absence of runtime DDL under normal, failure, snapshot, and cron paths; and
+- no normal state regression from Blob-backed image references to embedded base64.
+
+The safety guard must terminate before any request or fixture setup when it detects a production URL/alias, production project identifier, production Blob target, owner credential, or migration credential. Each live test records the synthetic state and Blob objects it created, removes them, restores the prior DEV state/version where applicable, and verifies the final state and Blob inventory against its captured baseline. A test is not accepted when cleanup is merely attempted or inferred from a successful response.
+
 ## Fixture policy
 
 - Use synthetic names, credentials, images, and financial values.
@@ -98,12 +114,16 @@ Exact scripts are an implementation decision for Stage 0. The test process must 
 
 ### Images and snapshots
 
+- Browser artwork-image characterization: selected-file preview, current resize/compression output, full/preview/pending precedence, upload request/result adaptation, Blob-backed resolution, legacy data-URL reads, reload persistence, and failure behavior.
+- Certificate characterization: template loading/cache, normalized text and filenames, single and batch workbook generation, image placement/conversion, Blob-backed artwork resolution, download action errors, and page-owned generated-state mutation.
 - Image-reference scan/plan for every supported list and field combination.
 - Data URL parsing, extension/path stability, upload budget, failure, idempotence, and stats.
 - Transfer stripping only when current URL rules permit it.
 - Snapshot KST slot/date, counts, deduplication, retention threshold.
 - Capture/list/restore/archive fallback/undo and consumed undo point.
 - Partial database/Blob failure behavior using fakes and isolated integration tests.
+
+Browser artwork-image and certificate tests must not import or redefine server image-reference migration policy. Server tests continue to own scan, upload budget, migration, and persistence policy.
 
 ### Output safety
 

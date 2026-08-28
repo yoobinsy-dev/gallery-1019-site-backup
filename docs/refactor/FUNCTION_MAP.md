@@ -6,6 +6,10 @@ This is a ranked refactor-candidate registry, not a direction to extract functio
 
 Every record states: rank, symbol, file/span, environment, size, responsibility, callers, callees, globals, inputs, outputs, state read, state write, network/database/Blob effects, DOM/browser effects, error behavior, rollback behavior, coupling/risk, proposed boundary, and characterization seam.
 
+## Extraction evidence
+
+Every implemented candidate requires a before/after extraction record. The before record lists its current responsibilities, globals, state, side effects, callers, and observable outputs. The after record names the extracted functions and destination, explicit inputs/outputs, remaining effects, and the responsibilities left in the page or handler. Acceptance requires fewer hidden dependencies and parity evidence; moving the same large function behind a forwarding wrapper does not qualify.
+
 ## Ranked candidates
 
 ### 1. `/api/state` handler
@@ -199,6 +203,30 @@ Every record states: rank, symbol, file/span, environment, size, responsibility,
 - **Contract:** current/incoming values/options -> drop detail or null. Reads arguments and threshold constants; no writes/network/DOM.
 - **Globals/errors/rollback:** minimum previous/absolute/ratio constants. Malformed/missing lists follow current count semantics; handler performs rejection/audit/alert.
 - **Risk/boundary/test:** critical safety predicate and strong early extraction candidate after tests. Cover below/at/above thresholds, missing exhibitions, delta touched IDs, explicit clear markers, all inventory arrays, malformed values, and multiple drops.
+
+## Exhibition function families
+
+These cohesive families refine Candidates 5, 6, 10, and 11. They are explicit implementation stages, not a request to create one file per helper.
+
+### Browser artwork-image operations
+
+- **Location/environment:** `exhibition-detail.js`; browser. Includes selected artwork image input/preview/processing, `getPhotoPreviewDataUrl`, `getPhotoDataUrl`, current resize/compression and canvas conversions, upload request/result adaptation, full/preview/pending reference resolution, and compatibility reads.
+- **Contract/effects:** File/Blob/reference plus current artwork fields -> preview or upload-ready result. Reads browser files and Blob URLs, uses canvas/fetch where currently required, and delegates state mutation/persistence to the page/repository.
+- **Boundary/test:** extract as one cohesive `artwork-images` subsystem after upload/reload and field-precedence characterization. Preserve dimensions, quality, Blob references, base64 compatibility, error paths, and cleanup. Do not import server migration policy.
+
+### Certificate generation
+
+- **Location/environment:** `exhibition-detail.js`; browser. Includes template fetch/cache, certificate date/filename normalization, artwork resolution and PNG conversion, workbook XML/image helpers, `buildCertificateWorkbookBlob`, `buildAllCertificatesWorkbookBlob`, and download input preparation.
+- **Contract/effects:** normalized exhibition/sale/artwork/template input -> downloadable workbook Blob and filename. It may read templates and artwork URLs but does not mutate exhibition/sales state, persist Blob objects, or own general works rendering.
+- **Boundary/test:** extract behind a narrow single/batch generator after normalized workbook artifact tests cover legacy and Blob-backed images. Keep certificate-ready state mutation and UI error presentation in page action handlers.
+
+### Works-management decomposition
+
+- **Location/environment:** the controlling `renderWorksManagement` family in `exhibition-detail.js`; browser, only after duplicate declaration shadowing is proved and resolved.
+- **Contract/effects:** exhibition/user/UI state -> works projection, action availability, and coordinated DOM. The page/repository retain aggregate persistence; artwork-images and certificate-generator retain their specialized effects.
+- **Boundary/test:** first extract pure filtering, sorting, selection, and permission/action projections; then adopt them in a page-local DOM/controller stage. Require role/mode/legacy DOM and interaction parity, including image upload/reload and Blob-backed certificates.
+
+Server-side `migrateExhibitionImageReferences` remains a separate Candidate 22 concern. Its reference scanning, upload budget, Blob migration, and state-persistence policy must not be combined with browser artwork-image processing.
 
 ## Candidates deliberately deferred
 

@@ -9,6 +9,7 @@
 - Preserve all serialized shapes and compatibility rules during structural stages.
 - Keep browser and server implementations separate where runtime/module systems differ, while sharing protocol fixtures and specifications.
 - Allow each extraction to be compared with the old implementation and reverted independently.
+- Create modules only when they express a cohesive, reusable, or independently testable contract; the proposed tree is a responsibility map, not a file-creation checklist.
 
 ## Dependency rule
 
@@ -40,18 +41,18 @@ src/
       auth-policy.js
       storage-adapter.js
       sync-client.js
-      sync-events.js
-      html-escape.js
       date-time.js
       currency.js
     exhibitions/
       exhibition-model.js
       inventory-policy.js
       sales-model.js
-      accounting-model.js
-      image-compatibility.js
+      accounting-projection.js
+      artwork-images.js
+      certificate-generator.js
       snapshot-client.js
       export-model.js
+      works-management.js
       detail-page.js
       list-page.js
       inventory-page.js
@@ -77,7 +78,6 @@ src/
       material-orders-page.js
     accounting/
       auto-entries.js
-      class-occurrences.js
       finance-projection.js
       accounting-page.js
   server/
@@ -118,6 +118,8 @@ tests/
 
 The first implementation stages may use root-level classic scripts such as `shared/date-time.js` if introducing `src/` would require a bundler or route change. Architecture is defined by dependency direction and contract, not directory aesthetics. Move entry files only when HTML-loading tests and deployment path checks exist.
 
+The tree above is provisional. A filename such as `sync-events.js`, `html-escape.js`, or a tiny policy module should exist separately only when it has a meaningful reusable or independently testable contract. Otherwise, colocate that behavior with its cohesive owner. Combining responsibilities into one module is acceptable when they change together and share one contract; creating one file per helper is not a goal.
+
 ## Module contracts
 
 ### Page orchestrators
@@ -133,6 +135,18 @@ Each `*-page.js` should own:
 
 It should not own calendar recurrence, payment balance, accounting aggregation, merge policy, or serialized compatibility transformations.
 
+### Page orchestrator exit criteria
+
+A page extraction is complete when its entrypoint primarily owns:
+
+- startup and teardown;
+- DOM lookup and event binding;
+- calls to domain modules and adapters/repositories;
+- rendering coordination and focus/selection restoration;
+- cloud event subscriptions and timer/lifecycle management.
+
+The entrypoint should generally no longer directly contain substantial financial or recurrence calculations, compatibility transformations, raw Blob operations, raw `fetch` calls, raw persistence serialization, or complex state-mutation algorithms. There is no line-count target: responsibility and hidden dependency reduction are the acceptance measures.
+
 ### Domain modules
 
 Domain functions accept explicit data and options and return values or command plans. They do not read globals or mutate caller data unless mutation is an explicit, tested contract.
@@ -147,6 +161,34 @@ buildAccountingProjection({ month, tab, datasets, categories })
 detectInventoryDrop({ current, incoming, touchedIds, thresholds })
 ```
 
+### Function extraction exit criteria
+
+Every function-level extraction records a before/after contract in its stage evidence:
+
+**Before:** original function/family, responsibilities, globals accessed, and side effects.
+
+**After:** extracted functions, module destination, explicit inputs, explicit outputs, remaining side effects, and the responsibilities retained by the page/controller.
+
+An extraction succeeds only when hidden dependencies are reduced and the destination has a cohesive contract. Moving an unchanged giant function into another file does not satisfy the architecture.
+
+### Exhibition responsibility boundaries
+
+The exhibition target has nine cohesive responsibility areas. They are conceptual boundaries and may be combined when actual cohesion supports it:
+
+- **Exhibition model:** compatibility-preserving selectors and aggregate operations; it does not normalize `works`/`artWorks`.
+- **Sales model:** sales selection, filtering, totals, and command planning without DOM or persistence.
+- **Accounting projection:** exhibition revenue/expense projections without persistence or general rendering.
+- **Artwork images:** selected artwork image processing, current resize/compression behavior, previews, browser upload adaptation, full/preview reference resolution, compatibility reads, and temporary browser conversion.
+- **Certificate generator:** template loading, normalized certificate inputs, artwork-image preparation for rendering, canvas/image composition, XLSX population, and existing downloadable output.
+- **Snapshots:** a narrow browser client for existing snapshot API requests/results.
+- **Export model:** current export projections and output preparation.
+- **Works management:** artwork selection/filter and permission/action-state projections, with DOM/controller coordination and invocation of artwork-image and certificate interfaces.
+- **Page orchestration:** startup, tab coordination, event binding, adapters, rendering, focus, cloud events, and lifecycle.
+
+`artwork-images.js` is strictly browser-side. It does not own server Blob migration policy, database state migration, or server image-reference rewriting. Server `image-reference-plan.js` and `image-migration-service.js` remain responsible for server-side reference scanning/migration behavior and Blob writes triggered by those services.
+
+`certificate-generator.js` does not own exhibition persistence, Blob persistence, artwork mutation, sales state, or general exhibition rendering. The page/works controller supplies normalized inputs, invokes the generator, and separately applies any existing certificate-status mutation through the unchanged exhibition save path.
+
 ### Browser ports
 
 ```javascript
@@ -160,6 +202,14 @@ downloads.save(blob, filename)
 ```
 
 The transitional storage adapter must delegate to existing native/patched behavior so writes still trigger cloud sync. It must not create a second synchronization mechanism.
+
+`stateClient`, page repositories, and the sync client must not become redundant wrappers:
+
+- the **sync client** owns synchronization scheduling, protocol metadata, reconciliation, and state application;
+- a **page repository** owns page/domain serialization and compatibility-preserving aggregate reads/writes;
+- a direct **state client** exists only for explicit API operations that are not ordinary synchronized storage writes.
+
+If a proposed layer only forwards the same arguments and adds no policy, adaptation, lifecycle, or test boundary, omit it.
 
 ### Server services and repositories
 
@@ -180,6 +230,12 @@ No server module except an explicit migration command may execute DDL. Runtime r
 | Material-order aggregate | Material-order domain | Accounting |
 | Manual accounting entries | Accounting domain | Accounting page/export |
 | Derived accounting entries | Pure accounting projection | Render/export only; never persisted as source records |
+
+## Canonical calendar occurrence ownership
+
+The studio domain owns one canonical, tested occurrence expansion implementation. It accepts explicit events, rules, overrides, date range, and timezone options and returns immutable occurrences. Students, personal work, and accounting adapt/filter those results for their own names, categories, payments, and totals.
+
+Do not maintain a second recurrence engine in accounting or another consumer. A consumer-specific `class-occurrences` module may exist only as a thin filter/adapter over the canonical engine and must not independently expand recurrence. If characterization proves genuinely different semantics, document the difference and obtain architecture approval before adding another engine.
 
 ## Compatibility strategy
 
@@ -234,3 +290,4 @@ Do not start by concatenating or deduplicating selectors. First inventory actual
 - Visual redesign.
 - Performance caching before correct invalidation rules are demonstrated.
 - Moving/deleting operational artifacts.
+- Creating every provisional filename when a smaller cohesive module set is sufficient.
