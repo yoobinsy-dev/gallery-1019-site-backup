@@ -2,6 +2,7 @@
   const STORAGE_KEY = 'pottery-personal-work-v1';
   const CALENDAR_STORAGE_KEY = 'studio-calendar-state-v1';
   const SLOT_MINUTES = 30;
+  const personalWorkCycles = globalThis.PersonalWorkCycles;
 
   const state = {
     entries: [],
@@ -342,10 +343,12 @@
         }
       : getCurrentCycleRange(entry.startDate, new Date());
 
-    const usage = cycle.start && cycle.end
-      ? getCycleUsageHours(entry.userName, cycle.start, cycle.end)
-      : 0;
-    const remaining = Math.max(0, roundHour(entry.maxHours - usage));
+    const usageRows = cycle.start && cycle.end
+      ? collectPersonalWorkUsageRows(entry.userName, { pastOnly: true, from: cycle.start, to: cycle.end })
+      : [];
+    const usageSummary = personalWorkCycles.calculateUsageSummary({ usageRows, maxHours: entry.maxHours });
+    const usage = usageSummary.usageHours;
+    const remaining = usageSummary.remainingHours;
     const needsPayment = !isDormant && isPaymentRequired(entry);
     const isEditing = !isDormant && state.editingId === entry.id;
 
@@ -928,72 +931,23 @@
       from: cycleStart,
       to: cycleEnd
     });
-
-    return roundHour(rows.reduce((sum, row) => sum + Number(row.durationHours || 0), 0));
+    return personalWorkCycles.calculateUsageSummary({ usageRows: rows, maxHours: 0 }).usageHours;
   }
 
   function getCurrentCycleRange(startDateStr, nowDate) {
-    const anchor = new Date(`${startDateStr}T00:00:00`);
-    const now = new Date(nowDate || new Date());
-
-    if (Number.isNaN(anchor.getTime())) {
-      const today = formatDateInput(now);
-      return {
-        start: today,
-        end: formatDateInput(addMonthKeepDay(now, 1))
-      };
-    }
-
-    let cycleStart = new Date(anchor);
-    let cycleEnd = addMonthKeepDay(cycleStart, 1);
-
-    if (now >= cycleStart) {
-      while (now >= cycleEnd) {
-        cycleStart = cycleEnd;
-        cycleEnd = addMonthKeepDay(cycleStart, 1);
-      }
-    }
-
-    return {
-      start: formatDateInput(cycleStart),
-      end: formatDateInput(cycleEnd)
-    };
+    return personalWorkCycles.getCurrentCycleRange(startDateStr, nowDate);
   }
 
   function isPaymentRequired(entry) {
-    if (Number(entry?.monthlyFee || 0) <= 0) return false;
-    const requiredCycleCount = getElapsedCycleCount(entry?.startDate, new Date());
-    if (requiredCycleCount <= 0) return false;
-
-    const todayKey = formatDateInput(new Date());
-    const paidDates = getEffectivePaymentDates(entry)
-      .filter((dateKey) => String(dateKey || '') <= todayKey);
-    return paidDates.length < requiredCycleCount;
+    return personalWorkCycles.isPaymentRequired({ entry, asOfDate: new Date() });
   }
 
   function getElapsedCycleCount(startDateStr, nowDate) {
-    const anchor = new Date(`${String(startDateStr || '').trim()}T00:00:00`);
-    const now = new Date(nowDate || new Date());
-    if (Number.isNaN(anchor.getTime())) return 0;
-    if (now < anchor) return 0;
-
-    let count = 1;
-    let cycleStart = new Date(anchor);
-    let cycleEnd = addMonthKeepDay(cycleStart, 1);
-    while (now >= cycleEnd) {
-      count += 1;
-      cycleStart = cycleEnd;
-      cycleEnd = addMonthKeepDay(cycleStart, 1);
-    }
-    return count;
+    return personalWorkCycles.getElapsedCycleCount(startDateStr, nowDate);
   }
 
   function getEffectivePaymentDates(entry) {
-    const history = normalizePaymentHistory(entry?.paymentHistory);
-    const latest = normalizeDateInput(entry?.lastPaymentDate || '');
-    const dates = new Set(history);
-    if (latest) dates.add(latest);
-    return Array.from(dates).sort((a, b) => b.localeCompare(a));
+    return personalWorkCycles.getEffectivePaymentDates(entry);
   }
 
   function addPaymentHistoryDate(entry, paymentDate) {
@@ -1017,12 +971,7 @@
   }
 
   function normalizePaymentHistory(paymentHistory) {
-    const history = Array.isArray(paymentHistory) ? paymentHistory : [];
-    return Array.from(new Set(
-      history
-        .map((value) => normalizeDateInput(value))
-        .filter(Boolean)
-    )).sort((a, b) => b.localeCompare(a));
+    return personalWorkCycles.normalizePaymentHistory(paymentHistory);
   }
 
   function normalizeDateInput(value) {

@@ -52,6 +52,26 @@ const studentFixtures = [{
   paymentCycleCredits: 4,
   manualUsedAdjustment: 1
 }];
+const personalWorkFixtures = [{
+  id: 'CHARACTERIZATION_TEST_PERSONAL_ACTIVE',
+  userName: 'CHARACTERIZATION_TEST_ACTIVE_ARTIST',
+  startDate: '2026-07-15',
+  maxHours: 3,
+  monthlyFee: 100000,
+  lastPaymentDate: '2026-07-15',
+  paymentHistory: ['2026-07-15']
+}, {
+  id: 'CHARACTERIZATION_TEST_PERSONAL_DORMANT',
+  userName: 'CHARACTERIZATION_TEST_DORMANT_ARTIST',
+  startDate: '2026-05-01',
+  maxHours: 4,
+  monthlyFee: 80000,
+  lastPaymentDate: '2026-07-01',
+  paymentHistory: ['2026-07-01'],
+  isDormant: true,
+  dormantCycleStart: '2026-07-01',
+  dormantCycleEnd: '2026-08-01'
+}];
 const calendarFixture = {
   events: [{
     id: 'CHARACTERIZATION_TEST_STUDENT_CLASS',
@@ -64,6 +84,20 @@ const calendarFixture = {
     repeatWeekly: true,
     repeatEndDate: '2026-07-15',
     repeatSkipDates: ['2026-07-08']
+  }, {
+    id: 'CHARACTERIZATION_TEST_PERSONAL_ACTIVE_USAGE',
+    kind: '개인작업',
+    title: 'CHARACTERIZATION_TEST_ACTIVE_ARTIST',
+    date: '2026-08-15',
+    start: '13:00',
+    end: '15:00'
+  }, {
+    id: 'CHARACTERIZATION_TEST_PERSONAL_DORMANT_USAGE',
+    kind: '강사 지도 하 개인작업',
+    title: 'CHARACTERIZATION_TEST_DORMANT_ARTIST',
+    date: '2026-07-10',
+    start: '09:00',
+    end: '12:00'
   }],
   baseRules: [],
   baseRuleTimeline: [],
@@ -84,7 +118,7 @@ test.beforeEach(async ({ page, baseURL }) => {
           users: [currentUser],
           exhibitions,
           'pottery-students-v1': studentFixtures,
-          'pottery-personal-work-v1': [],
+          'pottery-personal-work-v1': personalWorkFixtures,
           'studio-calendar-state-v1': calendarFixture,
           'pottery-material-orders-v1': [],
           'pottery-accounting-v1': []
@@ -100,12 +134,12 @@ test.beforeEach(async ({ page, baseURL }) => {
     }
     await route.continue();
   });
-  await page.addInitScript(({ user, fixtureExhibitions, fixtureStudents, fixtureCalendar }) => {
+  await page.addInitScript(({ user, fixtureExhibitions, fixtureStudents, fixturePersonalWork, fixtureCalendar }) => {
     localStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('users', JSON.stringify([user]));
     localStorage.setItem('exhibitions', JSON.stringify(fixtureExhibitions));
     localStorage.setItem('pottery-students-v1', JSON.stringify(fixtureStudents));
-    localStorage.setItem('pottery-personal-work-v1', '[]');
+    localStorage.setItem('pottery-personal-work-v1', JSON.stringify(fixturePersonalWork));
     localStorage.setItem('pottery-material-orders-v1', '[]');
     localStorage.setItem('pottery-accounting-v1', '[]');
     localStorage.setItem('studio-calendar-state-v1', JSON.stringify(fixtureCalendar));
@@ -113,6 +147,7 @@ test.beforeEach(async ({ page, baseURL }) => {
     user: currentUser,
     fixtureExhibitions: exhibitions,
     fixtureStudents: studentFixtures,
+    fixturePersonalWork: personalWorkFixtures,
     fixtureCalendar: calendarFixture
   });
 });
@@ -333,5 +368,63 @@ test('student payment credits preserve row, detail, role actions, recomputation,
     students: localStorage.getItem('pottery-students-v1'),
     calendar: localStorage.getItem('studio-calendar-state-v1')
   }))).toEqual(stateBefore);
+  expect(pageErrors).toEqual([]);
+});
+
+test('personal work cycles preserve active, dormant, payment, usage, edit, detail, and reload behavior', async ({ page }) => {
+  await page.addInitScript(() => {
+    const RealDate = Date;
+    const fixedTime = new RealDate('2026-08-15T12:00:00').getTime();
+    class FixedDate extends RealDate {
+      constructor(...args) {
+        super(...(args.length > 0 ? args : [fixedTime]));
+      }
+
+      static now() {
+        return fixedTime;
+      }
+    }
+    window.Date = FixedDate;
+  });
+
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.goto('/pottery-personal-work.html', { waitUntil: 'networkidle' });
+  const stateBefore = await page.evaluate(() => ({
+    personalWork: localStorage.getItem('pottery-personal-work-v1'),
+    calendar: localStorage.getItem('studio-calendar-state-v1')
+  }));
+
+  const activeRow = page.locator('#personal-tbody tr[data-id="CHARACTERIZATION_TEST_PERSONAL_ACTIVE"]');
+  await expect(activeRow).toHaveCount(1);
+  await expect(activeRow.locator('.period-col')).toHaveText('2026-08-15 ~ 2026-09-15');
+  await expect(activeRow.locator('.personal-need-payment')).toHaveText('결제 필요');
+  await expect(activeRow.locator('.used-col')).toHaveText('2시간');
+  await expect(activeRow.locator('.remain-col')).toHaveText('1시간');
+
+  const dormantRow = page.locator('#personal-dormant-tbody tr[data-id="CHARACTERIZATION_TEST_PERSONAL_DORMANT"]');
+  await expect(dormantRow).toHaveCount(1);
+  await expect(dormantRow.locator('.period-col')).toHaveText('2026-07-01 ~ 2026-08-01');
+  await expect(dormantRow.locator('.personal-need-payment')).toHaveCount(0);
+  await expect(dormantRow.locator('.used-col')).toHaveText('3시간');
+  await expect(dormantRow.locator('.remain-col')).toHaveText('1시간');
+
+  await activeRow.locator('.personal-action-btn.edit').click();
+  await expect(page.locator('#edit-start-CHARACTERIZATION_TEST_PERSONAL_ACTIVE')).toHaveValue('2026-07-15');
+  await activeRow.locator('.personal-action-btn.cancel').click();
+  await activeRow.locator('.personal-action-btn.detail').click();
+  await expect(page.locator('#personal-detail-modal')).toHaveClass(/open/);
+  await expect(page.locator('#personal-detail-payment-body')).toContainText('2026-07-15');
+  await expect(page.locator('#personal-detail-usage-body')).toContainText('2026-08-15 13:00~15:00');
+  await page.locator('#personal-detail-close').click();
+
+  expect(await page.evaluate(() => ({
+    personalWork: localStorage.getItem('pottery-personal-work-v1'),
+    calendar: localStorage.getItem('studio-calendar-state-v1')
+  }))).toEqual(stateBefore);
+  await page.reload({ waitUntil: 'networkidle' });
+  await expect(page.locator('#personal-tbody tr[data-id="CHARACTERIZATION_TEST_PERSONAL_ACTIVE"] .remain-col')).toHaveText('1시간');
+  await expect(page.locator('#personal-dormant-tbody tr[data-id="CHARACTERIZATION_TEST_PERSONAL_DORMANT"] .remain-col')).toHaveText('1시간');
+  expect(await page.evaluate(() => localStorage.getItem('pottery-personal-work-v1'))).toBe(stateBefore.personalWork);
   expect(pageErrors).toEqual([]);
 });
