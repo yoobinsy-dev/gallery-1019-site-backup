@@ -3,42 +3,8 @@ const { getStateMap, setStateValue } = require('./state-store');
 const { getKstDateString } = require('./snapshot-store');
 const { put } = require('@vercel/blob');
 
-const TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS exhibition_state_snapshots (
-    id BIGSERIAL PRIMARY KEY,
-    exhibition_id BIGINT NOT NULL,
-    snapshot_date_kst DATE NOT NULL,
-    snapshot_type TEXT NOT NULL DEFAULT 'daily-19-kst',
-    snapshot_payload JSONB NOT NULL,
-    works_goods_count INTEGER NOT NULL DEFAULT 0,
-    sold_items_count INTEGER NOT NULL DEFAULT 0,
-    source TEXT NOT NULL DEFAULT 'system',
-    note TEXT,
-    archive_url TEXT,
-    archive_path TEXT,
-    archive_stored_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    restored_at TIMESTAMPTZ,
-    restored_by TEXT,
-    undo_consumed_at TIMESTAMPTZ,
-    UNIQUE (exhibition_id, snapshot_date_kst, snapshot_type)
-  );
-`;
-
 const SNAPSHOT_RETENTION_DAYS = 7;
 const SNAPSHOT_ARCHIVE_STRICT = String(process.env.SNAPSHOT_ARCHIVE_STRICT || 'false').toLowerCase() === 'true';
-
-let initialized = false;
-
-function isConcurrentCreateRace(error) {
-  const message = String(error?.message || '').toLowerCase();
-  const code = String(error?.code || '').toLowerCase();
-  if (code === '23505' && message.includes('pg_type_typname_nsp_index')) {
-    return true;
-  }
-
-  return message.includes('pg_type_typname_nsp_index');
-}
 
 function getKstHour(date = new Date()) {
   const formatter = new Intl.DateTimeFormat('en-US', {
@@ -69,8 +35,6 @@ function getAutoSnapshotSlot(date = new Date()) {
 }
 
 async function purgeExpiredExhibitionSnapshots() {
-  await ensureExhibitionSnapshotTable();
-
   const result = await query(
     `
       DELETE FROM exhibition_state_snapshots
@@ -81,49 +45,6 @@ async function purgeExpiredExhibitionSnapshots() {
   );
 
   return result.rowCount || 0;
-}
-
-async function ensureExhibitionSnapshotTable() {
-  if (initialized) return;
-  try {
-    await query(TABLE_SQL);
-  } catch (error) {
-    if (!isConcurrentCreateRace(error)) {
-      throw error;
-    }
-    // Ignore cross-instance first-run CREATE TABLE races in serverless environments.
-  }
-
-  await query('ALTER TABLE exhibition_state_snapshots ADD COLUMN IF NOT EXISTS archive_url TEXT');
-  await query('ALTER TABLE exhibition_state_snapshots ADD COLUMN IF NOT EXISTS archive_path TEXT');
-  await query('ALTER TABLE exhibition_state_snapshots ADD COLUMN IF NOT EXISTS archive_stored_at TIMESTAMPTZ');
-
-  // Keep daily slot dedupe for automatic snapshots, but allow multiple manual snapshots per day.
-  await query(`
-    DO $$
-    DECLARE
-      constraint_name TEXT;
-    BEGIN
-      FOR constraint_name IN
-        SELECT conname
-        FROM pg_constraint
-        WHERE conrelid = 'exhibition_state_snapshots'::regclass
-          AND contype = 'u'
-          AND pg_get_constraintdef(oid) ILIKE '%(exhibition_id, snapshot_date_kst, snapshot_type)%'
-      LOOP
-        EXECUTE format('ALTER TABLE exhibition_state_snapshots DROP CONSTRAINT IF EXISTS %I', constraint_name);
-      END LOOP;
-    END $$;
-  `);
-
-  await query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS exhibition_state_snapshots_auto_slot_unique_idx
-      ON exhibition_state_snapshots (exhibition_id, snapshot_date_kst, snapshot_type)
-      WHERE snapshot_type IN ('auto-07-kst', 'auto-19-kst', 'daily-19-kst');
-  `);
-
-  await query('SELECT 1 FROM exhibition_state_snapshots LIMIT 1');
-  initialized = true;
 }
 
 function toArray(value) {
@@ -239,8 +160,6 @@ async function archiveSnapshotPayload({ exhibitionId, snapshotType, payload }) {
 }
 
 async function insertSnapshotRow({ exhibition, snapshotType, source, note, dedupeByDate }) {
-  await ensureExhibitionSnapshotTable();
-
   const exhibitionId = Number(exhibition?.id);
   if (!Number.isFinite(exhibitionId) || exhibitionId <= 0) return null;
 
@@ -422,7 +341,6 @@ async function createExhibitionSnapshotNow(exhibitionId, note = null) {
 
 async function listExhibitionSnapshots(exhibitionId, limit = 40) {
   await purgeExpiredExhibitionSnapshots();
-  await ensureExhibitionSnapshotTable();
 
   const safeLimit = Math.max(1, Math.min(200, Number(limit) || 40));
   const targetId = Number(exhibitionId);
@@ -448,7 +366,6 @@ async function listExhibitionSnapshots(exhibitionId, limit = 40) {
 
 async function getExhibitionSnapshotById(snapshotId) {
   await purgeExpiredExhibitionSnapshots();
-  await ensureExhibitionSnapshotTable();
 
   const result = await query(
     `
@@ -480,7 +397,6 @@ async function markSnapshotRestored(snapshotId, restoredBy) {
 
 async function getLatestUndoPoint(exhibitionId) {
   await purgeExpiredExhibitionSnapshots();
-  await ensureExhibitionSnapshotTable();
 
   const result = await query(
     `
@@ -606,7 +522,6 @@ async function undoLastExhibitionRestore(exhibitionId, restoredBy = 'manual-api'
 }
 
 module.exports = {
-  ensureExhibitionSnapshotTable,
   purgeExpiredExhibitionSnapshots,
   createDailyExhibitionSnapshots,
   createExhibitionSnapshotNow,

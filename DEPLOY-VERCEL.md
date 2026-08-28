@@ -27,16 +27,51 @@ npm install
 npx vercel
 ```
 
-## 3) Create a Postgres database
+## 3) Create a Postgres database and runtime role
 
 Use one of:
 - Vercel Postgres
 - Neon
 - Supabase Postgres
 
-Copy the `DATABASE_URL`.
+Create a dedicated runtime login with only:
 
-## 4) Add environment variables in Vercel
+- `CONNECT` on the application database
+- `USAGE` on the application schema
+- `SELECT`, `INSERT`, `UPDATE`, and `DELETE` on application tables
+- `USAGE` and `SELECT` on application sequences
+
+The runtime role must not own schema objects or have database/schema `CREATE`,
+`CREATEROLE`, `CREATEDB`, `REPLICATION`, `BYPASSRLS`, or an administrative role
+membership. On Neon, create limited roles with SQL; roles created through the
+Console, CLI, or API inherit `neon_superuser` privileges.
+
+Use the pooled runtime connection string as `DATABASE_URL`.
+
+Current role separation:
+
+- Production runtime: `gallery_1019_prod_app`
+- Development runtime: `gallery_1019_runtime`
+- Administrative migrations and recovery: `neondb_owner`
+
+Neither application runtime may use `neondb_owner`. Its credential must remain
+outside Vercel application environments and be supplied only for an explicit
+administrative operation.
+
+## 4) Apply database migrations
+
+Schema changes are an explicit administrative operation. Use a direct owner or
+migration-role connection only in the invoking shell:
+
+```bash
+DATABASE_MIGRATION_URL='postgresql://...' npm run db:migrate
+```
+
+This applies `sql/schema.sql` in a transaction and logs its SHA-256 hash. Never
+store `DATABASE_MIGRATION_URL` in Vercel or expose it to application runtime or
+cron jobs. Deploy application code only after the migration succeeds.
+
+## 5) Add environment variables in Vercel
 
 Required:
 - `DATABASE_URL`
@@ -48,7 +83,7 @@ Optional (only if using `/api/upload` for file/image uploads):
 You can set these in Vercel dashboard:
 Project -> Settings -> Environment Variables
 
-## 5) Deploy to production
+## 6) Deploy to production
 
 ```bash
 npx vercel --prod
@@ -59,7 +94,7 @@ You will get a URL like:
 
 You do not need to buy a domain for this.
 
-## 6) Verify
+## 7) Verify
 
 Check health endpoint:
 - `/api/health`
@@ -124,6 +159,8 @@ curl -s 'https://YOUR_DOMAIN/api/state-audit?limit=50&alertLimit=20'
 
 ## Notes
 
+- API and cron code performs DML only. It never creates or alters database objects.
+- A missing migration must fail visibly; runtime must not repair schema automatically.
 - This repo now includes `cloud-sync.js`, which syncs `users` and `exhibitions` state to Postgres through `/api/state`.
 - Existing UI continues to work with localStorage, while cloud sync provides cross-device persistence.
 - For large photo/file usage, use `/api/upload` and store returned URL in exhibition data instead of large base64 strings.

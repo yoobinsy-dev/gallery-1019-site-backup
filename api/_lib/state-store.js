@@ -1,23 +1,6 @@
 const { query } = require('./db');
 
-const TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS app_state (
-    state_key TEXT PRIMARY KEY,
-    state_value JSONB NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-`;
-
-let initialized = false;
-
-async function ensureTable() {
-  if (initialized) return;
-  await query(TABLE_SQL);
-  initialized = true;
-}
-
 async function getStateMap(keys) {
-  await ensureTable();
   if (!Array.isArray(keys) || keys.length === 0) {
     return {};
   }
@@ -35,7 +18,6 @@ async function getStateMap(keys) {
 }
 
 async function getStateMapWithMeta(keys) {
-  await ensureTable();
   if (!Array.isArray(keys) || keys.length === 0) {
     return { data: {}, meta: {} };
   }
@@ -58,7 +40,6 @@ async function getStateMapWithMeta(keys) {
 }
 
 async function getStateMetaMap(keys) {
-  await ensureTable();
   if (!Array.isArray(keys) || keys.length === 0) {
     return {};
   }
@@ -79,7 +60,6 @@ async function getStateMetaMap(keys) {
 }
 
 async function setStateValue(key, value) {
-  await ensureTable();
   const result = await query(
     `
       INSERT INTO app_state (state_key, state_value, updated_at)
@@ -96,7 +76,6 @@ async function setStateValue(key, value) {
 }
 
 async function deleteStateValue(key) {
-  await ensureTable();
   await query('DELETE FROM app_state WHERE state_key = $1', [key]);
 }
 
