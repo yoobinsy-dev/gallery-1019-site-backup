@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 
 const { exposeIifeFunctions } = require('../helpers/load-source');
 const autoEntries = require('../../accounting/auto-entries');
+const exportFormatter = require('../../accounting/export-formatter');
 const financeProjection = require('../../accounting/finance-projection');
 const calendarOccurrences = require('../../master-calendar/occurrences');
 const { buildGallerySalesAutoEntriesLegacy } = require('../fixtures/accounting-gallery-sales-legacy');
@@ -26,11 +27,14 @@ function loadAccounting() {
     'normalizeNameKey',
     'collectClassOccurrencesByStudentInMonth',
     'buildManualEntries',
-    'isFixedEntryActiveInMonth'
+    'isFixedEntryActiveInMonth',
+    'buildExportRows',
+    'csvEscape'
   ], { globals: {
     getMonthStart,
     MasterCalendarOccurrences: calendarOccurrences,
     PotteryAccountingAutoEntries: autoEntries,
+    PotteryAccountingExportFormatter: exportFormatter,
     PotteryAccountingFinanceProjection: financeProjection
   } }).exposed;
 }
@@ -287,6 +291,7 @@ test('accounting characterizes monthly class occurrence grouping and dedupe', ()
     getMonthStart,
     MasterCalendarOccurrences: calendarOccurrences,
     PotteryAccountingAutoEntries: autoEntries,
+    PotteryAccountingExportFormatter: exportFormatter,
     PotteryAccountingFinanceProjection: financeProjection
   } }).exposed;
   accounting.state.calendarEvents = [
@@ -326,6 +331,7 @@ test('accounting characterizes pottery automatic entries and commission rounding
     getMonthStart,
     MasterCalendarOccurrences: calendarOccurrences,
     PotteryAccountingAutoEntries: autoEntries,
+    PotteryAccountingExportFormatter: exportFormatter,
     PotteryAccountingFinanceProjection: financeProjection
   } }).exposed;
   accounting.state.students = [
@@ -356,4 +362,37 @@ test('accounting characterizes pottery automatic entries and commission rounding
     { id: 'auto-pottery-material-order-1-2026-08-02', source: 'auto', side: 'expense', category: '재료비', date: '2026-08-02', title: '재료 주문 2026-08-02', amount: 95, fixed: false, tab: 'pottery' }
   ]);
   assert.deepEqual(JSON.parse(JSON.stringify(accounting.buildAutoEntries('pottery', 'expense', '수강료 강사 커미션', '2026-08'))).map((entry) => entry.amount), [15, 61, 15]);
+});
+
+test('accounting characterizes export rows, entry types, totals, and CSV escaping', () => {
+  const accounting = loadAccounting();
+  const rows = accounting.buildExportRows({
+    revenueCategories: [{
+      category: 'Income',
+      entries: [
+        { date: '2026-08-01', title: 'Auto', amount: 100, source: 'auto', fixed: true },
+        { date: '2026-08-02', title: 'Fixed', amount: 0, source: 'manual', fixed: true }
+      ]
+    }],
+    expenseCategories: [{
+      category: 'Expense',
+      entries: [{ date: '2026-08-03', title: 'Manual', amount: -5, source: 'manual', fixed: false }]
+    }],
+    revenueTotal: 100,
+    expenseTotal: -5,
+    profit: 105
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(rows)), [
+    ['구분', '카테고리', '날짜', '항목명', '금액', '유형'],
+    ['수입', 'Income', '2026-08-01', 'Auto', '100', '자동'],
+    ['수입', 'Income', '2026-08-02', 'Fixed', '0', '고정'],
+    ['지출', 'Expense', '2026-08-03', 'Manual', '-5', '수동'],
+    ['', '', '', '총 수입', '100', ''],
+    ['', '', '', '총 지출', '-5', ''],
+    ['', '', '', '월 손익', '105', '']
+  ]);
+  assert.equal(accounting.csvEscape('plain'), 'plain');
+  assert.equal(accounting.csvEscape('a,b'), '"a,b"');
+  assert.equal(accounting.csvEscape('a"b\nc'), '"a""b\nc"');
+  assert.equal(accounting.csvEscape(null), '');
 });
