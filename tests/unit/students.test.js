@@ -301,3 +301,39 @@ test('student instructor visibility remains scoped to assigned students', () => 
   assert.equal(students.canManageStudent(students.state.students[0]), true);
   assert.equal(students.canManageStudent(students.state.students[1]), false);
 });
+
+test('student detail projection preserves payment rowspans, labels, and prior-cycle rows', () => {
+  const rows = paymentCredits.buildPaymentClassDetailRows({
+    groups: [{
+      paymentDate: '2026-08-01',
+      paymentRecord: { basis: '2회', tuition: 120000, credits: 2 },
+      classRecords: [
+        { date: '2026-08-01', start: '10:00', end: '11:00', classType: '정규 수강' },
+        { date: '2026-08-08', start: '10:00', end: '11:00' }
+      ]
+    }, {
+      paymentDate: '2026-07-01', paymentRecord: null, classRecords: []
+    }],
+    unassigned: [{ date: '2026-06-30', start: '09:00', end: '10:00', classType: '보강' }],
+    dayNames: ['일', '월', '화', '수', '목', '금', '토'],
+    getDayIndex: (date) => new Date(`${date}T00:00:00`).getDay(),
+    formatTuition: (value) => `${Number(value).toLocaleString('en-US')}원`,
+    isMonthlyBasis: (basis) => basis === '월초'
+  });
+  assert.deepEqual(rows, [
+    { cells: [
+      { text: '2026-08-01', rowSpan: 2 }, { text: '2회', rowSpan: 2 },
+      { text: '120,000원', rowSpan: 2 }, { text: '2', rowSpan: 2 },
+      { text: '2026-08-01 (토) 10:00~11:00 · 정규 수강' }
+    ] },
+    { cells: [{ text: '2026-08-08 (토) 10:00~11:00 · 수강' }] },
+    { cells: [
+      { text: '2026-07-01', rowSpan: 1 }, { text: '-', rowSpan: 1 },
+      { text: '-', rowSpan: 1 }, { text: '-', rowSpan: 1 }, { text: '-' }
+    ] },
+    { cells: [
+      { text: '이전 결제 사이클', rowSpan: 1, colSpan: 4 },
+      { text: '2026-06-30 (화) 09:00~10:00 · 보강' }
+    ] }
+  ]);
+});

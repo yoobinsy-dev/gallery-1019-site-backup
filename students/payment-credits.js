@@ -154,6 +154,59 @@
     };
   }
 
+  function buildPaymentClassDetailRows(options) {
+    const groups = Array.isArray(options?.groups) ? options.groups : [];
+    const unassigned = Array.isArray(options?.unassigned) ? options.unassigned : [];
+    const dayNames = Array.isArray(options?.dayNames) ? options.dayNames : [];
+    const getDayIndex = options?.getDayIndex;
+    const formatTuition = options?.formatTuition;
+    const isMonthlyBasis = options?.isMonthlyBasis;
+    const formatClass = (record) => {
+      const dayIndex = typeof getDayIndex === 'function' ? getDayIndex(record?.date) : -1;
+      const dayName = dayIndex >= 0 && dayIndex < dayNames.length ? dayNames[dayIndex] : '-';
+      const classLabel = String(record?.classType || '수강').trim();
+      return `${record?.date} (${dayName}) ${record?.start}~${record?.end} · ${classLabel}`;
+    };
+
+    const rows = [];
+    groups.forEach((group) => {
+      const classItems = Array.isArray(group?.classRecords) ? group.classRecords : [];
+      const spanCount = Math.max(1, classItems.length);
+      for (let index = 0; index < spanCount; index += 1) {
+        const cells = [];
+        if (index === 0) {
+          const paymentRecord = group?.paymentRecord || {};
+          cells.push({ text: group?.paymentDate || '-', rowSpan: spanCount });
+          cells.push({ text: paymentRecord.basis || '-', rowSpan: spanCount });
+          cells.push({
+            text: paymentRecord.tuition && typeof formatTuition === 'function'
+              ? formatTuition(paymentRecord.tuition)
+              : '-',
+            rowSpan: spanCount
+          });
+          cells.push({
+            text: paymentRecord.basis
+              ? (typeof isMonthlyBasis === 'function' && isMonthlyBasis(paymentRecord.basis)
+                  ? '-'
+                  : String(paymentRecord.credits))
+              : '-',
+            rowSpan: spanCount
+          });
+        }
+        cells.push({ text: classItems.length ? formatClass(classItems[index]) : '-' });
+        rows.push({ cells });
+      }
+    });
+
+    unassigned.forEach((record, index) => {
+      const cells = [];
+      if (index === 0) cells.push({ text: '이전 결제 사이클', rowSpan: unassigned.length, colSpan: 4 });
+      cells.push({ text: formatClass(record) });
+      rows.push({ cells });
+    });
+    return rows;
+  }
+
   function reservePriorCycleClasses(options) {
     const workingClasses = options?.workingClasses;
     const sortedPaymentsAsc = options?.sortedPaymentsAsc;
@@ -231,6 +284,7 @@
   }
 
   const api = Object.freeze({
+    buildPaymentClassDetailRows,
     buildPaymentClassGroups,
     computeCarryOverForNewPaymentCycle,
     getManualUsedAdjustment,

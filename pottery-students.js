@@ -1120,77 +1120,24 @@
     }
 
     const grouped = buildPaymentClassGroups(student, paymentDates, classRecords);
-    const groups = grouped.groups;
-    groups.forEach((group) => {
-      const classItems = Array.isArray(group.classRecords) ? group.classRecords : [];
-      const spanCount = Math.max(1, classItems.length);
-
-      for (let index = 0; index < spanCount; index += 1) {
-        const row = document.createElement('tr');
-
-        if (index === 0) {
-          const paymentRecord = group.paymentRecord || {};
-          const paymentCell = document.createElement('td');
-          paymentCell.rowSpan = spanCount;
-          paymentCell.textContent = group.paymentDate || '-';
-          row.appendChild(paymentCell);
-
-          const basisCell = document.createElement('td');
-          basisCell.rowSpan = spanCount;
-          basisCell.textContent = paymentRecord.basis || '-';
-          row.appendChild(basisCell);
-
-          const tuitionCell = document.createElement('td');
-          tuitionCell.rowSpan = spanCount;
-          tuitionCell.textContent = paymentRecord.tuition ? formatWon(paymentRecord.tuition) : '-';
-          row.appendChild(tuitionCell);
-
-          const creditsCell = document.createElement('td');
-          creditsCell.rowSpan = spanCount;
-          creditsCell.textContent = paymentRecord.basis
-            ? (isMonthlyStartBasis(paymentRecord.basis) ? '-' : String(paymentRecord.credits))
-            : '-';
-          row.appendChild(creditsCell);
-        }
-
-        const classCell = document.createElement('td');
-        if (classItems.length) {
-          const record = classItems[index];
-          const dayIndex = getDayIndexFromDateString(record.date);
-          const dayName = dayIndex >= 0 && dayIndex < DAY_NAMES.length ? DAY_NAMES[dayIndex] : '-';
-          const classLabel = String(record.classType || '수강').trim();
-          classCell.textContent = `${record.date} (${dayName}) ${record.start}~${record.end} · ${classLabel}`;
-        } else {
-          classCell.textContent = '-';
-        }
-
-        row.appendChild(classCell);
-        tbody.appendChild(row);
-      }
+    const rows = globalThis.StudentPaymentCredits.buildPaymentClassDetailRows({
+      ...grouped,
+      dayNames: DAY_NAMES,
+      getDayIndex: getDayIndexFromDateString,
+      formatTuition: formatWon,
+      isMonthlyBasis: isMonthlyStartBasis
     });
-
-    const unassigned = Array.isArray(grouped.unassigned) ? grouped.unassigned : [];
-    if (unassigned.length) {
-      unassigned.forEach((record, index) => {
-        const row = document.createElement('tr');
-        if (index === 0) {
-          const paymentCell = document.createElement('td');
-          paymentCell.rowSpan = unassigned.length;
-          paymentCell.colSpan = 4;
-          paymentCell.textContent = '이전 결제 사이클';
-          row.appendChild(paymentCell);
-        }
-
-        const classCell = document.createElement('td');
-        const dayIndex = getDayIndexFromDateString(record.date);
-        const dayName = dayIndex >= 0 && dayIndex < DAY_NAMES.length ? DAY_NAMES[dayIndex] : '-';
-        const classLabel = String(record.classType || '수강').trim();
-        classCell.textContent = `${record.date} (${dayName}) ${record.start}~${record.end} · ${classLabel}`;
-
-        row.appendChild(classCell);
-        tbody.appendChild(row);
+    rows.forEach((rowModel) => {
+      const row = document.createElement('tr');
+      rowModel.cells.forEach((cellModel) => {
+        const cell = document.createElement('td');
+        if (cellModel.rowSpan) cell.rowSpan = cellModel.rowSpan;
+        if (cellModel.colSpan) cell.colSpan = cellModel.colSpan;
+        cell.textContent = cellModel.text;
+        row.appendChild(cell);
       });
-    }
+      tbody.appendChild(row);
+    });
   }
 
   function renderDetailOtherUsageTable(student) {
