@@ -689,128 +689,28 @@
   }
 
   function buildPotteryClassRevenueEntries(monthKey) {
-    const occurrenceMap = collectClassOccurrencesByStudentInMonth(monthKey);
-    const entries = [];
-
-    state.students.forEach((student, index) => {
-      if (!student || typeof student !== 'object') return;
-      const name = String(student.name || '').trim();
-      if (!name) return;
-
-      const studentOccurrences = occurrenceMap.get(name) || [];
-      const completedCount = studentOccurrences.length;
-      if (completedCount <= 0) return;
-
-      const tuition = parsePriceToNumber(student.tuition);
-      if (tuition <= 0) return;
-
-      const tuitionBasis = String(student.tuitionBasis || '').trim();
-      let totalAmount = 0;
-      if (tuitionBasis === '월초') {
-        totalAmount = roundWon(tuition);
-      } else {
-        const cycleCount = Math.max(1, basisToCount(tuitionBasis));
-        totalAmount = roundWon((tuition / cycleCount) * completedCount);
-      }
-
-      if (totalAmount <= 0) return;
-      const baseAmount = Math.floor(totalAmount / completedCount);
-      const remainder = totalAmount - baseAmount * completedCount;
-
-      studentOccurrences.forEach((occurrence, occurrenceIndex) => {
-        const date = normalizeDateInput(occurrence.date || `${monthKey}-01`) || `${monthKey}-01`;
-        entries.push({
-          id: `auto-pottery-class-${normalizeNameKey(name)}-${date}-${occurrence.start || occurrenceIndex}-${index}`,
-          source: 'auto',
-          side: 'revenue',
-          category: '수강료',
-          date,
-          title: `${name} 수강 ${occurrence.start || ''}`.trim(),
-          amount: baseAmount + (occurrenceIndex < remainder ? 1 : 0),
-          fixed: false,
-          tab: TAB_POTTERY
-        });
-      });
+    return globalThis.PotteryAccountingAutoEntries.buildPotteryClassRevenueEntries({
+      students: state.students,
+      occurrenceMap: collectClassOccurrencesByStudentInMonth(monthKey),
+      monthKey,
+      helpers: { parsePriceToNumber, roundWon, basisToCount, normalizeDateInput, normalizeNameKey }
     });
-
-    entries.sort((a, b) => {
-      const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
-      if (dateCompare !== 0) return dateCompare;
-      return String(a.title || '').localeCompare(String(b.title || ''), 'ko');
-    });
-
-    return entries;
   }
 
   function buildPotteryPersonalWorkRevenueEntries(monthKey) {
-    const entries = [];
-
-    state.personalWorkEntries.forEach((entry, index) => {
-      if (!entry || typeof entry !== 'object') return;
-      const userName = String(entry.userName || '').trim();
-      if (!userName) return;
-
-      const monthlyFee = parsePriceToNumber(entry.monthlyFee);
-      if (monthlyFee <= 0) return;
-
-      const paymentDates = getPersonalWorkPaymentDates(entry)
-        .filter((date) => String(date || '').startsWith(`${monthKey}-`));
-
-      paymentDates.forEach((date, paymentIndex) => {
-        entries.push({
-          id: `auto-pottery-personal-${normalizeNameKey(userName)}-${monthKey}-${index}-${paymentIndex}`,
-          source: 'auto',
-          side: 'revenue',
-          category: '개인작업 이용료',
-          date,
-          title: `${userName} 개인작업 이용료`,
-          amount: monthlyFee,
-          fixed: false,
-          tab: TAB_POTTERY
-        });
-      });
+    return globalThis.PotteryAccountingAutoEntries.buildPotteryPersonalWorkRevenueEntries({
+      personalWorkEntries: state.personalWorkEntries,
+      monthKey,
+      helpers: { parsePriceToNumber, normalizeDateInput, normalizeNameKey }
     });
-
-    entries.sort((a, b) => {
-      const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
-      if (dateCompare !== 0) return dateCompare;
-      return String(a.title || '').localeCompare(String(b.title || ''), 'ko');
-    });
-
-    return entries;
   }
 
   function buildPotteryMaterialExpenseEntries(monthKey) {
-    const entries = [];
-
-    state.materialOrders.forEach((order, index) => {
-      if (!order || typeof order !== 'object') return;
-      const orderDate = normalizeDateInput(order.orderDate || '');
-      if (!orderDate || !orderDate.startsWith(`${monthKey}-`)) return;
-
-      const amount = getMaterialOrderTotal(order);
-      if (amount <= 0) return;
-
-      entries.push({
-        id: `auto-pottery-material-${order.id || index}-${orderDate}`,
-        source: 'auto',
-        side: 'expense',
-        category: '재료비',
-        date: orderDate,
-        title: `재료 주문 ${orderDate}`,
-        amount,
-        fixed: false,
-        tab: TAB_POTTERY
-      });
+    return globalThis.PotteryAccountingAutoEntries.buildPotteryMaterialExpenseEntries({
+      materialOrders: state.materialOrders,
+      monthKey,
+      helpers: { normalizeDateInput }
     });
-
-    entries.sort((a, b) => {
-      const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
-      if (dateCompare !== 0) return dateCompare;
-      return String(a.title || '').localeCompare(String(b.title || ''), 'ko');
-    });
-
-    return entries;
   }
 
   function collectClassOccurrencesByStudentInMonth(monthKey) {
@@ -890,20 +790,6 @@
     const match = String(basis || '').match(/\d+/);
     const value = match ? Number(match[0]) : 0;
     return Number.isFinite(value) ? value : 0;
-  }
-
-  function getPersonalWorkPaymentDates(entry) {
-    const history = Array.isArray(entry?.paymentHistory) ? entry.paymentHistory : [];
-    const latest = normalizeDateInput(entry?.lastPaymentDate || '');
-    const set = new Set();
-
-    history.forEach((value) => {
-      const date = normalizeDateInput(value);
-      if (date) set.add(date);
-    });
-    if (latest) set.add(latest);
-
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
   }
 
   function getMaterialOrderTotal(order) {

@@ -268,3 +268,54 @@ test('accounting characterizes monthly class occurrence grouping and dedupe', ()
     ['C', [{ date: '2026-08-04', start: '10:00' }, { date: '2026-08-11', start: '10:00' }]]
   ]);
 });
+
+test('accounting characterizes pottery automatic entries and commission rounding', () => {
+  const RealDate = Date;
+  const fixedTime = new RealDate('2026-08-15T12:00:00').getTime();
+  class FixedDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length ? args : [fixedTime]));
+    }
+
+    static now() {
+      return fixedTime;
+    }
+  }
+  const accounting = exposeIifeFunctions('pottery-accounting.js', [
+    'state', 'buildAutoEntries', 'buildPotteryClassRevenueEntries',
+    'buildPotteryPersonalWorkRevenueEntries', 'buildPotteryMaterialExpenseEntries'
+  ], { globals: {
+    Date: FixedDate,
+    getMonthStart,
+    MasterCalendarOccurrences: calendarOccurrences,
+    PotteryAccountingAutoEntries: autoEntries
+  } }).exposed;
+  accounting.state.students = [
+    { name: 'A', tuition: 100, tuitionBasis: '4회' },
+    { name: 'B', tuition: 101, tuitionBasis: '월초' }
+  ];
+  accounting.state.calendarEvents = [
+    { kind: '수강', title: 'A', date: '2026-08-03', start: '10:00', end: '11:00', repeatWeekly: true, repeatEndDate: '2026-08-10' },
+    { kind: '수강', title: 'B', date: '2026-08-04', start: '09:00', end: '10:00' }
+  ];
+  accounting.state.personalWorkEntries = [{
+    userName: 'Artist', monthlyFee: 100, paymentHistory: ['2026-08-01', '2026-08-01'], lastPaymentDate: '2026-08-15'
+  }];
+  accounting.state.materialOrders = [{
+    id: 'order-1', orderDate: '2026-08-02', items: [{ price: 100, discount: 10, shippingFee: 5 }]
+  }];
+
+  assert.deepEqual(JSON.parse(JSON.stringify(accounting.buildPotteryClassRevenueEntries('2026-08'))), [
+    { id: 'auto-pottery-class-a-2026-08-03-10:00-0', source: 'auto', side: 'revenue', category: '수강료', date: '2026-08-03', title: 'A 수강 10:00', amount: 25, fixed: false, tab: 'pottery' },
+    { id: 'auto-pottery-class-b-2026-08-04-09:00-1', source: 'auto', side: 'revenue', category: '수강료', date: '2026-08-04', title: 'B 수강 09:00', amount: 101, fixed: false, tab: 'pottery' },
+    { id: 'auto-pottery-class-a-2026-08-10-10:00-0', source: 'auto', side: 'revenue', category: '수강료', date: '2026-08-10', title: 'A 수강 10:00', amount: 25, fixed: false, tab: 'pottery' }
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(accounting.buildPotteryPersonalWorkRevenueEntries('2026-08'))), [
+    { id: 'auto-pottery-personal-artist-2026-08-0-0', source: 'auto', side: 'revenue', category: '개인작업 이용료', date: '2026-08-01', title: 'Artist 개인작업 이용료', amount: 100, fixed: false, tab: 'pottery' },
+    { id: 'auto-pottery-personal-artist-2026-08-0-1', source: 'auto', side: 'revenue', category: '개인작업 이용료', date: '2026-08-15', title: 'Artist 개인작업 이용료', amount: 100, fixed: false, tab: 'pottery' }
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(accounting.buildPotteryMaterialExpenseEntries('2026-08'))), [
+    { id: 'auto-pottery-material-order-1-2026-08-02', source: 'auto', side: 'expense', category: '재료비', date: '2026-08-02', title: '재료 주문 2026-08-02', amount: 95, fixed: false, tab: 'pottery' }
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(accounting.buildAutoEntries('pottery', 'expense', '수강료 강사 커미션', '2026-08'))).map((entry) => entry.amount), [15, 61, 15]);
+});

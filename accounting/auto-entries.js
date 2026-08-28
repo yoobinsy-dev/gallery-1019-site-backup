@@ -76,6 +76,144 @@
     return total > 0 ? total : 0;
   }
 
+  function buildPotteryClassRevenueEntries(options) {
+    const students = Array.isArray(options?.students) ? options.students : [];
+    const occurrenceMap = options?.occurrenceMap instanceof Map ? options.occurrenceMap : new Map();
+    const monthKey = String(options?.monthKey || '');
+    const helpers = options?.helpers || {};
+    const entries = [];
+
+    students.forEach((student, index) => {
+      if (!student || typeof student !== 'object') return;
+      const name = String(student.name || '').trim();
+      if (!name) return;
+
+      const studentOccurrences = occurrenceMap.get(name) || [];
+      const completedCount = studentOccurrences.length;
+      if (completedCount <= 0) return;
+
+      const tuition = helpers.parsePriceToNumber(student.tuition);
+      if (tuition <= 0) return;
+
+      const tuitionBasis = String(student.tuitionBasis || '').trim();
+      let totalAmount = 0;
+      if (tuitionBasis === '월초') {
+        totalAmount = helpers.roundWon(tuition);
+      } else {
+        const cycleCount = Math.max(1, helpers.basisToCount(tuitionBasis));
+        totalAmount = helpers.roundWon((tuition / cycleCount) * completedCount);
+      }
+
+      if (totalAmount <= 0) return;
+      const baseAmount = Math.floor(totalAmount / completedCount);
+      const remainder = totalAmount - baseAmount * completedCount;
+
+      studentOccurrences.forEach((occurrence, occurrenceIndex) => {
+        const date = helpers.normalizeDateInput(occurrence.date || `${monthKey}-01`) || `${monthKey}-01`;
+        entries.push({
+          id: `auto-pottery-class-${helpers.normalizeNameKey(name)}-${date}-${occurrence.start || occurrenceIndex}-${index}`,
+          source: 'auto',
+          side: 'revenue',
+          category: '수강료',
+          date,
+          title: `${name} 수강 ${occurrence.start || ''}`.trim(),
+          amount: baseAmount + (occurrenceIndex < remainder ? 1 : 0),
+          fixed: false,
+          tab: 'pottery'
+        });
+      });
+    });
+
+    return sortEntries(entries);
+  }
+
+  function buildPotteryPersonalWorkRevenueEntries(options) {
+    const personalWorkEntries = Array.isArray(options?.personalWorkEntries) ? options.personalWorkEntries : [];
+    const monthKey = String(options?.monthKey || '');
+    const helpers = options?.helpers || {};
+    const entries = [];
+
+    personalWorkEntries.forEach((entry, index) => {
+      if (!entry || typeof entry !== 'object') return;
+      const userName = String(entry.userName || '').trim();
+      if (!userName) return;
+
+      const monthlyFee = helpers.parsePriceToNumber(entry.monthlyFee);
+      if (monthlyFee <= 0) return;
+
+      const paymentDates = getPersonalWorkPaymentDates(entry, helpers)
+        .filter((date) => String(date || '').startsWith(`${monthKey}-`));
+
+      paymentDates.forEach((date, paymentIndex) => {
+        entries.push({
+          id: `auto-pottery-personal-${helpers.normalizeNameKey(userName)}-${monthKey}-${index}-${paymentIndex}`,
+          source: 'auto',
+          side: 'revenue',
+          category: '개인작업 이용료',
+          date,
+          title: `${userName} 개인작업 이용료`,
+          amount: monthlyFee,
+          fixed: false,
+          tab: 'pottery'
+        });
+      });
+    });
+
+    return sortEntries(entries);
+  }
+
+  function buildPotteryMaterialExpenseEntries(options) {
+    const materialOrders = Array.isArray(options?.materialOrders) ? options.materialOrders : [];
+    const monthKey = String(options?.monthKey || '');
+    const helpers = options?.helpers || {};
+    const entries = [];
+
+    materialOrders.forEach((order, index) => {
+      if (!order || typeof order !== 'object') return;
+      const orderDate = helpers.normalizeDateInput(order.orderDate || '');
+      if (!orderDate || !orderDate.startsWith(`${monthKey}-`)) return;
+
+      const amount = getMaterialOrderTotal(order);
+      if (amount <= 0) return;
+
+      entries.push({
+        id: `auto-pottery-material-${order.id || index}-${orderDate}`,
+        source: 'auto',
+        side: 'expense',
+        category: '재료비',
+        date: orderDate,
+        title: `재료 주문 ${orderDate}`,
+        amount,
+        fixed: false,
+        tab: 'pottery'
+      });
+    });
+
+    return sortEntries(entries);
+  }
+
+  function getPersonalWorkPaymentDates(entry, helpers) {
+    const history = Array.isArray(entry?.paymentHistory) ? entry.paymentHistory : [];
+    const latest = helpers.normalizeDateInput(entry?.lastPaymentDate || '');
+    const dates = new Set();
+
+    history.forEach((value) => {
+      const date = helpers.normalizeDateInput(value);
+      if (date) dates.add(date);
+    });
+    if (latest) dates.add(latest);
+
+    return Array.from(dates).sort((a, b) => a.localeCompare(b));
+  }
+
+  function sortEntries(entries) {
+    return entries.sort((a, b) => {
+      const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
+      if (dateCompare !== 0) return dateCompare;
+      return String(a.title || '').localeCompare(String(b.title || ''), 'ko');
+    });
+  }
+
   function getExhibitionEndDate(exhibition, helpers) {
     if (!exhibition || typeof exhibition !== 'object') return '';
     return helpers.normalizeDateInput(exhibition.endDate || exhibition.date || '');
@@ -128,7 +266,13 @@
     return `${base}|${itemType}|${soldDate}|${soldDateTime}|${price}|${qty}`;
   }
 
-  const api = Object.freeze({ buildGallerySalesAutoEntries, getMaterialOrderTotal });
+  const api = Object.freeze({
+    buildGallerySalesAutoEntries,
+    buildPotteryClassRevenueEntries,
+    buildPotteryPersonalWorkRevenueEntries,
+    buildPotteryMaterialExpenseEntries,
+    getMaterialOrderTotal
+  });
   root.PotteryAccountingAutoEntries = api;
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
