@@ -3,12 +3,16 @@ const assert = require('node:assert/strict');
 
 const { exposeIifeFunctions } = require('../helpers/load-source');
 const model = require('../../material-orders/model');
+const rowProjection = require('../../material-orders/row-projection');
 
 function loadOrders() {
   return exposeIifeFunctions('pottery-material-orders.js', [
     'state', 'normalizeOrder', 'normalizeItem', 'getLineTotal', 'getOrderTotal', 'getOrdersForMonth',
     'buildOrderNumberMap', 'compareOrders', 'inferOrderWideByPattern', 'normalizeDateISO'
-  ], { globals: { PotteryMaterialOrdersModel: model } }).exposed;
+  ], { globals: {
+    PotteryMaterialOrdersModel: model,
+    PotteryMaterialOrdersRowProjection: rowProjection
+  } }).exposed;
 }
 
 test('material orders characterize totals, discounts, shipping, and inferred order-wide fields', () => {
@@ -70,4 +74,52 @@ test('material order model characterizes strict normalization and preserves inpu
   assert.equal(orders.getLineTotal(100.9, 10.9, 5.9), 95);
   assert.equal(orders.getLineTotal(10, 20, 2), null);
   assert.equal(orders.normalizeDateISO('invalid'), '');
+});
+
+test('material order row projection preserves grouping, selection, editing, and totals', () => {
+  const orders = [{
+    id: 'order-2',
+    orderWideDiscount: true,
+    orderWideShipping: false,
+    items: [
+      { id: 'item-a', price: 100, discount: 10 },
+      { id: 'item-b', price: 50, shippingFee: 5 }
+    ]
+  }, {
+    id: 'order-1',
+    items: [{ id: 'item-c', price: 25 }]
+  }];
+  const projection = rowProjection.buildRowProjection({
+    orders,
+    orderNumberMap: new Map([['order-1', 1], ['order-2', 2]]),
+    selectedItemIds: ['item-a', 'item-b'],
+    editingOrderId: 'order-2',
+    getOrderTotal: model.getOrderTotal
+  });
+
+  assert.deepEqual(projection.visibleItemIds, ['item-a', 'item-b', 'item-c']);
+  assert.equal(projection.grandTotal, 170);
+  assert.deepEqual(projection.rows.map((row) => ({
+    orderNo: row.orderNo,
+    itemId: row.item.id,
+    itemIndex: row.itemIndex,
+    rowSpan: row.rowSpan,
+    showGroupCell: row.showGroupCell,
+    isEditing: row.isEditing,
+    itemSelected: row.itemSelected,
+    orderSelected: row.orderSelected,
+    mergeMeta: row.mergeMeta
+  })), [{
+    orderNo: 2, itemId: 'item-a', itemIndex: 0, rowSpan: 2, showGroupCell: true,
+    isEditing: true, itemSelected: true, orderSelected: true,
+    mergeMeta: { mergeOrderCells: true, mergeDiscount: true, mergeShipping: false, mergeTotal: true, orderTotal: 145 }
+  }, {
+    orderNo: 2, itemId: 'item-b', itemIndex: 1, rowSpan: 2, showGroupCell: false,
+    isEditing: true, itemSelected: true, orderSelected: true,
+    mergeMeta: { mergeOrderCells: true, mergeDiscount: true, mergeShipping: false, mergeTotal: true, orderTotal: 145 }
+  }, {
+    orderNo: 1, itemId: 'item-c', itemIndex: 0, rowSpan: 1, showGroupCell: true,
+    isEditing: false, itemSelected: false, orderSelected: false,
+    mergeMeta: { mergeOrderCells: false, mergeDiscount: false, mergeShipping: false, mergeTotal: false, orderTotal: 25 }
+  }]);
 });

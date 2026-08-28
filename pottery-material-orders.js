@@ -312,15 +312,14 @@
     const monthKey = getMonthKeyFromDate(state.displayMonth);
     const orders = getOrdersForMonth(monthKey);
     const orderNoMap = buildOrderNumberMap();
-    const visibleItemIds = [];
-
-    orders.forEach((order) => {
-      order.items.forEach((item) => {
-        visibleItemIds.push(item.id);
-      });
+    const projection = globalThis.PotteryMaterialOrdersRowProjection.buildRowProjection({
+      orders,
+      orderNumberMap: orderNoMap,
+      selectedItemIds: state.selectedItemIds,
+      editingOrderId: state.editing?.orderId,
+      getOrderTotal
     });
-
-    state.selectedItemIds = state.selectedItemIds.filter((itemId) => visibleItemIds.includes(itemId));
+    state.selectedItemIds = state.selectedItemIds.filter((itemId) => projection.visibleItemIds.includes(itemId));
 
     tbody.innerHTML = '';
 
@@ -332,52 +331,27 @@
       return;
     }
 
-    orders.forEach((order) => {
-      const editingInOrder = Boolean(state.editing && state.editing.orderId === order.id);
-      const rowSpan = order.items.length;
-      const mergeDiscount = Boolean(order.orderWideDiscount);
-      const mergeShipping = Boolean(order.orderWideShipping);
-      const mergeTotal = mergeDiscount || mergeShipping;
-      const orderTotal = getOrderTotal(order);
-      const mergeOrderCells = rowSpan > 1;
-
-      order.items.forEach((item, itemIndex) => {
+    projection.rows.forEach((row) => {
+        const { order, item, itemIndex, rowSpan, showGroupCell, orderNo, mergeMeta } = row;
         const tr = document.createElement('tr');
         tr.dataset.orderId = order.id;
         tr.dataset.itemId = item.id;
         if (itemIndex === 0) tr.classList.add('group-start');
 
-        const isEditing = editingInOrder;
-        if (isEditing) {
+        if (row.isEditing) {
           tr.classList.add('orders-inline-edit');
         }
 
-        const showGroupCell = itemIndex === 0;
-        const orderNo = orderNoMap.get(order.id) || '-';
-
-        if (isEditing) {
-          tr.innerHTML = buildInlineEditRowHTML(orderNo, order, item, itemIndex, showGroupCell, rowSpan, {
-            mergeOrderCells,
-            mergeDiscount,
-            mergeShipping,
-            mergeTotal,
-            orderTotal
-          });
+        if (row.isEditing) {
+          tr.innerHTML = buildInlineEditRowHTML(orderNo, order, item, itemIndex, showGroupCell, rowSpan, mergeMeta);
         } else {
-          tr.innerHTML = buildReadOnlyRowHTML(orderNo, order, item, itemIndex, showGroupCell, rowSpan, {
-            mergeDiscount,
-            mergeShipping,
-            mergeTotal,
-            orderTotal,
-            mergeOrderCells
-          });
+          tr.innerHTML = buildReadOnlyRowHTML(orderNo, order, item, itemIndex, showGroupCell, rowSpan, mergeMeta);
         }
 
         tbody.appendChild(tr);
-      });
     });
 
-    appendMainTableTotalRow(tbody, orders);
+    appendMainTableTotalRow(tbody, projection.grandTotal);
     applyManualCellMerges('main');
 
     autoResizeTextareasIn(tbody);
@@ -387,17 +361,8 @@
     refreshGridKeyboardNavigation();
   }
 
-  function appendMainTableTotalRow(tbody, orders) {
+  function appendMainTableTotalRow(tbody, grandTotal) {
     if (!tbody) return;
-
-    let grandTotal = 0;
-
-    orders.forEach((order) => {
-      const orderTotal = getOrderTotal(order);
-      if (typeof orderTotal === 'number' && orderTotal > 0) {
-        grandTotal += orderTotal;
-      }
-    });
 
     const tr = document.createElement('tr');
     tr.className = 'orders-total-row';
