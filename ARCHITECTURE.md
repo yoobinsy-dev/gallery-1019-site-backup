@@ -21,13 +21,13 @@ The initial `main` and `develop` commit is `43c0ac9b099e6fb7b7b22da6bc6fbe68342e
 
 Production and development are separate security boundaries. Sharing environment variable names is allowed; sharing resource values or write credentials is not.
 
-| Resource | Production | Development requirement |
+| Resource | Production | Development |
 | --- | --- | --- |
-| Vercel project | `gallery-1019-site` (`prj_YCn5F9fEsMGHpBBKInqNNkbvPuwG`), team `1019-gallery` | Create a separate project. Do not link the development worktree to the production project. |
-| Canonical URL | `gallery-1019-site.vercel.app` | Use only the development project's domains. |
-| Lakebase Postgres (Neon) | Production database `neondb`; endpoint identifier `ep-autumn-brook-aum5q7ch` | Create a separate development branch or database with its own role and credentials. |
-| Exhibition images | Public Blob store `gallery-1019-exhibition-images-public` (`store_8GrgABDn7KW6YuH3`) | Create a separate public development Blob store. |
-| Snapshot archive | Archive Blob binding `BLOB_READ_WRITE_TOKEN`; verified resource name `gallery-1019-files` | Prefer disabling archive writes. If archive behavior must be tested, create a separate private development store. |
+| Vercel project | `gallery-1019-site` (`prj_YCn5F9fEsMGHpBBKInqNNkbvPuwG`), team `1019-gallery` | `gallery-1019-site-dev` (`prj_jfBfO6Bx1OeqdEjaV8QzZlPMQQn2`) |
+| Canonical URL | `gallery-1019-site.vercel.app` | `gallery-1019-site-dev.vercel.app` |
+| Lakebase Postgres (Neon) | Production database `neondb`; branch `br-crimson-flower-auah6zwc`; endpoint `ep-autumn-brook-aum5q7ch` | Database `neondb`; branch `br-divine-waterfall-au77ncm0`; endpoint `ep-falling-cell-au5eg3l0`; role `gallery_1019_dev_app` |
+| Exhibition images | Public Blob store `gallery-1019-exhibition-images-public` (`store_8GrgABDn7KW6YuH3`) | Public Blob store `gallery-1019-exhibition-images-dev` (`store_juobLGwpzZY4gmFa`) |
+| Snapshot archive | Archive Blob binding `BLOB_READ_WRITE_TOKEN`; verified resource name `gallery-1019-files` | Disabled; no `BLOB_READ_WRITE_TOKEN` is installed |
 
 Never put tokens, passwords, connection strings, or secret values in Git or documentation. Ignored legacy environment files must never be copied into a clean worktree.
 
@@ -112,4 +112,4 @@ Development deployments are prohibited until all of these conditions are true:
 - Every development/preview environment variable has been checked by resource identity, not merely by variable name.
 - No production write credential is present in the development project, worktree, CI, or preview settings.
 
-At the time this document was created, those external development resources had not been created. The clean development worktree intentionally contains no `.vercel` link and no environment files.
+The gate passed on 2026-08-28. The development worktree is linked only to the development Vercel project. Its ignored local `.env.local` contains only the development project's Vercel OIDC token; application resource values are managed in the development project. See `docs/DEVELOPMENT_ENVIRONMENT.md` for the verified resource manifest, deployment procedure, and isolation evidence.
