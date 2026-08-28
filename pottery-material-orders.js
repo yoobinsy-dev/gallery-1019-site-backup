@@ -1742,30 +1742,15 @@
   }
 
   function getOrdersForMonth(monthKey) {
-    return state.orders
-      .filter((order) => String(order.orderDate || '').slice(0, 7) === monthKey)
-      .sort((a, b) => compareOrders(b, a));
+    return globalThis.PotteryMaterialOrdersModel.getOrdersForMonth(state.orders, monthKey);
   }
 
   function buildOrderNumberMap() {
-    const sorted = state.orders.slice().sort(compareOrders);
-    const map = new Map();
-
-    sorted.forEach((order, index) => {
-      map.set(order.id, index + 1);
-    });
-
-    return map;
+    return globalThis.PotteryMaterialOrdersModel.buildOrderNumberMap(state.orders);
   }
 
   function compareOrders(a, b) {
-    const byDate = String(a.orderDate || '').localeCompare(String(b.orderDate || ''));
-    if (byDate !== 0) return byDate;
-
-    const byCreated = String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
-    if (byCreated !== 0) return byCreated;
-
-    return String(a.id || '').localeCompare(String(b.id || ''));
+    return globalThis.PotteryMaterialOrdersModel.compareOrders(a, b);
   }
 
   function buildProductOptionsHTML(selectedValue) {
@@ -1864,80 +1849,24 @@
   }
 
   function normalizeOrder(order) {
-    if (!order || typeof order !== 'object') return null;
-
-    const id = String(order.id || makeId('ord')).trim();
-    const date = normalizeDateISO(order.orderDate) || formatDateISO(new Date());
-    const createdAt = String(order.createdAt || new Date().toISOString());
-
-    const rawItems = Array.isArray(order.items) ? order.items : [];
-    const items = rawItems
-      .map(normalizeItem)
-      .filter(Boolean);
-
-    if (items.length === 0) return null;
-
-    const explicitOrderWideDiscount = typeof order.orderWideDiscount === 'boolean' ? order.orderWideDiscount : null;
-    const explicitOrderWideShipping = typeof order.orderWideShipping === 'boolean' ? order.orderWideShipping : null;
-    const inferredOrderWideDiscount = inferOrderWideByPattern(items, 'discount');
-    const inferredOrderWideShipping = inferOrderWideByPattern(items, 'shipping');
-
-    return {
-      id,
-      orderDate: date,
-      createdAt,
-      orderWideDiscount: explicitOrderWideDiscount !== null ? explicitOrderWideDiscount : inferredOrderWideDiscount,
-      orderWideShipping: explicitOrderWideShipping !== null ? explicitOrderWideShipping : inferredOrderWideShipping,
-      items
-    };
-  }
-
-  function inferOrderWideByPattern(items, kind) {
-    if (!Array.isArray(items) || items.length <= 1) return false;
-
-    const key = kind === 'discount' ? 'discount' : 'shippingFee';
-    const firstValue = Number(items[0]?.[key]);
-    const firstHasValue = Number.isFinite(firstValue) && firstValue > 0;
-    if (!firstHasValue) return false;
-
-    return items.slice(1).every((item) => {
-      const value = Number(item?.[key]);
-      return !Number.isFinite(value) || value <= 0;
+    return globalThis.PotteryMaterialOrdersModel.normalizeOrder(order, {
+      makeId,
+      siteOptions: SITE_OPTIONS,
+      defaultStatus: DEFAULT_STATUS,
+      currentDate: new Date()
     });
   }
 
+  function inferOrderWideByPattern(items, kind) {
+    return globalThis.PotteryMaterialOrdersModel.inferOrderWideByPattern(items, kind);
+  }
+
   function normalizeItem(item) {
-    if (!item || typeof item !== 'object') return null;
-
-    const id = String(item.id || makeId('item')).trim();
-    const category = String(item.category || '').trim();
-    const site = SITE_OPTIONS.includes(String(item.site || '').trim())
-      ? String(item.site || '').trim()
-      : SITE_OPTIONS[0];
-    const product = String(item.product || '').trim();
-    const quantity = Math.floor(Number(item.quantity));
-
-    if (!product) return null;
-    if (!Number.isInteger(quantity) || quantity <= 0) return null;
-
-    const parsedPrice = Number(item.price);
-    const price = Number.isFinite(parsedPrice) && parsedPrice > 0 ? Math.floor(parsedPrice) : null;
-    const parsedDiscount = Number(item.discount);
-    const discount = Number.isFinite(parsedDiscount) && parsedDiscount > 0 ? Math.floor(parsedDiscount) : null;
-    const parsedShippingFee = Number(item.shippingFee);
-    const shippingFee = Number.isFinite(parsedShippingFee) && parsedShippingFee > 0 ? Math.floor(parsedShippingFee) : null;
-
-    return {
-      id,
-      category,
-      site,
-      product,
-      quantity,
-      price,
-      discount,
-      shippingFee,
-      status: String(item.status || DEFAULT_STATUS).trim() || DEFAULT_STATUS
-    };
+    return globalThis.PotteryMaterialOrdersModel.normalizeItem(item, {
+      makeId,
+      siteOptions: SITE_OPTIONS,
+      defaultStatus: DEFAULT_STATUS
+    });
   }
 
   function saveOrders() {
@@ -1979,14 +1908,7 @@
   }
 
   function getLineTotal(price, discount, shippingFee) {
-    const numericPrice = Number(price);
-    const numericDiscount = Number(discount);
-    const numericShippingFee = Number(shippingFee);
-    const safePrice = Number.isFinite(numericPrice) && numericPrice > 0 ? Math.floor(numericPrice) : 0;
-    const safeDiscount = Number.isFinite(numericDiscount) && numericDiscount > 0 ? Math.floor(numericDiscount) : 0;
-    const safeShippingFee = Number.isFinite(numericShippingFee) && numericShippingFee > 0 ? Math.floor(numericShippingFee) : 0;
-    const total = safePrice - safeDiscount + safeShippingFee;
-    return total > 0 ? total : null;
+    return globalThis.PotteryMaterialOrdersModel.getLineTotal(price, discount, shippingFee);
   }
 
   function updateOrderLineTotalForRow(row) {
@@ -2084,42 +2006,7 @@
   }
 
   function getOrderTotal(order) {
-    if (!order || !Array.isArray(order.items)) return null;
-
-    const items = order.items;
-    const orderWideDiscount = Boolean(order.orderWideDiscount);
-    const orderWideShipping = Boolean(order.orderWideShipping);
-
-    let totalPrice = 0;
-    let totalDiscount = 0;
-    let totalShipping = 0;
-
-    items.forEach((item, index) => {
-      const price = Number(item?.price);
-      const discount = Number(item?.discount);
-      const shipping = Number(item?.shippingFee);
-
-      if (Number.isFinite(price) && price > 0) {
-        totalPrice += Math.floor(price);
-      }
-
-      if (Number.isFinite(discount) && discount > 0) {
-        const shouldCount = orderWideDiscount ? index === 0 : true;
-        if (shouldCount) {
-          totalDiscount += Math.floor(discount);
-        }
-      }
-
-      if (Number.isFinite(shipping) && shipping > 0) {
-        const shouldCount = orderWideShipping ? index === 0 : true;
-        if (shouldCount) {
-          totalShipping += Math.floor(shipping);
-        }
-      }
-    });
-
-    const total = totalPrice - totalDiscount + totalShipping;
-    return total > 0 ? total : null;
+    return globalThis.PotteryMaterialOrdersModel.getOrderTotal(order);
   }
 
   function updateInlineEditTotalForRow(row) {
@@ -2187,11 +2074,7 @@
   }
 
   function normalizeDateISO(rawDate) {
-    const value = String(rawDate || '').trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return '';
-    const parsed = new Date(`${value}T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) return '';
-    return value;
+    return globalThis.PotteryMaterialOrdersModel.normalizeDateISO(rawDate);
   }
 
   function formatDateISO(date) {
