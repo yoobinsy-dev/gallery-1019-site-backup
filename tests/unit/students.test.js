@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { cloneCalendarEvents } = require('../fixtures/calendar');
 const { exposeIifeFunctions } = require('../helpers/load-source');
 const paymentCredits = require('../../students/payment-credits');
+const calendarOccurrences = require('../../master-calendar/occurrences');
 const {
   buildPaymentClassGroupsLegacy,
   computeCarryOverForNewPaymentCycleLegacy,
@@ -41,7 +42,11 @@ function loadStudents() {
     'isMonthlyStartBasis',
     'getVisibleStudents',
     'canManageStudent'
-  ], { globals: { Date: FixedDate, StudentPaymentCredits: paymentCredits } }).exposed;
+  ], { globals: {
+    Date: FixedDate,
+    MasterCalendarOccurrences: calendarOccurrences,
+    StudentPaymentCredits: paymentCredits
+  } }).exposed;
 }
 
 test('students characterize single/weekly attendance, cancellation, ordering, and boundary dates', () => {

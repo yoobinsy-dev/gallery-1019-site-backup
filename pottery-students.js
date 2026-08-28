@@ -1219,33 +1219,15 @@
       if (!kindSet.has(String(event.kind || '').trim())) return;
       if (isAllDayKind(event.kind)) return;
 
-      if (!event.repeatWeekly) {
-        pushOccurrence(event, String(event.date || ''));
-        return;
-      }
-
-      const baseDate = new Date(`${event.date}T00:00:00`);
-      if (Number.isNaN(baseDate.getTime())) return;
-
-      const skipDates = Array.isArray(event.repeatSkipDates) ? event.repeatSkipDates : [];
-      let horizon = null;
-      if (event.repeatEndDate) {
-        horizon = new Date(`${event.repeatEndDate}T00:00:00`);
-        if (Number.isNaN(horizon.getTime())) return;
-      } else if (pastOnly) {
-        horizon = new Date(now);
-      } else {
-        horizon = addDays(now, 365);
-      }
-
-      let cursor = new Date(baseDate);
-      while (cursor <= horizon) {
-        const key = formatDateInput(cursor);
-        if (!skipDates.includes(key)) {
-          pushOccurrence(event, key);
-        }
-        cursor = addDays(cursor, 7);
-      }
+      const rangeEnd = event.repeatWeekly
+        ? (event.repeatEndDate || formatDateInput(pastOnly ? now : addDays(now, 365)))
+        : event.date;
+      globalThis.MasterCalendarOccurrences.expandOccurrences({
+        events: [event],
+        rangeStart: event.date,
+        rangeEnd,
+        invalidRepeatEnd: 'exclude'
+      }).forEach((occurrence) => pushOccurrence(occurrence.event, occurrence.date));
     });
 
     records.sort((a, b) => {
@@ -1357,52 +1339,11 @@
         mostRecentClassDate: ''
       };
     }
-
-    const now = new Date();
-    let completedCount = 0;
-    let mostRecentClassDate = '';
-
-    state.calendar.events.forEach((event) => {
-      if (!event || event.kind !== '수강') return;
-      if (String(event.title || '').trim() !== name) return;
-      if (!event.date) return;
-
-      if (!event.repeatWeekly) {
-        const key = String(event.date || '').trim();
-        const endAt = getOccurrenceEndDateTime(key, event.start, event.end);
-        if (!endAt || endAt > now) return;
-        completedCount += 1;
-        if (!mostRecentClassDate || key > mostRecentClassDate) {
-          mostRecentClassDate = key;
-        }
-        return;
-      }
-
-      const baseDate = new Date(`${event.date}T00:00:00`);
-      if (Number.isNaN(baseDate.getTime())) return;
-
-      const skipDates = Array.isArray(event.repeatSkipDates) ? event.repeatSkipDates : [];
-      const endDate = event.repeatEndDate ? new Date(`${event.repeatEndDate}T00:00:00`) : now;
-      if (Number.isNaN(endDate.getTime())) return;
-
-      let cursor = new Date(baseDate);
-      while (cursor <= endDate) {
-        const key = formatDateInput(cursor);
-        const endAt = getOccurrenceEndDateTime(key, event.start, event.end);
-        if (!endAt || endAt > now) break;
-        if (!skipDates.includes(key)) {
-          completedCount += 1;
-          if (!mostRecentClassDate || key > mostRecentClassDate) {
-            mostRecentClassDate = key;
-          }
-        }
-        cursor = addDays(cursor, 7);
-      }
-    });
+    const records = collectStudentEventOccurrences(name, ['수강'], { pastOnly: true });
 
     return {
-      completedCount,
-      mostRecentClassDate
+      completedCount: records.length,
+      mostRecentClassDate: records.length ? records[0].date : ''
     };
   }
 
@@ -1413,50 +1354,10 @@
     const normalizedPaymentDate = String(paymentDate || '').trim();
     if (!normalizedPaymentDate) return 0;
 
-    const startDate = new Date(`${normalizedPaymentDate}T00:00:00`);
-    if (startDate && Number.isNaN(startDate.getTime())) return 0;
-
-    const now = new Date();
-    let completedCount = 0;
-
-    state.calendar.events.forEach((event) => {
-      if (!event || event.kind !== '수강') return;
-      if (String(event.title || '').trim() !== name) return;
-      if (!event.date) return;
-
-      if (!event.repeatWeekly) {
-        const key = String(event.date || '').trim();
-        const d = new Date(`${key}T00:00:00`);
-        if (Number.isNaN(d.getTime())) return;
-        const endAt = getOccurrenceEndDateTime(key, event.start, event.end);
-        if (!endAt || endAt > now) return;
-        if (startDate && d < startDate) return;
-        completedCount += 1;
-        return;
-      }
-
-      const baseDate = new Date(`${event.date}T00:00:00`);
-      if (Number.isNaN(baseDate.getTime())) return;
-
-      const skipDates = Array.isArray(event.repeatSkipDates) ? event.repeatSkipDates : [];
-      const endDate = event.repeatEndDate ? new Date(`${event.repeatEndDate}T00:00:00`) : now;
-      if (Number.isNaN(endDate.getTime())) return;
-
-      let cursor = new Date(baseDate);
-      while (cursor <= endDate) {
-        const key = formatDateInput(cursor);
-        const endAt = getOccurrenceEndDateTime(key, event.start, event.end);
-        if (!endAt || endAt > now) break;
-        const notSkipped = !skipDates.includes(key);
-        const afterPayment = !startDate || cursor >= startDate;
-        if (notSkipped && afterPayment) {
-          completedCount += 1;
-        }
-        cursor = addDays(cursor, 7);
-      }
-    });
-
-    return completedCount;
+    if (Number.isNaN(new Date(`${normalizedPaymentDate}T00:00:00`).getTime())) return 0;
+    return collectStudentEventOccurrences(name, ['수강'], { pastOnly: true })
+      .filter((record) => record.date >= normalizedPaymentDate)
+      .length;
   }
 
   function getCompletedClassCountForBalance(student, paymentDateOverride) {
@@ -1616,38 +1517,11 @@
   }
 
   function getEventsForDate(date) {
-    const target = new Date(`${date}T00:00:00`);
-    if (Number.isNaN(target.getTime())) return [];
-
-    return state.calendar.events.filter((event) => {
-      if (!event || !event.date) return false;
-
-      if (isExhibitionKind(event.kind)) {
-        const startDate = new Date(`${event.date}T00:00:00`);
-        const endDate = new Date(`${(event.endDate || event.date)}T00:00:00`);
-        if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return false;
-        return target >= startDate && target <= endDate;
-      }
-
-      if (!event.repeatWeekly) {
-        return event.date === date;
-      }
-
-      const skipDates = Array.isArray(event.repeatSkipDates) ? event.repeatSkipDates : [];
-      if (skipDates.includes(date)) return false;
-
-      const baseDate = new Date(`${event.date}T00:00:00`);
-      if (Number.isNaN(baseDate.getTime())) return false;
-      if (target < baseDate) return false;
-
-      if (event.repeatEndDate) {
-        const repeatEndDate = new Date(`${event.repeatEndDate}T00:00:00`);
-        if (!Number.isNaN(repeatEndDate.getTime()) && target > repeatEndDate) {
-          return false;
-        }
-      }
-
-      return baseDate.getDay() === target.getDay();
+    return globalThis.MasterCalendarOccurrences.getEventsForDate({
+      events: state.calendar.events,
+      date,
+      includeRangeEvents: true,
+      isRangeEvent: (event) => isExhibitionKind(event.kind)
     });
   }
 
