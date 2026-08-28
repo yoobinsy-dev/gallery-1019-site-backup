@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { exposeIifeFunctions } = require('../helpers/load-source');
+const mergePlanning = require('../../material-orders/merge-planning');
 const model = require('../../material-orders/model');
 const rowProjection = require('../../material-orders/row-projection');
 
@@ -122,4 +123,41 @@ test('material order row projection preserves grouping, selection, editing, and 
     isEditing: false, itemSelected: false, orderSelected: false,
     mergeMeta: { mergeOrderCells: false, mergeDiscount: false, mergeShipping: false, mergeTotal: false, orderTotal: 25 }
   }]);
+});
+
+test('material order merge planning preserves contiguous ranges and replaces overlaps', () => {
+  const orderedRowIds = ['a', 'b', 'c', 'd'];
+  assert.deepEqual(mergePlanning.buildVerticalSelection({
+    table: 'main', colKey: 'price', orderedRowIds, startRowId: 'd', endRowId: 'b'
+  }), { table: 'main', colKey: 'price', rowIds: ['b', 'c', 'd'] });
+  assert.equal(mergePlanning.buildVerticalSelection({
+    table: 'main', colKey: 'price', orderedRowIds, startRowId: 'missing', endRowId: 'b'
+  }), null);
+  assert.deepEqual(mergePlanning.buildContiguousSelection({
+    table: 'popup', colKey: 'shipping', orderedRowIds, selectedRowIds: ['b', 'c']
+  }), { table: 'popup', colKey: 'shipping', rowIds: ['b', 'c'] });
+  assert.equal(mergePlanning.buildContiguousSelection({
+    table: 'popup', colKey: 'shipping', orderedRowIds, selectedRowIds: ['a', 'c']
+  }), null);
+
+  const existing = [
+    { colKey: 'price', rowIds: ['a', 'b'] },
+    { colKey: 'price', rowIds: ['c', 'd'] },
+    { colKey: 'shipping', rowIds: ['b', 'c'] }
+  ];
+  assert.deepEqual(mergePlanning.applyMergePlan(existing, {
+    colKey: 'price', rowIds: ['b', 'c']
+  }), [
+    { colKey: 'shipping', rowIds: ['b', 'c'] },
+    { colKey: 'price', rowIds: ['b', 'c'] }
+  ]);
+  assert.deepEqual(existing, [
+    { colKey: 'price', rowIds: ['a', 'b'] },
+    { colKey: 'price', rowIds: ['c', 'd'] },
+    { colKey: 'shipping', rowIds: ['b', 'c'] }
+  ]);
+  assert.deepEqual(mergePlanning.retainApplicablePlans(existing, ['a', 'b', 'c']), [
+    { colKey: 'price', rowIds: ['a', 'b'] },
+    { colKey: 'shipping', rowIds: ['b', 'c'] }
+  ]);
 });
