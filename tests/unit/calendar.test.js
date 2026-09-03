@@ -8,6 +8,7 @@ const occupancy = require('../../master-calendar/occupancy');
 const commands = require('../../master-calendar/commands');
 const pointerController = require('../../master-calendar/pointer-controller');
 const modalController = require('../../master-calendar/modal-controller');
+const quickEditController = require('../../master-calendar/quick-edit-controller');
 const monthView = require('../../master-calendar/month-view');
 const weekView = require('../../master-calendar/week-view');
 const { createStorageAdapter } = require('../../storage/storage-adapter');
@@ -31,6 +32,7 @@ function loadCalendar(globals = {}) {
     MasterCalendarCommands: commands,
     MasterCalendarPointerController: pointerController,
     MasterCalendarModalController: modalController,
+    MasterCalendarQuickEditController: quickEditController,
     MasterCalendarMonthView: monthView,
     MasterCalendarWeekView: weekView,
     MasterCalendarRepository: {
@@ -640,7 +642,8 @@ test('master calendar characterizes workshop usage recurrence and exclusive boun
   ], { globals: {
     Date: FixedDate,
     MasterCalendarDateTime: dateTime,
-    MasterCalendarOccurrences: occurrences
+    MasterCalendarOccurrences: occurrences,
+    MasterCalendarQuickEditController: quickEditController
   } }).exposed;
   calendar.state.events = [
     { kind: '개인작업', title: 'A', date: '2026-08-01', start: '10:00', end: '11:00', repeatWeekly: true, repeatEndDate: '2026-08-15', repeatSkipDates: ['2026-08-08'] },
@@ -670,7 +673,8 @@ test('master calendar characterizes teaching log recurrence and inclusive horizo
   ], { globals: {
     Date: FixedDate,
     MasterCalendarDateTime: dateTime,
-    MasterCalendarOccurrences: occurrences
+    MasterCalendarOccurrences: occurrences,
+    MasterCalendarQuickEditController: quickEditController
   } }).exposed;
   const duplicate = { id: 'repeat', kind: '수강', title: 'A', date: '2027-08-01', start: '11:00', end: '12:00', repeatWeekly: true, repeatEndDate: '2027-08-15', repeatSkipDates: ['2027-08-08'], classType: '정규', instructor: 'I' };
   calendar.state.events = [
