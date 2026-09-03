@@ -10,6 +10,7 @@ const pointerController = require('../../master-calendar/pointer-controller');
 const modalController = require('../../master-calendar/modal-controller');
 const eventModalController = require('../../master-calendar/event-modal-controller');
 const recurringEventController = require('../../master-calendar/recurring-event-controller');
+const bindingsController = require('../../master-calendar/bindings-controller');
 const quickEditController = require('../../master-calendar/quick-edit-controller');
 const baseEditController = require('../../master-calendar/base-edit-controller');
 const baseEditorController = require('../../master-calendar/base-editor-controller');
@@ -38,6 +39,7 @@ function loadCalendar(globals = {}) {
     MasterCalendarModalController: modalController,
     MasterCalendarEventModalController: eventModalController,
     MasterCalendarRecurringEventController: recurringEventController,
+    MasterCalendarBindingsController: bindingsController,
     MasterCalendarQuickEditController: quickEditController,
     MasterCalendarBaseEditController: baseEditController,
     MasterCalendarBaseEditorController: baseEditorController,
@@ -654,6 +656,7 @@ test('master calendar characterizes workshop usage recurrence and exclusive boun
     MasterCalendarModalController: modalController,
     MasterCalendarEventModalController: eventModalController,
     MasterCalendarRecurringEventController: recurringEventController,
+    MasterCalendarBindingsController: bindingsController,
     MasterCalendarQuickEditController: quickEditController,
     MasterCalendarBaseEditController: baseEditController,
     MasterCalendarBaseEditorController: baseEditorController
@@ -690,6 +693,7 @@ test('master calendar characterizes teaching log recurrence and inclusive horizo
     MasterCalendarModalController: modalController,
     MasterCalendarEventModalController: eventModalController,
     MasterCalendarRecurringEventController: recurringEventController,
+    MasterCalendarBindingsController: bindingsController,
     MasterCalendarQuickEditController: quickEditController,
     MasterCalendarBaseEditController: baseEditController,
     MasterCalendarBaseEditorController: baseEditorController
