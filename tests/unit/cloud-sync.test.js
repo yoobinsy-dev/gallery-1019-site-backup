@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { exposeIifeFunctions } = require('../helpers/load-source');
+const CloudSyncModel = require('../../sync/cloud-sync-model');
 const CloudSyncProtocol = require('../../sync/cloud-sync-protocol');
 
 const SYNCED_KEYS = [
@@ -76,6 +77,7 @@ function createCloudSyncHarness({
   exposeIifeFunctions('cloud-sync.js', [], {
     globals: {
       CustomEvent: TestCustomEvent,
+      CloudSyncModel,
       CloudSyncProtocol,
       Storage: TestStorage,
       fetch,
@@ -151,6 +153,27 @@ test('cloud sync characterizes the page-to-active-key request matrix', async () 
       );
     }
   }
+});
+
+test('cloud sync model characterizes users and exhibitions delta removals', () => {
+  const previousUsers = [
+    { id: 1, username: 'admin', role: 'admin' },
+    { id: 2, username: 'member', role: 'member' }
+  ];
+  const nextUsers = [{ id: 1, username: 'admin', role: 'manager' }];
+  const previousExhibitions = [{ id: 10, title: 'Keep' }, { id: 11, title: 'Remove' }];
+  const nextExhibitions = [{ id: 10, title: 'Changed' }];
+
+  assert.deepEqual(CloudSyncModel.buildUsersDelta(previousUsers, nextUsers), {
+    changed: nextUsers,
+    removedIds: [2]
+  });
+  assert.deepEqual(CloudSyncModel.buildExhibitionsDelta(previousExhibitions, nextExhibitions), {
+    changed: nextExhibitions,
+    removedIds: [11]
+  });
+  assert.equal(previousUsers[0].role, 'admin');
+  assert.equal(previousExhibitions[0].title, 'Keep');
 });
 
 test('cloud sync applies remote startup state without echo before signaling ready', async () => {
