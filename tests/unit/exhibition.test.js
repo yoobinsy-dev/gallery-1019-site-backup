@@ -42,6 +42,18 @@ function loadExhibition() {
     ,'formatAccountingAmount'
     ,'getExhibitionRevenueItems'
     ,'getExpenseEffectiveAmount'
+    ,'filterWorks'
+    ,'getWorkSortValue'
+    ,'parseSizeParts'
+    ,'normalizeManualNumber'
+    ,'normalizeTitle'
+    ,'shouldValidateManualNumberUniqueness'
+    ,'shouldValidateTitleUniqueness'
+    ,'findSavedManualNumberConflict'
+    ,'findSavedTitleConflict'
+    ,'getBulkManualNumberConflicts'
+    ,'getBulkTitleConflicts'
+    ,'getMissingRequiredWorkFields'
   ], {
     globals: {
       atob(value) { return Buffer.from(value, 'base64').toString('binary'); },
@@ -494,4 +506,36 @@ test('exhibition snapshot client preserves request and response contracts', asyn
     }),
     /network/
   );
+});
+
+test('exhibition inventory characterizes filtering, size parsing, sort values, and constraints', () => {
+  const exhibition = loadExhibition();
+  const state = exhibition.exhibitionDetailState;
+  const works = [{ id: 1, manualNumber: ' A-1 ', title: 'Alpha', author: 'Kim', price: '100', materials: 'Clay', size: '10 cm x 20 cm', year: '2026', category: 'Cup', saved: true },
+    { id: 2, manualNumber: 'B-2', title: 'Beta', author: 'Lee', price: '', materials: 'Wood', size: 'x 30 cm', year: '2025', category: 'Object', saved: true }];
+  state.exhibition = { works, soldWorks: [{ itemType: '작품', workId: 1 }] };
+  state.workAdvanced = false;
+  state.workSearch = 'kim 100 clay';
+  assert.deepEqual(JSON.parse(JSON.stringify(exhibition.filterWorks(works).map((work) => work.id))), [1]);
+  state.workAdvanced = true;
+  state.workFilters = { title: '', author: 'lee', price: '', materials: 'wood', size: '', year: '', category: '' };
+  assert.deepEqual(JSON.parse(JSON.stringify(exhibition.filterWorks(works).map((work) => work.id))), [2]);
+  assert.deepEqual(JSON.parse(JSON.stringify(exhibition.parseSizeParts('10 cm × 20 cm'))), { width: '10', height: '20' });
+  assert.deepEqual(JSON.parse(JSON.stringify(exhibition.parseSizeParts('x 30 cm'))), { width: '', height: '30' });
+  assert.equal(exhibition.getWorkSortValue(works[0], 'status'), 'sold');
+  assert.equal(exhibition.normalizeManualNumber(' A-1 '), 'a-1');
+  assert.equal(exhibition.normalizeTitle(' Alpha '), 'alpha');
+  assert.deepEqual(JSON.parse(JSON.stringify(exhibition.getMissingRequiredWorkFields(works[1]))), ['price']);
+
+  const saved = { id: 10, manualNumber: 'A-1', title: 'Alpha', saved: true };
+  const pendingA = { id: 11, manualNumber: ' a-1 ', title: ' alpha ', saved: false, wasSaved: false };
+  const pendingB = { id: 12, manualNumber: 'B-2', title: 'Beta', saved: false, wasSaved: false };
+  const pendingC = { id: 13, manualNumber: 'b-2', title: ' beta ', saved: false, wasSaved: false };
+  assert.equal(exhibition.shouldValidateManualNumberUniqueness(pendingA), true);
+  assert.equal(exhibition.shouldValidateTitleUniqueness({ title: '', wasSaved: false }), false);
+  assert.equal(exhibition.findSavedManualNumberConflict(pendingA, [saved])?.id, 10);
+  assert.equal(exhibition.findSavedTitleConflict(pendingA, [saved])?.id, 10);
+  assert.deepEqual([...exhibition.getBulkManualNumberConflicts([saved, pendingA, pendingB, pendingC], [pendingA, pendingB, pendingC])].sort(), [11, 12, 13]);
+  assert.deepEqual([...exhibition.getBulkTitleConflicts([saved, pendingA, pendingB, pendingC], [pendingA, pendingB, pendingC])].sort(), [11, 12, 13]);
+  assert.equal(saved.manualNumber, 'A-1');
 });
