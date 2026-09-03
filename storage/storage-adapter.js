@@ -10,6 +10,9 @@
         return storage.getItem(key);
       },
       write(key, serializedValue) {
+        return storage.setItem(key, serializedValue);
+      },
+      writeSafely(key, serializedValue) {
         if (typeof safeWrite === 'function') {
           return safeWrite(key, serializedValue);
         }

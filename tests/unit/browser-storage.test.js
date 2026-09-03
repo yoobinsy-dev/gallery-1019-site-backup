@@ -140,7 +140,7 @@ test('safe storage recognizes current browser quota error variants', () => {
   assert.equal(model.isStorageQuotaError(new TypeError('other')), false);
 });
 
-test('browser storage adapter preserves raw reads, safe writes, removals, and failures', () => {
+test('browser storage adapter preserves raw reads, native writes, safe writes, and removals', () => {
   const values = new Map([['existing', '{"legacy":true}']]);
   const calls = [];
   const storage = {
@@ -163,14 +163,26 @@ test('browser storage adapter preserves raw reads, safe writes, removals, and fa
 
   assert.equal(adapter.read('missing'), null);
   assert.equal(adapter.read('existing'), '{"legacy":true}');
-  assert.equal(adapter.write('feature', '[{"unknown":1}]'), true);
+  assert.equal(adapter.write('feature', '[{"unknown":1}]'), undefined);
   assert.equal(adapter.read('feature'), '[{"unknown":1}]');
-  assert.equal(adapter.write('failed', 'value'), false);
+  assert.equal(adapter.writeSafely('failed', 'value'), false);
   assert.equal(adapter.remove('feature'), undefined);
   assert.equal(adapter.read('feature'), null);
   assert.deepEqual(calls, [
-    ['write', 'feature', '[{"unknown":1}]'],
     ['write', 'failed', 'value'],
     ['remove', 'feature']
   ]);
+});
+
+test('browser storage adapter native writes preserve thrown storage exceptions', () => {
+  const adapter = createStorageAdapter({
+    storage: {
+      getItem() { return null; },
+      setItem() { throw new Error('storage blocked'); },
+      removeItem() {}
+    },
+    safeWrite() { return false; }
+  });
+  assert.throws(() => adapter.write('key', 'value'), /storage blocked/);
+  assert.equal(adapter.writeSafely('key', 'value'), false);
 });
