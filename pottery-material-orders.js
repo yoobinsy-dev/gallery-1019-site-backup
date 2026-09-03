@@ -1779,36 +1779,15 @@
   }
 
   function getProductOptions() {
-    let parsed;
-    try {
-      parsed = JSON.parse(localStorage.getItem(PRODUCT_OPTIONS_KEY) || '[]');
-    } catch (error) {
-      parsed = [];
-    }
-
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed
+    return globalThis.MaterialOrdersRepository.repository
+      .loadProductOptions()
       .map((entry) => String(entry || '').trim())
       .filter(Boolean);
   }
 
   function loadOrders() {
-    let parsed;
-    try {
-      parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    } catch (error) {
-      parsed = [];
-    }
-
-    if (!Array.isArray(parsed)) {
-      state.orders = [];
-      return;
-    }
-
-    state.orders = parsed
+    state.orders = globalThis.MaterialOrdersRepository.repository
+      .loadOrders()
       .map(normalizeOrder)
       .filter(Boolean);
   }
@@ -1835,7 +1814,7 @@
   }
 
   function saveOrders() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.orders));
+    globalThis.MaterialOrdersRepository.repository.saveOrders(state.orders);
   }
 
   function parseCurrencyInput(rawValue) {

@@ -5,6 +5,8 @@ const { exposeIifeFunctions } = require('../helpers/load-source');
 const mergePlanning = require('../../material-orders/merge-planning');
 const model = require('../../material-orders/model');
 const rowProjection = require('../../material-orders/row-projection');
+const { createStorageAdapter } = require('../../storage/storage-adapter');
+const materialOrdersRepository = require('../../storage/material-orders-repository');
 
 function loadOrders(globals = {}) {
   return exposeIifeFunctions('pottery-material-orders.js', [
@@ -15,6 +17,17 @@ function loadOrders(globals = {}) {
     PotteryMaterialOrdersMergePlanning: mergePlanning,
     PotteryMaterialOrdersModel: model,
     PotteryMaterialOrdersRowProjection: rowProjection,
+    MaterialOrdersRepository: {
+      repository: materialOrdersRepository.createMaterialOrdersRepository(
+        createStorageAdapter({
+          storage: globals.localStorage || {
+            getItem() { return null; },
+            setItem() {},
+            removeItem() {}
+          }
+        })
+      )
+    },
     ...globals
   } }).exposed;
 }
@@ -46,6 +59,23 @@ test('material orders persistence characterizes product cache, normalized orders
   orders.loadOrders();
   assert.deepEqual(JSON.parse(JSON.stringify(orders.state.orders)), []);
   assert.deepEqual(JSON.parse(JSON.stringify(orders.getProductOptions())), []);
+});
+
+test('material orders repository preserves raw arrays and exact order serialization', () => {
+  const values = new Map([
+    ['pottery-material-product-options-v1', '[{"unknown":"product"}]'],
+    ['pottery-material-orders-v1', '[{"unknown":"order"}]']
+  ]);
+  const writes = [];
+  const repository = materialOrdersRepository.createMaterialOrdersRepository({
+    read(key) { return values.get(key) ?? null; },
+    write(key, value) { writes.push([key, value]); return undefined; }
+  });
+  assert.equal(repository.loadProductOptions()[0].unknown, 'product');
+  assert.equal(repository.loadOrders()[0].unknown, 'order');
+  const orders = [{ id: 1, legacyField: 'keep' }];
+  assert.equal(repository.saveOrders(orders), undefined);
+  assert.deepEqual(writes, [['pottery-material-orders-v1', JSON.stringify(orders)]]);
 });
 
 test('material orders characterize totals, discounts, shipping, and inferred order-wide fields', () => {
