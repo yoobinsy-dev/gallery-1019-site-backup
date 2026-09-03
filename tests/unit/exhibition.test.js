@@ -12,7 +12,7 @@ const inventoryModel = require('../../exhibitions/inventory-model');
 const inventoryRenderer = require('../../exhibitions/inventory-renderer');
 const inventoryBackupModel = require('../../exhibitions/inventory-backup-model');
 
-function loadExhibition() {
+function loadExhibition(overrides = {}) {
   return exposeClassicScriptFunctions('exhibition-detail.js', [
     'exhibitionDetailState',
     'getPhotoPreviewDataUrl',
@@ -61,6 +61,11 @@ function loadExhibition() {
     ,'getInventoryListCounts'
     ,'normalizeInventoryBackupSnapshot'
     ,'isLargeUnexpectedInventoryDrop'
+    ,'saveExhibition'
+    ,'loadInventoryBackup'
+    ,'persistInventoryBackup'
+    ,'loadLastViewedExhibitionTab'
+    ,'saveLastViewedExhibitionTab'
   ], {
     globals: {
       atob(value) { return Buffer.from(value, 'base64').toString('binary'); },
@@ -76,10 +81,54 @@ function loadExhibition() {
       ExhibitionCertificateModel: certificateModel,
       ExhibitionInventoryModel: inventoryModel,
       ExhibitionInventoryRenderer: inventoryRenderer,
-      ExhibitionInventoryBackupModel: inventoryBackupModel
+      ExhibitionInventoryBackupModel: inventoryBackupModel,
+      ...overrides
     }
   }).exposed;
 }
+
+test('exhibition detail persistence characterizes main-save shaping and backup order', () => {
+  const baseline = [{ id: 1, works: [{ id: 'old' }], artWorks: [{ id: 'old' }], unknownRoot: 'baseline' }];
+  const values = new Map([['exhibitions', JSON.stringify(baseline)]]);
+  const writes = [];
+  const exhibition = loadExhibition({
+    localStorage: { getItem(key) { return values.get(key) ?? null; }, setItem() {} },
+    safeSetLocalStorageItem(key, value) { writes.push([key, value]); values.set(key, value); return true; }
+  });
+  exhibition.exhibitionDetailState.exhibitionId = 1;
+  exhibition.exhibitionDetailState.inventoryMode = 'art';
+  exhibition.exhibitionDetailState.exhibition = {
+    id: 1,
+    unknownRoot: 'keep',
+    works: [{ id: 'work', unknownWork: 'keep', pendingPhotoDataUrl: 'drop' }],
+    soldWorks: [],
+    goods: [],
+    soldGoods: []
+  };
+  assert.equal(exhibition.saveExhibition(), true);
+  assert.equal(writes.length, 2);
+  assert.equal(writes[0][0], 'exhibitions');
+  assert.equal(writes[1][0], 'exhibition-inventory-backup:1');
+  const saved = JSON.parse(writes[0][1])[0];
+  assert.equal(saved.unknownRoot, 'keep');
+  assert.equal(saved.works[0].unknownWork, 'keep');
+  assert.equal(saved.works[0].pendingPhotoDataUrl, undefined);
+  assert.deepEqual(saved.works, saved.artWorks);
+  assert.match(saved.updatedAt, /^\d{4}-\d{2}-\d{2}T/);
+  const backup = JSON.parse(writes[1][1]);
+  assert.equal(backup.snapshot.artWorks[0].unknownWork, 'keep');
+});
+
+test('exhibition detail persistence skips backup after failed main safe write', () => {
+  const exhibition = loadExhibition({
+    localStorage: { getItem(key) { return key === 'exhibitions' ? '[]' : null; }, setItem() {} },
+    safeSetLocalStorageItem() { return false; }
+  });
+  exhibition.exhibitionDetailState.exhibitionId = 2;
+  exhibition.exhibitionDetailState.exhibition = { id: 2, works: [], soldWorks: [] };
+  assert.equal(exhibition.saveExhibition(), false);
+  assert.equal(exhibition.loadInventoryBackup(2), null);
+});
 
 test('exhibition images characterize pending, URL, and legacy preview precedence', () => {
   const exhibition = loadExhibition();
