@@ -289,9 +289,21 @@ test('works renderer preserves controlling body, roles, modes, and works compati
   await expect(page.locator('tr[data-work-id="900102"]')).toContainText('CHARACTERIZATION_TEST_ARTIST_OWNED');
   await expect(page.getByText('CHARACTERIZATION_TEST_ARTWORKS_ONLY', { exact: true })).toHaveCount(0);
   await expect(page.locator('#work-select-all-btn-bottom')).toHaveCount(1);
+  const savedArtRow = page.locator('tr[data-work-id="900101"]');
+  await expect(savedArtRow.locator('img.saved-photo-image')).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await expect(savedArtRow.getByRole('button', { name: 'SOLD', exact: true })).toHaveCount(1);
+  await savedArtRow.getByRole('button', { name: '수정', exact: true }).click();
+  await expect(savedArtRow.locator('input[data-field="manualNumber"]')).toHaveValue('W-LEGACY');
+  await expect(savedArtRow.locator('input[data-field="title"]')).toHaveValue('CHARACTERIZATION_TEST_WORKS_PRECEDENCE');
+  await expect(savedArtRow.locator('input[data-field="price"]')).toHaveValue('100000');
+  await expect(savedArtRow.locator('input[data-field="author"]')).toHaveValue(currentUser.name);
 
   await page.getByRole('button', { name: '굿즈 목록', exact: true }).click();
-  await expect(page.locator('tr[data-work-id="900201"]')).toContainText('CHARACTERIZATION_TEST_GOODS');
+  const goodsRow = page.locator('tr[data-work-id="900201"]');
+  await expect(goodsRow).toContainText('CHARACTERIZATION_TEST_GOODS');
+  await expect(goodsRow.locator('td').nth(5)).toHaveText('5');
+  await expect(goodsRow.locator('td').nth(6)).toHaveText('0');
+  await expect(goodsRow.locator('td').nth(7)).toHaveText('5');
   await expect(page.locator('.works-table thead')).toContainText('판매된 수량');
   await expect(page.locator('#work-select-all-btn-bottom')).toHaveCount(1);
 
