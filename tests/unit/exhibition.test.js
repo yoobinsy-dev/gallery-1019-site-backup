@@ -19,9 +19,13 @@ function loadExhibition() {
     'applyWorkPhotoFields',
     'clearPendingWorkPhotoFields',
     'getCertificateImageDataUrl',
+    'getSourceArtworkForSold',
     'hasGeneratedCertificate',
     'normalizeCertificateDateText',
     'safeCertificateFileName',
+    'getArtistInstagramForCertificate',
+    'buildAllCertificatesDownloadFileName',
+    'computeContainedImageAnchor',
     'normalizeSoldItemType',
     'parseSoldQuantity',
     'parseStockQuantity',
@@ -195,6 +199,40 @@ test('certificate inputs characterize artwork fallback, ready version, date, and
   assert.equal(exhibition.hasGeneratedCertificate({ certificateReady: true, certificateVersion: 1 }), false);
   assert.equal(exhibition.normalizeCertificateDateText('2026-08-28 12:34:56'), '2026.08.28');
   assert.equal(exhibition.safeCertificateFileName('A/B:*?'), 'A_B___-보증서.xlsx');
+});
+
+test('certificate model characterizes artwork source, Instagram, batch filename, and geometry', () => {
+  const exhibition = loadExhibition();
+  const state = exhibition.exhibitionDetailState;
+  state.exhibition = {
+    title: 'Exhibition / One',
+    artWorks: [{ id: 1, title: 'current', author: 'Artist A' }],
+    works: [{ id: 1, title: 'legacy', author: 'Artist A' }],
+    artistInstagramMap: { 'artist a': '@artist' }
+  };
+  assert.equal(exhibition.getSourceArtworkForSold({ workId: 1 }).title, 'current');
+  assert.equal(
+    exhibition.getArtistInstagramForCertificate({ author: 'fallback' }, { author: 'Artist A' }),
+    '@artist'
+  );
+  assert.equal(exhibition.buildAllCertificatesDownloadFileName(), 'Exhibition _ One-모든보증서.xlsx');
+  delete state.exhibition.artWorks;
+  assert.equal(exhibition.getSourceArtworkForSold({ workId: 1 }).title, 'legacy');
+
+  const metrics = {
+    getColumnWidthPx: () => 10,
+    getRowHeightPx: () => 10
+  };
+  assert.deepEqual(JSON.parse(JSON.stringify(exhibition.computeContainedImageAnchor(metrics, 100, 100, 44))), {
+    fromCol: 2,
+    fromColOff: 0,
+    toCol: 7,
+    toColOff: 0,
+    fromRow: 54,
+    fromRowOff: 47625,
+    toRow: 59,
+    toRowOff: 47625
+  });
 });
 
 test('exhibition sales characterize source compatibility, quantity, filtering, sorting, and summaries', () => {

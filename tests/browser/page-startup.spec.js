@@ -36,6 +36,8 @@ const exhibitions = [{
     title: 'CHARACTERIZATION_TEST_WORKS_PRECEDENCE',
     author: currentUser.name,
     price: '100000',
+    photoName: 'characterization.png',
+    photoDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nVQAAAAASUVORK5CYII=',
     saved: true,
     createdByUserId: currentUser.id,
     legacyOnlyField: 'preserve-works'
@@ -67,7 +69,7 @@ const exhibitions = [{
     createdByUserId: currentUser.id
   }],
   soldWorks: [
-    { id: 1, itemType: '작품', price: 250001, buyerName: 'Buyer A' },
+    { id: 1, workId: 900101, itemType: '작품', price: 250001, buyerName: 'Buyer A', soldAtKst: '2026-08-15 12:00:00', saved: true },
     { id: 2, itemType: '굿즈', price: 5000, soldQuantity: 2 }
   ],
   artSoldWorks: [],
@@ -366,6 +368,36 @@ test('exhibition snapshot client preserves requests, defaults, and refresh order
     { action: 'undo-restore', exhibitionId: EXHIBITION_ID }
   ]);
   expect(requests.filter((request) => request.method === 'GET')).toHaveLength(4);
+});
+
+test('certificate builder preserves template cells, date, image, and source records', async ({ page }) => {
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  const result = await page.evaluate(async () => {
+    const [exhibition] = JSON.parse(localStorage.getItem('exhibitions') || '[]');
+    const sold = exhibition.soldWorks.find((item) => item.id === 1);
+    const work = exhibition.works.find((item) => item.id === 900101);
+    const before = JSON.stringify({ sold, work });
+    const blob = await window.buildCertificateWorkbookBlob(sold, work);
+    const workbook = await XlsxPopulate.fromDataAsync(await blob.arrayBuffer());
+    const sheet = workbook.sheet(0);
+    const zip = await JSZip.loadAsync(blob);
+    const mediaFiles = Object.keys(zip.files).filter((name) => name.startsWith('xl/media/') && !zip.files[name].dir);
+    return {
+      artist: sheet.cell('F24').value(),
+      title: sheet.cell('F26').value(),
+      date: sheet.cell('B3').value(),
+      mediaCount: mediaFiles.length,
+      size: blob.size,
+      sourceUnchanged: before === JSON.stringify({ sold, work })
+    };
+  });
+
+  expect(result.artist).toBe(currentUser.name);
+  expect(result.title).toBe('CHARACTERIZATION_TEST_WORKS_PRECEDENCE');
+  expect(result.date).toBe('Date 2026.08.15');
+  expect(result.mediaCount).toBeGreaterThan(0);
+  expect(result.size).toBeGreaterThan(1000);
+  expect(result.sourceUnchanged).toBe(true);
 });
 
 test('exhibition exports preserve filenames and key payload cells', async ({ page }) => {
