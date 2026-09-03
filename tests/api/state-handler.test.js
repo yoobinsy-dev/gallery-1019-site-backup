@@ -35,7 +35,7 @@ function createHarness(initial = {}) {
       meta[key] = { updatedAt };
       return updatedAt;
     },
-    async deleteStateValue(key) { deleted.push(key); delete values[key]; }
+    async deleteStateValue(key) { operations.push(`delete:${key}`); deleted.push(key); delete values[key]; }
   };
   const handler = loadCommonJsWithMocks('api/state.js', {
     './_lib/state-store': stateStore,
@@ -158,4 +158,8 @@ test('DELETE /api/state characterizes blocked users deletion and accepted dispos
   assert.equal(accepted.statusCode, 200);
   assert.deepEqual(harness.deleted, ['pottery-accounting-v1']);
   assert.equal(harness.audit.at(-1).reason, 'explicit-delete');
+  assert.deepEqual(harness.operations.slice(-2), [
+    'delete:pottery-accounting-v1',
+    'audit:explicit-delete'
+  ]);
 });

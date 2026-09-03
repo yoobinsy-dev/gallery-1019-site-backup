@@ -5,6 +5,7 @@ const { buildTransferSafeExhibitions, migrateExhibitionImageReferences } = requi
 const { createStateReadService } = require('./_lib/state-read-service');
 const { createStateWriteService } = require('./_lib/state-write-service');
 const { createStateDecisionReporter } = require('./_lib/state-decision-reporter');
+const { createStateDeleteService } = require('./_lib/state-delete-service');
 
 const ALLOWED_KEYS = new Set([
   'users',
@@ -834,6 +835,15 @@ const handleStateWrite = createStateWriteService({
   }
 });
 
+const handleStateDelete = createStateDeleteService({
+  allowedKeys: ALLOWED_KEYS,
+  decisionReporter,
+  deleteStateValue,
+  getClientIdFromRequest,
+  getRequestId,
+  sendJson
+});
+
 module.exports = async function handler(req, res) {
   try {
     if (req.method === 'GET') {
@@ -847,41 +857,7 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.method === 'DELETE') {
-      const key = typeof req.query.key === 'string' ? req.query.key.trim() : '';
-      const requestId = getRequestId(req);
-      const clientId = getClientIdFromRequest(req);
-      if (!ALLOWED_KEYS.has(key)) {
-        sendJson(res, 400, { ok: false, error: 'Invalid key. Allowed: users, exhibitions, pottery-students-v1, pottery-personal-work-v1, studio-calendar-state-v1, pottery-material-orders-v1, pottery-accounting-v1.' });
-        return;
-      }
-
-      if (key === 'users') {
-        await logStateWriteAttempt({
-          requestId,
-          stateKey: key,
-          action: 'DELETE',
-          decision: 'rejected',
-          reason: 'users-delete-blocked',
-          clientId
-        });
-
-        sendJson(res, 403, {
-          ok: false,
-          error: 'Deleting users state is blocked. Remove accounts through users updates instead.'
-        });
-        return;
-      }
-
-      await deleteStateValue(key);
-      await logStateWriteAttempt({
-        requestId,
-        stateKey: key,
-        action: 'DELETE',
-        decision: 'accepted',
-        reason: 'explicit-delete',
-        clientId
-      });
-      sendJson(res, 200, { ok: true });
+      await handleStateDelete(req, res);
       return;
     }
 
