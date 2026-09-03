@@ -7,6 +7,10 @@
   if (!cloudSyncModel) {
     throw new Error('CloudSyncModel must load before cloud-sync.js.');
   }
+  const cloudSyncReconciliation = globalThis.CloudSyncReconciliation;
+  if (!cloudSyncReconciliation) {
+    throw new Error('CloudSyncReconciliation must load before cloud-sync.js.');
+  }
 
   const SYNCED_KEYS = new Set(cloudSyncProtocol.SYNCED_KEYS);
   const {
@@ -14,9 +18,15 @@
     buildStateSignature,
     buildTransferSafeExhibitionsPayload,
     buildUsersDelta,
-    isSameValue,
-    normalizeHttpUrl
+    isSameValue
   } = cloudSyncModel;
+  const {
+    hasAnyPhotoPreviewInExhibitions,
+    isSuspiciousRemoteExhibitionsDrop,
+    mergeExhibitionsPreservingPreview,
+    mergeMaterialOrdersForSync,
+    shouldPreferRemoteExhibitions
+  } = cloudSyncReconciliation;
   const PUSH_DEBOUNCE_MS = 1500;
   const META_KEY = '__sync_updated_at__';
   const SESSION_META_KEY = '__sync_updated_at_session__';
@@ -26,10 +36,6 @@
   const STATE_PULL_ETAG_KEY = '__cloud_sync_state_pull_etags__';
   const READY_EVENT = 'cloud-sync:ready';
   const STATE_APPLIED_EVENT = 'cloud-sync:state-applied';
-  const REMOTE_DROP_MIN_PREVIOUS_TOTAL = 20;
-  const REMOTE_DROP_MIN_ABSOLUTE = 15;
-  const REMOTE_DROP_RATIO = 0.7;
-  const PREVIEW_DATA_URL_SAFE_LENGTH = 280000;
 
   const originalSetItem = Storage.prototype.setItem;
   const originalRemoveItem = Storage.prototype.removeItem;
@@ -88,123 +94,6 @@
 
   function getRequestedSyncKeys() {
     return activeSyncKeys.slice();
-  }
-
-  function getMaterialOrderIdentity(order, fallbackPrefix, index) {
-    const id = String(order?.id || '').trim();
-    if (id) return `id:${id}`;
-
-    const createdAt = String(order?.createdAt || '').trim();
-    const orderDate = String(order?.orderDate || '').trim();
-    if (createdAt || orderDate) {
-      return `date:${orderDate}|created:${createdAt}|idx:${index}`;
-    }
-
-    return `${fallbackPrefix}:${index}`;
-  }
-
-  function getMaterialOrderEpochMs(order) {
-    if (!order || typeof order !== 'object') return 0;
-
-    const candidates = [
-      order.updatedAt,
-      order.modifiedAt,
-      order.createdAt,
-      order.orderDate
-    ];
-
-    for (let i = 0; i < candidates.length; i += 1) {
-      const ms = getEpochMs(candidates[i]);
-      if (ms > 0) return ms;
-    }
-
-    return 0;
-  }
-
-  function mergeMaterialOrderItems(preferredItems, fallbackItems) {
-    const result = [];
-    const seen = new Set();
-
-    const pushIfNew = (item, prefix, index) => {
-      if (!item || typeof item !== 'object') return;
-      const identity = String(item.id || '').trim() || `${prefix}:${index}`;
-      if (seen.has(identity)) return;
-      seen.add(identity);
-      result.push(item);
-    };
-
-    if (Array.isArray(preferredItems)) {
-      preferredItems.forEach((item, index) => pushIfNew(item, 'pref', index));
-    }
-    if (Array.isArray(fallbackItems)) {
-      fallbackItems.forEach((item, index) => pushIfNew(item, 'fallback', index));
-    }
-
-    return result;
-  }
-
-  function mergeMaterialOrderPair(localOrder, remoteOrder) {
-    if (!localOrder || typeof localOrder !== 'object') return remoteOrder;
-    if (!remoteOrder || typeof remoteOrder !== 'object') return localOrder;
-
-    const localMs = getMaterialOrderEpochMs(localOrder);
-    const remoteMs = getMaterialOrderEpochMs(remoteOrder);
-    const preferred = localMs >= remoteMs ? localOrder : remoteOrder;
-    const fallback = preferred === localOrder ? remoteOrder : localOrder;
-
-    const merged = { ...fallback, ...preferred };
-    merged.items = mergeMaterialOrderItems(preferred.items, fallback.items);
-
-    if (typeof preferred.orderWideDiscount === 'boolean') {
-      merged.orderWideDiscount = preferred.orderWideDiscount;
-    } else if (typeof fallback.orderWideDiscount === 'boolean') {
-      merged.orderWideDiscount = fallback.orderWideDiscount;
-    }
-
-    if (typeof preferred.orderWideShipping === 'boolean') {
-      merged.orderWideShipping = preferred.orderWideShipping;
-    } else if (typeof fallback.orderWideShipping === 'boolean') {
-      merged.orderWideShipping = fallback.orderWideShipping;
-    }
-
-    return merged;
-  }
-
-  function mergeMaterialOrdersForSync(localOrders, remoteOrders) {
-    if (!Array.isArray(localOrders) || !Array.isArray(remoteOrders)) {
-      return Array.isArray(remoteOrders) ? remoteOrders : (Array.isArray(localOrders) ? localOrders : []);
-    }
-
-    const merged = [];
-    const localByIdentity = new Map();
-    const consumedLocal = new Set();
-
-    localOrders.forEach((order, index) => {
-      if (!order || typeof order !== 'object') return;
-      const identity = getMaterialOrderIdentity(order, 'local', index);
-      if (!localByIdentity.has(identity)) {
-        localByIdentity.set(identity, order);
-      }
-    });
-
-    remoteOrders.forEach((remoteOrder, index) => {
-      if (!remoteOrder || typeof remoteOrder !== 'object') return;
-      const identity = getMaterialOrderIdentity(remoteOrder, 'remote', index);
-      const localOrder = localByIdentity.get(identity);
-      if (localOrder) {
-        merged.push(mergeMaterialOrderPair(localOrder, remoteOrder));
-        consumedLocal.add(identity);
-        return;
-      }
-      merged.push(remoteOrder);
-    });
-
-    localByIdentity.forEach((localOrder, identity) => {
-      if (consumedLocal.has(identity)) return;
-      merged.push(localOrder);
-    });
-
-    return merged;
   }
 
   function queuePushWithBaseline(key, nextValue, baselineValue) {
@@ -378,216 +267,6 @@
     }
     meta[key] = updatedAtIso;
     setRemoteSyncMeta(meta);
-  }
-
-  function hasAnyPhotoPreviewInList(list) {
-    if (!Array.isArray(list)) return false;
-    return list.some((item) => {
-      if (!item || typeof item !== 'object') return false;
-      return Boolean(
-        normalizeHttpUrl(item.photoPreviewUrl)
-          || normalizeHttpUrl(item.photoUrl)
-          ||
-        (typeof item.photoPreviewDataUrl === 'string' && item.photoPreviewDataUrl.length > 0)
-          || (typeof item.photoDataUrl === 'string' && item.photoDataUrl.length > 0)
-      );
-    });
-  }
-
-  function hasAnyPhotoPreviewInExhibitions(exhibitions) {
-    if (!Array.isArray(exhibitions)) return false;
-    return exhibitions.some((exhibition) => {
-      if (!exhibition || typeof exhibition !== 'object') return false;
-      return hasAnyPhotoPreviewInList(exhibition.artWorks)
-        || hasAnyPhotoPreviewInList(exhibition.goods)
-        || hasAnyPhotoPreviewInList(exhibition.artSoldWorks)
-        || hasAnyPhotoPreviewInList(exhibition.soldGoods)
-        || hasAnyPhotoPreviewInList(exhibition.works)
-        || hasAnyPhotoPreviewInList(exhibition.soldWorks);
-    });
-  }
-
-  function hasPhotoPreview(item) {
-    if (!item || typeof item !== 'object') return false;
-    return Boolean(
-      normalizeHttpUrl(item.photoPreviewUrl)
-      || normalizeHttpUrl(item.photoUrl)
-      ||
-      (typeof item.photoPreviewDataUrl === 'string' && item.photoPreviewDataUrl.length > 0)
-      || (typeof item.photoDataUrl === 'string' && item.photoDataUrl.length > 0)
-    );
-  }
-
-  function getPreviewIdentity(item) {
-    if (!item || typeof item !== 'object') return '';
-
-    const id = Number(item.id);
-    if (Number.isFinite(id) && id > 0) return `id:${id}`;
-
-    const workId = Number(item.workId);
-    if (Number.isFinite(workId) && workId > 0) return `work:${workId}`;
-
-    const manualNumber = (item.manualNumber || '').toString().trim().toLowerCase();
-    const title = (item.title || '').toString().trim().toLowerCase();
-    if (manualNumber || title) return `manual:${manualNumber}|title:${title}`;
-    return '';
-  }
-
-  function mergeItemPreservingPreview(localItem, remoteItem) {
-    if (!remoteItem || typeof remoteItem !== 'object') return remoteItem;
-    if (hasPhotoPreview(remoteItem)) return remoteItem;
-    if (!hasPhotoPreview(localItem)) return remoteItem;
-
-    const merged = { ...remoteItem };
-    if ((!normalizeHttpUrl(merged.photoPreviewUrl))
-      && normalizeHttpUrl(localItem?.photoPreviewUrl)) {
-      merged.photoPreviewUrl = localItem.photoPreviewUrl;
-    }
-
-    if ((!normalizeHttpUrl(merged.photoUrl))
-      && normalizeHttpUrl(localItem?.photoUrl)) {
-      merged.photoUrl = localItem.photoUrl;
-    }
-
-    if ((!merged.photoPreviewDataUrl || merged.photoPreviewDataUrl.length === 0)
-      && typeof localItem.photoPreviewDataUrl === 'string'
-      && localItem.photoPreviewDataUrl.length > 0) {
-      merged.photoPreviewDataUrl = localItem.photoPreviewDataUrl;
-    }
-
-    if ((!merged.photoDataUrl || merged.photoDataUrl.length === 0)
-      && typeof localItem.photoDataUrl === 'string'
-      && localItem.photoDataUrl.length > 0
-      && localItem.photoDataUrl.length <= PREVIEW_DATA_URL_SAFE_LENGTH) {
-      merged.photoDataUrl = localItem.photoDataUrl;
-    }
-
-    return merged;
-  }
-
-  function mergeListPreservingPreview(localList, remoteList) {
-    if (!Array.isArray(remoteList)) return remoteList;
-    if (!Array.isArray(localList) || localList.length === 0) return remoteList;
-
-    const localByIdentity = new Map();
-    localList.forEach((item) => {
-      const key = getPreviewIdentity(item);
-      if (!key || !hasPhotoPreview(item)) return;
-      if (!localByIdentity.has(key)) {
-        localByIdentity.set(key, item);
-      }
-    });
-
-    return remoteList.map((item) => {
-      const key = getPreviewIdentity(item);
-      if (!key) return item;
-      return mergeItemPreservingPreview(localByIdentity.get(key), item);
-    });
-  }
-
-  function mergeExhibitionPreservingPreview(localExhibition, remoteExhibition) {
-    if (!remoteExhibition || typeof remoteExhibition !== 'object') return remoteExhibition;
-    if (!localExhibition || typeof localExhibition !== 'object') return remoteExhibition;
-
-    const merged = { ...remoteExhibition };
-    ['artWorks', 'goods', 'artSoldWorks', 'soldGoods', 'works', 'soldWorks'].forEach((field) => {
-      if (Array.isArray(remoteExhibition[field])) {
-        merged[field] = mergeListPreservingPreview(localExhibition[field], remoteExhibition[field]);
-      }
-    });
-
-    return merged;
-  }
-
-  function mergeExhibitionsPreservingPreview(localExhibitions, remoteExhibitions) {
-    if (!Array.isArray(remoteExhibitions)) return remoteExhibitions;
-    if (!Array.isArray(localExhibitions) || localExhibitions.length === 0) return remoteExhibitions;
-
-    const localById = new Map(
-      localExhibitions
-        .filter((exhibition) => exhibition && typeof exhibition === 'object')
-        .map((exhibition) => [Number(exhibition.id), exhibition])
-    );
-
-    return remoteExhibitions.map((remoteExhibition) => {
-      const id = Number(remoteExhibition?.id);
-      if (!Number.isFinite(id) || id <= 0) return remoteExhibition;
-      return mergeExhibitionPreservingPreview(localById.get(id), remoteExhibition);
-    });
-  }
-
-  function countInventoryRowsInExhibitions(exhibitions) {
-    if (!Array.isArray(exhibitions)) return 0;
-
-    return exhibitions.reduce((sum, exhibition) => {
-      if (!exhibition || typeof exhibition !== 'object') return sum;
-      const works = Array.isArray(exhibition.artWorks)
-        ? exhibition.artWorks.length
-        : (Array.isArray(exhibition.works) ? exhibition.works.length : 0);
-      const goods = Array.isArray(exhibition.goods) ? exhibition.goods.length : 0;
-      const soldWorks = Array.isArray(exhibition.artSoldWorks)
-        ? exhibition.artSoldWorks.length
-        : (Array.isArray(exhibition.soldWorks) ? exhibition.soldWorks.length : 0);
-      const soldGoods = Array.isArray(exhibition.soldGoods) ? exhibition.soldGoods.length : 0;
-      return sum + works + goods + soldWorks + soldGoods;
-    }, 0);
-  }
-
-  function hasExplicitInventoryClearMarker(exhibition) {
-    return Boolean(exhibition && typeof exhibition.inventoryExplicitlyClearedAt === 'string' && exhibition.inventoryExplicitlyClearedAt.trim());
-  }
-
-  function getInventoryListCount(exhibition) {
-    if (!exhibition || typeof exhibition !== 'object') return 0;
-    const artCount = Array.isArray(exhibition.artWorks)
-      ? exhibition.artWorks.length
-      : (Array.isArray(exhibition.works) ? exhibition.works.length : 0);
-    const goodsCount = Array.isArray(exhibition.goods) ? exhibition.goods.length : 0;
-    return artCount + goodsCount;
-  }
-
-  function isSuspiciousRemoteExhibitionsDrop(localValue, remoteValue) {
-    if (!Array.isArray(localValue) || !Array.isArray(remoteValue)) return false;
-
-    const remoteById = new Map(
-      remoteValue
-        .filter((item) => item && typeof item === 'object')
-        .map((item) => [Number(item.id), item])
-    );
-
-    return localValue.some((localExhibition) => {
-      if (!localExhibition || typeof localExhibition !== 'object') return false;
-      const localId = Number(localExhibition.id);
-      if (!Number.isFinite(localId) || localId <= 0) return false;
-
-      const localCount = getInventoryListCount(localExhibition);
-      if (localCount < REMOTE_DROP_MIN_PREVIOUS_TOTAL) return false;
-
-      const remoteExhibition = remoteById.get(localId);
-      const remoteCount = getInventoryListCount(remoteExhibition);
-      const dropped = localCount - remoteCount;
-      if (dropped < REMOTE_DROP_MIN_ABSOLUTE) return false;
-      if (dropped / localCount < REMOTE_DROP_RATIO) return false;
-
-      // Allow remote to clear inventory only when it carries an explicit clear marker.
-      if (hasExplicitInventoryClearMarker(remoteExhibition)) {
-        return false;
-      }
-
-      return remoteCount <= Math.floor(localCount * 0.3);
-    });
-  }
-
-  function shouldPreferRemoteExhibitions(localValue, remoteValue) {
-    if (!Array.isArray(localValue) || !Array.isArray(remoteValue)) return false;
-
-    const localCount = countInventoryRowsInExhibitions(localValue);
-    const remoteCount = countInventoryRowsInExhibitions(remoteValue);
-    if (remoteCount <= localCount) return false;
-
-    // If local looks sparse compared to remote, recover from remote even when timestamps are ambiguous.
-    if (localCount === 0 && remoteCount > 0) return true;
-    return (remoteCount - localCount) >= 10;
   }
 
   function parseJsonSafe(value) {

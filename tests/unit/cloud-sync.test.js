@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { exposeIifeFunctions } = require('../helpers/load-source');
 const CloudSyncModel = require('../../sync/cloud-sync-model');
 const CloudSyncProtocol = require('../../sync/cloud-sync-protocol');
+const CloudSyncReconciliation = require('../../sync/cloud-sync-reconciliation');
 
 const SYNCED_KEYS = [
   'users',
@@ -79,6 +80,7 @@ function createCloudSyncHarness({
       CustomEvent: TestCustomEvent,
       CloudSyncModel,
       CloudSyncProtocol,
+      CloudSyncReconciliation,
       Storage: TestStorage,
       fetch,
       localStorage,
@@ -174,6 +176,41 @@ test('cloud sync model characterizes users and exhibitions delta removals', () =
   });
   assert.equal(previousUsers[0].role, 'admin');
   assert.equal(previousExhibitions[0].title, 'Keep');
+});
+
+test('cloud sync reconciliation merges without mutating its inputs', () => {
+  const localOrders = [{
+    id: 'order-1',
+    updatedAt: '2026-08-30T10:02:00.000Z',
+    items: [{ id: 'clay' }]
+  }];
+  const remoteOrders = [{
+    id: 'order-1',
+    updatedAt: '2026-08-30T10:01:00.000Z',
+    items: [{ id: 'glaze' }]
+  }];
+  const localExhibitions = [{
+    id: 10,
+    artWorks: [{ id: 101, photoPreviewDataUrl: 'data:image/jpeg;base64,preview' }]
+  }];
+  const remoteExhibitions = [{ id: 10, artWorks: [{ id: 101 }] }];
+  const originalLocalOrders = structuredClone(localOrders);
+  const originalRemoteOrders = structuredClone(remoteOrders);
+  const originalLocalExhibitions = structuredClone(localExhibitions);
+  const originalRemoteExhibitions = structuredClone(remoteExhibitions);
+
+  const mergedOrders = CloudSyncReconciliation.mergeMaterialOrdersForSync(localOrders, remoteOrders);
+  const mergedExhibitions = CloudSyncReconciliation.mergeExhibitionsPreservingPreview(
+    localExhibitions,
+    remoteExhibitions
+  );
+
+  assert.deepEqual(mergedOrders[0].items, [{ id: 'clay' }, { id: 'glaze' }]);
+  assert.equal(mergedExhibitions[0].artWorks[0].photoPreviewDataUrl, 'data:image/jpeg;base64,preview');
+  assert.deepEqual(localOrders, originalLocalOrders);
+  assert.deepEqual(remoteOrders, originalRemoteOrders);
+  assert.deepEqual(localExhibitions, originalLocalExhibitions);
+  assert.deepEqual(remoteExhibitions, originalRemoteExhibitions);
 });
 
 test('cloud sync applies remote startup state without echo before signaling ready', async () => {
