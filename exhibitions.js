@@ -264,3 +264,10 @@ window.addEventListener('click', (event) => {
 });
 
 window.addEventListener('DOMContentLoaded', loadExhibitions);
+
+window.addEventListener('cloud-sync:state-applied', (event) => {
+  const keys = Array.isArray(event?.detail?.keys) ? event.detail.keys : [];
+  if (keys.includes('exhibitions')) {
+    loadExhibitions();
+  }
+});
