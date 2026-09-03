@@ -1507,6 +1507,19 @@
     clearTimeout: (timerId) => clearTimeout(timerId)
   });
 
+  const recurringEventController = globalThis.MasterCalendarRecurringEventController.create({
+    state,
+    commandPlanner: globalThis.MasterCalendarCommands,
+    canManageEventOccurrence,
+    openModal,
+    closeModal,
+    saveState,
+    renderCalendar,
+    refreshWorkshopUsageUi,
+    applyClassEventBaseMetadata,
+    createEventId: () => `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  });
+
   function openEventModal(preset) {
     eventModalController.openEventModal(preset);
   }
@@ -1529,130 +1542,43 @@
   }
 
   function requestDeleteEvent(eventId, occurrenceDate) {
-    const eventItem = state.events.find((item) => item && item.id === eventId);
-    if (!eventItem) return;
-    if (!canManageEventOccurrence(eventItem, occurrenceDate || eventItem.date || '')) {
-      return;
-    }
-
-    if (eventItem.repeatWeekly && state.viewMode === 'week' && occurrenceDate) {
-      state.recurringDelete.eventId = String(eventId);
-      state.recurringDelete.occurrenceDate = String(occurrenceDate);
-      openModal('recurring-delete-modal');
-      return;
-    }
-
-    state.deleteConfirm.eventId = String(eventId);
-    openModal('delete-confirm-modal');
+    return recurringEventController.requestDeleteEvent(eventId, occurrenceDate);
   }
 
   function handleDeleteConfirmOk() {
-    const eventId = String(state.deleteConfirm.eventId || '');
-    if (!eventId) {
-      closeModal('delete-confirm-modal');
-      return;
-    }
-
-    state.events = state.events.filter((item) => item.id !== eventId);
-    state.deleteConfirm.eventId = '';
-    saveState();
-    closeModal('delete-confirm-modal');
-    renderCalendar();
-    refreshWorkshopUsageUi();
+    return recurringEventController.handleDeleteConfirmOk();
   }
 
   function handleDeleteRecurringOne() {
-    applyRecurringDeletePlan('one');
+    return recurringEventController.handleDeleteRecurringOne();
   }
 
   function handleDeleteRecurringFollowing() {
-    const eventId = String(state.recurringDelete.eventId || '');
-    const occurrenceDate = String(state.recurringDelete.occurrenceDate || '');
-    const eventItem = state.events.find((item) => item && item.id === eventId);
-    const plan = globalThis.MasterCalendarCommands.planRecurringDelete({
-      scope: 'following', event: eventItem, occurrenceDate
-    });
-    finishRecurringDeletePlan(plan, eventId, eventItem);
+    return recurringEventController.handleDeleteRecurringFollowing();
   }
 
   function applyRecurringDeletePlan(scope) {
-    const eventId = String(state.recurringDelete.eventId || '');
-    const occurrenceDate = String(state.recurringDelete.occurrenceDate || '');
-    const eventItem = state.events.find((item) => item && item.id === eventId);
-    const plan = globalThis.MasterCalendarCommands.planRecurringDelete({ scope, event: eventItem, occurrenceDate });
-    finishRecurringDeletePlan(plan, eventId, eventItem);
+    return recurringEventController.applyRecurringDeletePlan(scope);
   }
 
   function finishRecurringDeletePlan(plan, eventId, eventItem) {
-    if (plan.action === 'none') {
-      closeModal('recurring-delete-modal');
-      return;
-    }
-    if (plan.action === 'remove') state.events = state.events.filter((item) => item.id !== eventId);
-    else Object.assign(eventItem, plan.patch);
-
-    saveState();
-    closeModal('recurring-delete-modal');
-    renderCalendar();
-    refreshWorkshopUsageUi();
+    return recurringEventController.finishRecurringDeletePlan(plan, eventId, eventItem);
   }
 
   function handleMoveRecurringOne() {
-    applyRecurringMovePlan('one');
+    return recurringEventController.handleMoveRecurringOne();
   }
 
   function handleMoveRecurringFollowing() {
-    applyRecurringMovePlan('following');
+    return recurringEventController.handleMoveRecurringFollowing();
   }
 
   function applyRecurringMovePlan(scope) {
-    const eventId = String(state.recurringMove.eventId || '');
-    const occurrenceDate = String(state.recurringMove.occurrenceDate || '');
-    const nextDate = String(state.recurringMove.nextDate || '');
-    const nextStart = String(state.recurringMove.nextStart || '');
-    const nextEnd = String(state.recurringMove.nextEnd || '');
-    const eventItem = state.events.find((item) => item && item.id === eventId);
-    const nextClassType = String(state.recurringMove.nextClassType || eventItem?.classType || '');
-    const nextInstructor = String(state.recurringMove.nextInstructor || eventItem?.instructor || '').trim();
-    const nextBaseRuleId = String(state.recurringMove.nextBaseRuleId || eventItem?.baseRuleId || '');
-    const plan = globalThis.MasterCalendarCommands.planRecurringMove({
-      scope,
-      event: eventItem,
-      occurrenceDate,
-      nextDate,
-      nextStart,
-      nextEnd,
-      nextClassType,
-      nextInstructor,
-      nextBaseRuleId,
-      createEventId: () => `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    });
-    if (plan.action === 'none') {
-      resetRecurringMoveState();
-      closeModal('recurring-move-modal');
-      return;
-    }
-    Object.assign(eventItem, plan.patch);
-    const movedEvent = plan.event;
-    if (movedEvent) state.events.push(movedEvent);
-    applyClassEventBaseMetadata(movedEvent || eventItem, nextDate);
-
-    saveState();
-    resetRecurringMoveState();
-    closeModal('recurring-move-modal');
-    renderCalendar();
-    refreshWorkshopUsageUi();
+    return recurringEventController.applyRecurringMovePlan(scope);
   }
 
   function resetRecurringMoveState() {
-    state.recurringMove.eventId = '';
-    state.recurringMove.occurrenceDate = '';
-    state.recurringMove.nextDate = '';
-    state.recurringMove.nextStart = '';
-    state.recurringMove.nextEnd = '';
-    state.recurringMove.nextClassType = '';
-    state.recurringMove.nextInstructor = '';
-    state.recurringMove.nextBaseRuleId = '';
+    return recurringEventController.resetRecurringMoveState();
   }
 
   function buildDailyOccupancyMap(date, excludeEventId) {
