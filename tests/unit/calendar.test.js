@@ -5,15 +5,54 @@ const { exposeIifeFunctions } = require('../helpers/load-source');
 const dateTime = require('../../master-calendar/date-time');
 const occurrences = require('../../master-calendar/occurrences');
 
-function loadCalendar() {
+function loadCalendar(globals = {}) {
   return exposeIifeFunctions('pottery-master-calendar.js', [
     'slotToTime', 'timeToSlot', 'getWeekStart', 'getMonthStart', 'addDays', 'addMonths', 'formatDateInput',
-    'getDayIndexFromDateString', 'getEventsForDate', 'state', 'isExhibitionKind'
+    'getDayIndexFromDateString', 'getEventsForDate', 'state', 'isExhibitionKind',
+    'loadStudioUsers', 'getStudentUsersForEvents', 'getPersonalUsersForEvents',
+    'getActivePersonalWorkEntries', 'loadStudioInstructors', 'loadState', 'saveState'
   ], { globals: {
     MasterCalendarDateTime: dateTime,
-    MasterCalendarOccurrences: occurrences
+    MasterCalendarOccurrences: occurrences,
+    ...globals
   } }).exposed;
 }
+
+test('calendar persistence characterizes dependencies, fixed state schema, and exact writes', () => {
+  const values = new Map([
+    ['pottery-students-v1', '[{"name":" Student "}]'],
+    ['pottery-personal-work-v1', '[{"userName":"Artist","startDate":"2026-08-01","maxHours":10,"isDormant":false},{"userName":"Dormant","isDormant":true}]'],
+    ['users', '[{"name":"Teacher","accountType":"강사","siteAccess":"pottery"}]'],
+    ['studio-calendar-state-v1', JSON.stringify({
+      events: [{ id: 'event', kind: '개인작업', title: 'Work', date: '2026-08-01', unknownEvent: 'drop' }],
+      baseRules: [], baseRuleTimeline: [], baseWeekOverrides: {}, studioUsers: ['Stored'],
+      instructors: ['Stored Teacher'], classTeachingLog: [], unknownRoot: 'drop'
+    })]
+  ]);
+  const writes = [];
+  const calendar = loadCalendar({ localStorage: {
+    getItem(key) { return values.get(key) ?? null; },
+    setItem(key, value) { writes.push([key, value]); return undefined; }
+  } });
+  calendar.loadStudioUsers();
+  assert.deepEqual(JSON.parse(JSON.stringify(calendar.state.studioUsers)), ['Artist', 'Student']);
+  assert.deepEqual(JSON.parse(JSON.stringify(calendar.getStudentUsersForEvents())), ['Student']);
+  assert.deepEqual(JSON.parse(JSON.stringify(calendar.getPersonalUsersForEvents())), ['Artist']);
+  assert.equal(calendar.getActivePersonalWorkEntries()[0].maxHours, 10);
+  calendar.loadState();
+  assert.equal(calendar.state.events[0].unknownEvent, undefined);
+  assert.equal(calendar.saveState(), undefined);
+  const saved = JSON.parse(writes[0][1]);
+  assert.equal(writes[0][0], 'studio-calendar-state-v1');
+  assert.deepEqual(Object.keys(saved), [
+    'events', 'baseRules', 'baseRuleTimeline', 'baseWeekOverrides',
+    'studioUsers', 'instructors', 'classTeachingLog'
+  ]);
+
+  values.set('pottery-students-v1', '{malformed');
+  calendar.loadStudioUsers();
+  assert.deepEqual(JSON.parse(JSON.stringify(calendar.state.studioUsers)), []);
+});
 
 test('calendar characterizes slot conversion and clamping', () => {
   const calendar = loadCalendar();
