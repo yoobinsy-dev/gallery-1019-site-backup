@@ -431,6 +431,26 @@ test('exhibition sales add modal preserves search, buffer, buyer, and reset beha
   await expect(page.locator('#sales-add-common-buyer-fields')).toBeHidden();
 });
 
+test('exhibition sales shell preserves table and duplicated action controls', async ({ page }) => {
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.locator('.tab-button[data-tab="inventory-sales"]').click();
+
+  await expect(page.locator('.sales-table thead th')).toHaveCount(16);
+  await expect(page.locator('#sold-works-tbody tr')).toHaveCount(2);
+  await expect(page.locator('#sales-search')).toHaveAttribute('placeholder', '번호, 제목, 작가, 구매자, 결제방법 등 검색');
+  await expect(page.getByRole('button', { name: '+ 판매 항목 추가', exact: true })).toHaveCount(2);
+  await expect(page.getByRole('button', { name: '엑셀 파일로 다운 받기', exact: true })).toHaveCount(2);
+  await expect(page.getByRole('button', { name: '모든 보증서 다운 받기', exact: true })).toHaveCount(2);
+  await expect(page.locator('#sales-select-all-btn')).toHaveCount(1);
+  await expect(page.locator('#sales-select-all-btn-bottom')).toHaveCount(1);
+  await expect(page.locator('#sales-sold-stats-ticker')).toHaveCount(1);
+
+  await page.locator('#sales-search').fill('CHARACTERIZATION_TEST_WORKS_PRECEDENCE');
+  await expect(page.locator('#sold-works-tbody tr')).toHaveCount(1);
+  await page.getByRole('button', { name: '+ 판매 항목 추가', exact: true }).first().click();
+  await expect(page.locator('#sales-add-modal')).toHaveCSS('display', 'flex');
+});
+
 test('exhibition snapshot client preserves requests, defaults, and refresh order', async ({ page }) => {
   const requests = [];
   await page.route('**/api/exhibition-snapshots*', async (route) => {
