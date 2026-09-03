@@ -113,7 +113,7 @@ async function loadInventoryExhibitions() {
   const fetchedSummaries = await fetchInventoryExhibitionSummaries();
   const exhibitions = Array.isArray(fetchedSummaries)
     ? fetchedSummaries
-    : (JSON.parse(localStorage.getItem('exhibitions')) || []);
+    : globalThis.ExhibitionsRepository.repository.loadExhibitions();
   const userId = getCurrentUserId(currentUser);
   const visibleExhibitions = isAdmin
     ? exhibitions

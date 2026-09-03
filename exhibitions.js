@@ -107,7 +107,7 @@ function loadExhibitions() {
 
   applyExhibitionsPagePermissions(role);
 
-  const exhibitions = JSON.parse(localStorage.getItem('exhibitions')) || [];
+  const exhibitions = globalThis.ExhibitionsRepository.repository.loadExhibitions();
   const currentUserId = getCurrentUserId(currentUser);
   const visibleExhibitions = role === 'admin'
     ? exhibitions
@@ -218,7 +218,7 @@ function addExhibition() {
     return;
   }
 
-  const exhibitions = JSON.parse(localStorage.getItem('exhibitions')) || [];
+  const exhibitions = globalThis.ExhibitionsRepository.repository.loadExhibitions();
 
   const newExhibition = {
     id: Date.now(),
@@ -239,12 +239,7 @@ function addExhibition() {
   };
 
   exhibitions.push(newExhibition);
-  const saveSucceeded = typeof safeSetLocalStorageItem === 'function'
-    ? safeSetLocalStorageItem('exhibitions', JSON.stringify(exhibitions))
-    : (() => {
-      localStorage.setItem('exhibitions', JSON.stringify(exhibitions));
-      return true;
-    })();
+  const saveSucceeded = globalThis.ExhibitionsRepository.repository.saveExhibitionsSafely(exhibitions);
 
   if (!saveSucceeded) {
     message.textContent = '저장 공간이 부족해 전시를 저장하지 못했습니다. 이미지 용량을 줄인 뒤 다시 시도해주세요.';

@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { exposeClassicScriptFunctions } = require('../helpers/load-source');
+const { createStorageAdapter } = require('../../storage/storage-adapter');
+const exhibitionsRepository = require('../../storage/exhibitions-repository');
 
 function createDocument(elements) {
   return {
@@ -33,10 +35,13 @@ test('exhibition list persistence characterizes quota-safe exact creation writes
     'add-modal': { style: {} },
     'exhibitions-tbody': { innerHTML: '', appendChild() {} }
   };
+  const localStorage = { getItem(key) { return values.get(key) ?? null; }, setItem() {} };
   const page = exposeClassicScriptFunctions('exhibitions.js', ['addExhibition'], { globals: {
     document: createDocument(elements),
-    localStorage: { getItem(key) { return values.get(key) ?? null; }, setItem() {} },
-    safeSetLocalStorageItem(key, value) { writes.push([key, value]); values.set(key, value); return true; }
+    localStorage,
+    ExhibitionsRepository: { repository: exhibitionsRepository.createExhibitionsRepository(
+      createStorageAdapter({ storage: localStorage, safeWrite(key, value) { writes.push([key, value]); values.set(key, value); return true; } })
+    ) }
   } }).exposed;
   page.addExhibition();
   assert.equal(writes.length, 1);
@@ -54,12 +59,27 @@ test('inventory persistence characterizes failed remote summary local fallback',
   ]);
   const rows = [];
   const elements = { 'inventory-tbody': { innerHTML: '', appendChild(row) { rows.push(row); } } };
+  const localStorage = { getItem(key) { return values.get(key) ?? null; }, setItem() {} };
   const page = exposeClassicScriptFunctions('inventory.js', ['loadInventoryExhibitions'], { globals: {
     document: createDocument(elements),
-    localStorage: { getItem(key) { return values.get(key) ?? null; } },
+    localStorage,
+    ExhibitionsRepository: { repository: exhibitionsRepository.createExhibitionsRepository(
+      createStorageAdapter({ storage: localStorage })
+    ) },
     fetch() { throw new Error('offline'); }
   } }).exposed;
   await page.loadInventoryExhibitions();
   assert.equal(rows.length, 1);
   assert.match(rows[0].innerHTML, /Local/);
+});
+
+test('exhibitions repository preserves raw documents, parse failures, and safe results', () => {
+  const repository = exhibitionsRepository.createExhibitionsRepository({
+    read() { return '[{"unknown":"keep"}]'; },
+    writeSafely(key, value) { return key === 'exhibitions' && value === '[{"id":1}]'; }
+  });
+  assert.equal(repository.loadExhibitions()[0].unknown, 'keep');
+  assert.equal(repository.saveExhibitionsSafely([{ id: 1 }]), true);
+  const malformed = exhibitionsRepository.createExhibitionsRepository({ read() { return '{'; } });
+  assert.throws(() => malformed.loadExhibitions(), SyntaxError);
 });
