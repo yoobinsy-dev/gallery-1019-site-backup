@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { exposeClassicScriptFunctions } = require('../helpers/load-source');
+const salesModel = require('../../exhibitions/sales-model');
 
 function loadExhibition() {
   return exposeClassicScriptFunctions('exhibition-detail.js', [
@@ -29,7 +30,8 @@ function loadExhibition() {
       CustomEvent: class CustomEvent {},
       FileReader: class FileReader {},
       Image: class Image {},
-      DOMParser: class DOMParser {}
+      DOMParser: class DOMParser {},
+      ExhibitionSalesModel: salesModel
     }
   }).exposed;
 }
@@ -125,6 +127,7 @@ test('exhibition sales characterize source compatibility, quantity, filtering, s
   state.selectedSalesIds = [];
 
   assert.equal(exhibition.normalizeSoldItemType(null), '작품');
+  assert.equal(salesModel.normalizeSoldItemType(null), '작품');
   assert.equal(exhibition.normalizeSoldItemType({ itemType: 'unknown' }), '작품');
   assert.equal(exhibition.parseSoldQuantity('2.9'), 2);
   assert.equal(exhibition.parseSoldQuantity(0), 1);

@@ -2521,27 +2521,19 @@ function getSalesMasterRecords() {
 }
 
 function normalizeSoldItemType(sold) {
-  if (!sold) return '작품';
-  return sold.itemType === '굿즈' ? '굿즈' : '작품';
+  return globalThis.ExhibitionSalesModel.normalizeSoldItemType(sold);
 }
 
 function parseSoldQuantity(value) {
-  const n = Number(String(value ?? '').replace(/[^\d.-]/g, ''));
-  if (!Number.isFinite(n) || n <= 0) return 1;
-  return Math.floor(n);
+  return globalThis.ExhibitionSalesModel.parseSoldQuantity(value);
 }
 
 function parseStockQuantity(value) {
-  const n = Number(String(value ?? '').replace(/[^\d.-]/g, ''));
-  if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.floor(n);
+  return globalThis.ExhibitionSalesModel.parseStockQuantity(value);
 }
 
 function getGoodsSoldQuantity(goodsId) {
-  const records = getSalesMasterRecords();
-  return records
-    .filter((sold) => normalizeSoldItemType(sold) === '굿즈' && sold.workId === goodsId)
-    .reduce((sum, sold) => sum + parseSoldQuantity(sold.soldQuantity), 0);
+  return globalThis.ExhibitionSalesModel.getGoodsSoldQuantity(getSalesMasterRecords(), goodsId);
 }
 
 function renderInventoryListManagement(container) {
@@ -2871,10 +2863,7 @@ function isArtistSalesSummaryEnabled() {
 }
 
 function parsePriceToNumber(value) {
-  if (isWorkNotForSale(value)) return 0;
-  const numeric = Number(String(value || '').replace(/[^\d.-]/g, ''));
-  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
-  return numeric;
+  return globalThis.ExhibitionSalesModel.parseSoldPriceAmount(value, isWorkNotForSale);
 }
 
 function formatCurrencyKrw(value) {
@@ -2883,25 +2872,7 @@ function formatCurrencyKrw(value) {
 }
 
 function getArtistSalesSummary() {
-  const soldWorks = ensureSoldWorksArray();
-  const summaryMap = new Map();
-
-  soldWorks.forEach((sold) => {
-    const author = (sold.author || '').toString().trim() || '작가 미지정';
-    const qty = getSoldQuantityForItemType(normalizeSoldItemType(sold), sold.soldQuantity);
-    const revenue = parsePriceToNumber(sold.price) * qty;
-    const existing = summaryMap.get(author) || { author, soldCount: 0, totalRevenue: 0 };
-    existing.soldCount += qty;
-    existing.totalRevenue += revenue;
-    summaryMap.set(author, existing);
-  });
-
-  return Array.from(summaryMap.values())
-    .sort((a, b) => {
-      if (b.totalRevenue !== a.totalRevenue) return b.totalRevenue - a.totalRevenue;
-      if (b.soldCount !== a.soldCount) return b.soldCount - a.soldCount;
-      return a.author.localeCompare(b.author, 'ko');
-    });
+  return globalThis.ExhibitionSalesModel.getArtistSalesSummary(ensureSoldWorksArray(), isWorkNotForSale);
 }
 
 function openArtistSalesSummaryModal() {
@@ -3194,28 +3165,17 @@ function renderSoldWorkRows() {
 }
 
 function getSoldQuantityForItemType(itemType, value) {
-  return itemType === '굿즈' ? parseSoldQuantity(value) : 1;
+  return globalThis.ExhibitionSalesModel.getSoldQuantityForItemType(itemType, value);
 }
 
 function getSalesSearchResults(query) {
   const exhibition = getCurrentExhibition();
-  const artWorks = Array.isArray(exhibition.artWorks) ? exhibition.artWorks : (exhibition.works || []);
-  const goods = Array.isArray(exhibition.goods) ? exhibition.goods : [];
-  const works = [
-    ...artWorks.map((work) => ({ ...work, itemType: '작품' })),
-    ...goods.map((work) => ({ ...work, itemType: '굿즈' }))
-  ];
-  const q = (query || '').trim().toLowerCase();
-  if (query === '__all__') return works;
-  if (!q) return [];
-
-  return works
-    .filter(work => {
-      const number = (work.manualNumber || '').toString().toLowerCase();
-      const title = (work.title || '').toString().toLowerCase();
-      return number.includes(q) || title.includes(q);
-    })
-    .slice(0, 20);
+  return globalThis.ExhibitionSalesModel.getSalesSearchResults({
+    artWorks: exhibition.artWorks,
+    works: exhibition.works,
+    goods: exhibition.goods,
+    query
+  });
 }
 
 function resetSalesAddCommonBuyerState() {
@@ -7977,11 +7937,7 @@ function editSelectedWorks() {
 }
 
 function parseSoldPriceAmount(value) {
-  if (isWorkNotForSale(value)) return 0;
-  const numericText = (value || '').toString().replace(/[^\d.-]/g, '');
-  const amount = Number(numericText);
-  if (!Number.isFinite(amount) || amount <= 0) return 0;
-  return amount;
+  return globalThis.ExhibitionSalesModel.parseSoldPriceAmount(value, isWorkNotForSale);
 }
 
 function formatWonAmount(amount) {
@@ -7989,37 +7945,24 @@ function formatWonAmount(amount) {
 }
 
 function getSoldStatsForWorksTicker() {
-  const soldWorks = ensureSoldWorksArray();
-  const selectedIds = exhibitionDetailState.selectedWorkIds;
-  const selectedSet = new Set(selectedIds);
-  const scopedSales = selectedIds.length > 0
-    ? soldWorks.filter(item => selectedSet.has(item.workId))
-    : soldWorks;
-
-  return {
-    basisLabel: selectedIds.length > 0
-      ? `선택된 작품 ${selectedIds.length}개 기준 판매 통계`
-      : '전체 작품 기준 판매 통계',
-    soldCount: scopedSales.length,
-    totalAmount: scopedSales.reduce((sum, item) => sum + parseSoldPriceAmount(item.price), 0)
-  };
+  return globalThis.ExhibitionSalesModel.getSoldStats({
+    records: ensureSoldWorksArray(),
+    selectedIds: exhibitionDetailState.selectedWorkIds,
+    idField: 'workId',
+    selectedLabel: '선택된 작품',
+    allLabel: '전체 작품 기준 판매 통계',
+    isNotForSale: isWorkNotForSale
+  });
 }
 
 function getSoldStatsForSalesTicker() {
-  const soldWorks = ensureSoldWorksArray();
-  const selectedIds = exhibitionDetailState.selectedSalesIds;
-  const selectedSet = new Set(selectedIds);
-  const scopedSales = selectedIds.length > 0
-    ? soldWorks.filter(item => selectedSet.has(item.id))
-    : soldWorks;
-
-  return {
-    basisLabel: selectedIds.length > 0
-      ? `선택된 판매 ${selectedIds.length}개 기준 판매 통계`
-      : '전체 판매 기준 판매 통계',
-    soldCount: scopedSales.length,
-    totalAmount: scopedSales.reduce((sum, item) => sum + parseSoldPriceAmount(item.price), 0)
-  };
+  return globalThis.ExhibitionSalesModel.getSoldStats({
+    records: ensureSoldWorksArray(),
+    selectedIds: exhibitionDetailState.selectedSalesIds,
+    selectedLabel: '선택된 판매',
+    allLabel: '전체 판매 기준 판매 통계',
+    isNotForSale: isWorkNotForSale
+  });
 }
 
 function renderSoldStatsTicker(scope) {
@@ -8102,14 +8045,15 @@ function getWorkSortValue(work, field) {
 }
 
 function getSortedSoldWorks() {
-  const soldWorks = filterSoldWorks(ensureSoldWorksArray());
-  if (!exhibitionDetailState.salesSortField) return soldWorks;
-
-  const direction = exhibitionDetailState.salesSortDirection === 'desc' ? -1 : 1;
-  return [...soldWorks].sort((a, b) => {
-    const valueA = getSoldSortValue(a, exhibitionDetailState.salesSortField);
-    const valueB = getSoldSortValue(b, exhibitionDetailState.salesSortField);
-    return compareWorkValues(valueA, valueB, exhibitionDetailState.salesSortField) * direction;
+  return globalThis.ExhibitionSalesModel.getSortedSoldWorks({
+    records: ensureSoldWorksArray(),
+    advanced: exhibitionDetailState.salesAdvanced,
+    filters: exhibitionDetailState.salesFilters,
+    search: exhibitionDetailState.salesSearch,
+    sortField: exhibitionDetailState.salesSortField,
+    sortDirection: exhibitionDetailState.salesSortDirection,
+    compareValues: compareWorkValues,
+    isNotForSale: isWorkNotForSale
   });
 }
 
@@ -8176,32 +8120,7 @@ function exportSalesToExcel() {
 }
 
 function getSoldSortValue(sold, field) {
-  switch (field) {
-    case 'manualNumber':
-      return sold.manualNumber || '';
-    case 'itemType':
-      return normalizeSoldItemType(sold);
-    case 'category':
-      return sold.category || '';
-    case 'title':
-      return sold.title || '';
-    case 'author':
-      return sold.author || '';
-    case 'price': {
-      const amount = parseSoldPriceAmount(sold.price);
-      return amount > 0 ? String(amount) : '';
-    }
-    case 'soldAtKst':
-      return sold.soldAtKst || '';
-    case 'buyerName':
-      return sold.buyerName || '';
-    case 'buyerPhone':
-      return sold.buyerPhone || '';
-    case 'paymentMethod':
-      return sold.paymentMethod || '';
-    default:
-      return '';
-  }
+  return globalThis.ExhibitionSalesModel.getSoldSortValue(sold, field, isWorkNotForSale);
 }
 
 function getManualNumberSortGroup(value) {
@@ -8581,34 +8500,10 @@ function resetSalesFilters() {
 }
 
 function filterSoldWorks(soldWorks) {
-  if (exhibitionDetailState.salesAdvanced) {
-    const filters = exhibitionDetailState.salesFilters;
-    return soldWorks.filter((sold) => {
-      const soldDate = (sold.soldAtKst || '').slice(0, 10);
-      const from = (filters.soldDateFrom || '').trim();
-      const to = (filters.soldDateTo || '').trim();
-      if (from && (!soldDate || soldDate < from)) return false;
-      if (to && (!soldDate || soldDate > to)) return false;
-
-      const textFields = ['manualNumber', 'title', 'author', 'buyerName', 'buyerPhone', 'paymentMethod'];
-      return textFields.every((key) => {
-        const value = (filters[key] || '').trim().toLowerCase();
-        if (!value) return true;
-        const field = (sold[key] || '').toString().toLowerCase();
-        return field.includes(value);
-      });
-    });
-  }
-
-  const search = (exhibitionDetailState.salesSearch || '').trim().toLowerCase();
-  if (!search) return soldWorks;
-
-  return soldWorks.filter((sold) => {
-    const paymentDisplay = sold.paymentMethod === '기타'
-      ? `기타 ${sold.paymentMethodEtc || ''}`
-      : (sold.paymentMethod || '');
-    const text = `${sold.manualNumber || ''} ${normalizeSoldItemType(sold)} ${sold.title || ''} ${sold.author || ''} ${sold.price || ''} ${sold.soldQuantity || ''} ${sold.soldAtKst || ''} ${sold.buyerName || ''} ${sold.buyerPhone || ''} ${paymentDisplay} ${sold.note || ''}`.toLowerCase();
-    return text.includes(search);
+  return globalThis.ExhibitionSalesModel.filterSoldWorks(soldWorks, {
+    advanced: exhibitionDetailState.salesAdvanced,
+    filters: exhibitionDetailState.salesFilters,
+    search: exhibitionDetailState.salesSearch
   });
 }
 
