@@ -127,7 +127,18 @@ const salesViewController = globalThis.ExhibitionDetailSalesViewController.creat
   handleDownloadAllCertificatesAction,
   isArtistScopedUser,
   getSalesSortIndicator,
-  renderSoldWorkRows
+  getCurrentExhibition,
+  ensureSoldWorksArray,
+  getSortedSoldWorks,
+  getSalesSearchResults,
+  canCurrentUserModifyOwnedRow,
+  getPhotoPreviewDataUrl,
+  normalizeSoldItemType,
+  getSoldQuantityForItemType,
+  hasGeneratedCertificate,
+  soldKstToInputValue,
+  renderSoldStatsTicker,
+  updateSalesActionButtons
 });
 
 const accountingViewController = globalThis.ExhibitionDetailAccountingViewController.create({
@@ -2072,132 +2083,7 @@ function updateSalesActionButtons() {
 }
 
 function renderSoldWorkRows() {
-  const tbody = document.getElementById('sold-works-tbody');
-  if (!tbody) {
-    renderSoldStatsTicker('sales');
-    updateSalesActionButtons();
-    return;
-  }
-
-  const exhibition = getCurrentExhibition();
-  const soldWorksAll = ensureSoldWorksArray();
-  const soldWorks = getSortedSoldWorks();
-  const sourceWorks = getSalesSearchResults('__all__');
-  tbody.innerHTML = '';
-
-  if (soldWorksAll.length === 0) {
-    const emptyRow = document.createElement('tr');
-    emptyRow.innerHTML = '<td colspan="16" class="no-users">등록된 판매 작품이 없습니다.</td>';
-    tbody.appendChild(emptyRow);
-    renderSoldStatsTicker('sales');
-    updateSalesActionButtons();
-    return;
-  }
-
-  if (soldWorks.length === 0) {
-    const emptyRow = document.createElement('tr');
-    emptyRow.innerHTML = '<td colspan="16" class="no-users">검색 결과가 없습니다.</td>';
-    tbody.appendChild(emptyRow);
-    renderSoldStatsTicker('sales');
-    updateSalesActionButtons();
-    return;
-  }
-
-  soldWorks.forEach((sold, index) => {
-    const row = document.createElement('tr');
-    row.setAttribute('data-sold-id', String(sold.id));
-    const isSelected = exhibitionDetailState.selectedSalesIds.includes(sold.id);
-    const isSaved = !!sold.saved;
-    const canModifySold = canCurrentUserModifyOwnedRow(sold);
-    const isReadonlyRow = isSaved || !canModifySold;
-    const actionButton = !canModifySold
-      ? ''
-      : (isSaved
-        ? `<button class="action-btn edit-btn" onclick="toggleSoldWorkEdit(${sold.id})">수정</button>`
-        : `<button class="action-btn approve-btn" onclick="saveSoldWork(${sold.id}, this)">저장</button>`);
-    const soldPreviewDataUrl = getPhotoPreviewDataUrl(sold);
-    const previewCell = soldPreviewDataUrl
-      ? `<img src="${soldPreviewDataUrl}" alt="${(sold.title || '작품').replace(/"/g, '&quot;')}" class="saved-photo-image" onclick="openImagePreviewBySoldId(${sold.id}, event)">`
-      : `<span class="saved-photo">${sold.photoName || '사진 없음'}</span>`;
-    const soldItemType = normalizeSoldItemType(sold);
-    const sourceMatch = sourceWorks.find((work) => work.id === sold.workId && work.itemType === soldItemType);
-    const categoryText = sold.category || sourceMatch?.category || '';
-    const soldQuantityValue = getSoldQuantityForItemType(soldItemType, sold.soldQuantity);
-    const isCertificateReady = hasGeneratedCertificate(sold);
-    const certificateButtonHtml = soldItemType === '작품'
-      ? (isCertificateReady
-        ? `<div class="certificate-actions">
-            <button class="action-btn approve-btn" onclick="handleSoldCertificateAction(${sold.id})">보증서 다운로드</button>
-            <button class="action-btn edit-btn" onclick="handleSoldCertificateRemakeAction(${sold.id})">보증서 다시 만들기</button>
-          </div>`
-        : `<button class="action-btn edit-btn" onclick="handleSoldCertificateAction(${sold.id})">보증서 만들기</button>`)
-      : '';
-
-    const paymentDisplay = sold.paymentMethod === '기타'
-      ? `기타${sold.paymentMethodEtc ? ` (${sold.paymentMethodEtc})` : ''}`
-      : (sold.paymentMethod || '');
-    const manualNumberCell = sold.madeToOrder
-      ? `<span class="sales-number-with-badge"><span>${sold.manualNumber || ''}</span><span class="sales-made-to-order-square-badge"><span>주문</span><span>제작</span></span></span>`
-      : (sold.manualNumber || '');
-
-    const paymentInputCell = `
-      <div class="sales-payment-group">
-        <select data-field="paymentMethod" onchange="handleSoldPaymentMethodChange(${sold.id}, this.value)">
-          <option value="" ${!sold.paymentMethod ? 'selected' : ''}>선택</option>
-          <option value="카드결제" ${sold.paymentMethod === '카드결제' ? 'selected' : ''}>카드결제</option>
-          <option value="계좌이체" ${sold.paymentMethod === '계좌이체' ? 'selected' : ''}>계좌이체</option>
-          <option value="온누리상품권" ${sold.paymentMethod === '온누리상품권' ? 'selected' : ''}>온누리상품권</option>
-          <option value="기타" ${sold.paymentMethod === '기타' ? 'selected' : ''}>기타</option>
-        </select>
-        ${sold.paymentMethod === '기타' ? `<input data-field="paymentMethodEtc" type="text" value="${sold.paymentMethodEtc || ''}" placeholder="기타 결제방법 입력" onchange="handleSoldFieldChange(${sold.id}, 'paymentMethodEtc', this.value)">` : ''}
-      </div>
-    `;
-
-    row.innerHTML = `
-      <td class="checkbox-col"><input type="checkbox" class="sales-checkbox" ${isSelected ? 'checked' : ''} onclick="toggleSalesSelection(${sold.id}, this.checked, event, ${index})"></td>
-      <td>${manualNumberCell}</td>
-      <td>${soldItemType}</td>
-      <td>${categoryText}</td>
-      <td>${previewCell}</td>
-      <td>${sold.title || ''}</td>
-      <td>${sold.author || ''}</td>
-      <td>${sold.price || ''}</td>
-      ${isReadonlyRow
-        ? `<td>${soldQuantityValue}</td>`
-        : (soldItemType === '굿즈'
-          ? `<td><input data-field="soldQuantity" type="number" min="1" value="${soldQuantityValue}" onchange="handleSoldFieldChange(${sold.id}, 'soldQuantity', this.value)"></td>`
-          : `<td><input data-field="soldQuantity" type="number" min="1" value="1" disabled aria-label="작품 수량"></td>`)}
-      ${isReadonlyRow
-        ? `<td>${sold.soldAtKst || ''}</td>`
-        : `<td><input type="datetime-local" data-field="soldAtKst" value="${soldKstToInputValue(sold.soldAtKst)}" onchange="handleSoldFieldChange(${sold.id}, 'soldAtKst', soldInputValueToKst(this.value))"></td>`}
-      ${isReadonlyRow
-        ? `<td>${sold.buyerName || ''}</td>`
-        : `<td><input data-field="buyerName" type="text" value="${sold.buyerName || ''}" placeholder="구매자 성함" onchange="handleSoldFieldChange(${sold.id}, 'buyerName', this.value)"></td>`}
-      ${isReadonlyRow
-        ? `<td>${sold.buyerPhone || ''}</td>`
-        : `<td><input data-field="buyerPhone" type="text" value="${sold.buyerPhone || ''}" placeholder="010-0000-0000" oninput="handleSoldPhoneInput(${sold.id}, event)" onchange="handleSoldFieldChange(${sold.id}, 'buyerPhone', this.value)"></td>`}
-      ${isReadonlyRow ? `<td>${paymentDisplay}</td>` : `<td>${paymentInputCell}</td>`}
-      ${isReadonlyRow
-        ? `<td>${sold.note || ''}</td>`
-        : `<td><input data-field="note" type="text" value="${sold.note || ''}" placeholder="비고" onchange="handleSoldFieldChange(${sold.id}, 'note', this.value)"></td>`}
-      <td>
-        ${actionButton}
-        ${canModifySold ? `<button class="action-btn delete-btn" onclick="deleteSoldWork(${sold.id})">삭제</button>` : ''}
-      </td>
-      <td>${certificateButtonHtml}</td>
-    `;
-
-    tbody.appendChild(row);
-  });
-
-  const selectAll = document.getElementById('select-all-sales');
-  if (selectAll) {
-    const allSelected = soldWorksAll.length > 0 && soldWorksAll.every(item => exhibitionDetailState.selectedSalesIds.includes(item.id));
-    selectAll.checked = allSelected;
-  }
-
-  renderSoldStatsTicker('sales');
-  updateSalesActionButtons();
+  return salesViewController.renderSoldWorkRows();
 }
 
 function getSoldQuantityForItemType(itemType, value) {
