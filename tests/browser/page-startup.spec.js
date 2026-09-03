@@ -12,6 +12,16 @@ const currentUser = {
   galleryRole: '어드민',
   siteAccess: 'both'
 };
+const artistUser = {
+  id: 900002,
+  username: 'CHARACTERIZATION_TEST_ARTIST',
+  name: 'CHARACTERIZATION_TEST_ARTIST',
+  password: 'not-a-real-credential',
+  accountType: '기획자/작가',
+  galleryRole: '기획자/작가',
+  siteAccess: 'gallery'
+};
+const users = [currentUser, artistUser];
 const exhibitions = [{
   id: EXHIBITION_ID,
   title: 'CHARACTERIZATION_TEST_EXHIBITION',
@@ -19,9 +29,43 @@ const exhibitions = [{
   startDate: '2026-08-01',
   endDate: '2026-08-31',
   managers: [currentUser.name],
-  works: [],
-  artWorks: [],
-  goods: [],
+  staff: { planners: [], artists: [artistUser.id], staffs: [] },
+  works: [{
+    id: 900101,
+    manualNumber: 'W-LEGACY',
+    title: 'CHARACTERIZATION_TEST_WORKS_PRECEDENCE',
+    author: currentUser.name,
+    price: '100000',
+    saved: true,
+    createdByUserId: currentUser.id,
+    legacyOnlyField: 'preserve-works'
+  }, {
+    id: 900102,
+    manualNumber: 'W-ARTIST',
+    title: 'CHARACTERIZATION_TEST_ARTIST_OWNED',
+    author: artistUser.name,
+    price: '200000',
+    saved: true,
+    createdByUserId: artistUser.id
+  }],
+  artWorks: [{
+    id: 900103,
+    manualNumber: 'A-CURRENT',
+    title: 'CHARACTERIZATION_TEST_ARTWORKS_ONLY',
+    author: currentUser.name,
+    price: '300000',
+    saved: true,
+    createdByUserId: currentUser.id
+  }],
+  goods: [{
+    id: 900201,
+    manualNumber: 'G-1',
+    title: 'CHARACTERIZATION_TEST_GOODS',
+    price: '5000',
+    quantity: 5,
+    saved: true,
+    createdByUserId: currentUser.id
+  }],
   soldWorks: [
     { id: 1, itemType: '작품', price: 250001 },
     { id: 2, itemType: '굿즈', price: 5000, soldQuantity: 2 }
@@ -164,7 +208,7 @@ test.beforeEach(async ({ page, baseURL }) => {
       const payload = {
         ok: true,
         data: {
-          users: [currentUser],
+          users,
           exhibitions,
           'pottery-students-v1': studentFixtures,
           'pottery-personal-work-v1': personalWorkFixtures,
@@ -183,9 +227,9 @@ test.beforeEach(async ({ page, baseURL }) => {
     }
     await route.continue();
   });
-  await page.addInitScript(({ user, fixtureExhibitions, fixtureStudents, fixturePersonalWork, fixtureCalendar, fixtureMaterialOrders }) => {
+  await page.addInitScript(({ user, fixtureUsers, fixtureExhibitions, fixtureStudents, fixturePersonalWork, fixtureCalendar, fixtureMaterialOrders }) => {
     localStorage.setItem('currentUser', JSON.stringify(user));
-    localStorage.setItem('users', JSON.stringify([user]));
+    localStorage.setItem('users', JSON.stringify(fixtureUsers));
     localStorage.setItem('exhibitions', JSON.stringify(fixtureExhibitions));
     localStorage.setItem('pottery-students-v1', JSON.stringify(fixtureStudents));
     localStorage.setItem('pottery-personal-work-v1', JSON.stringify(fixturePersonalWork));
@@ -194,6 +238,7 @@ test.beforeEach(async ({ page, baseURL }) => {
     localStorage.setItem('studio-calendar-state-v1', JSON.stringify(fixtureCalendar));
   }, {
     user: currentUser,
+    fixtureUsers: users,
     fixtureExhibitions: exhibitions,
     fixtureStudents: studentFixtures,
     fixturePersonalWork: personalWorkFixtures,
@@ -233,6 +278,51 @@ for (const [name, path] of pages) {
     await expect(page.locator('body')).toBeVisible();
   });
 }
+
+test('works renderer preserves controlling body, roles, modes, and works compatibility', async ({ page }) => {
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.locator('.tab-button[data-tab="inventory-list"]').click();
+
+  await expect(page.locator('tr[data-work-id="900101"]')).toContainText('CHARACTERIZATION_TEST_WORKS_PRECEDENCE');
+  await expect(page.locator('tr[data-work-id="900102"]')).toContainText('CHARACTERIZATION_TEST_ARTIST_OWNED');
+  await expect(page.getByText('CHARACTERIZATION_TEST_ARTWORKS_ONLY', { exact: true })).toHaveCount(0);
+  await expect(page.locator('#work-select-all-btn-bottom')).toHaveCount(1);
+
+  await page.getByRole('button', { name: '굿즈 목록', exact: true }).click();
+  await expect(page.locator('tr[data-work-id="900201"]')).toContainText('CHARACTERIZATION_TEST_GOODS');
+  await expect(page.locator('.works-table thead')).toContainText('판매된 수량');
+  await expect(page.locator('#work-select-all-btn-bottom')).toHaveCount(1);
+
+  await page.evaluate((artist) => {
+    localStorage.setItem('currentUser', JSON.stringify(artist));
+    window.switchTab('works');
+  }, artistUser);
+  const adminOwnedRow = page.locator('tr[data-work-id="900101"]');
+  const artistOwnedRow = page.locator('tr[data-work-id="900102"]');
+  const deleteAllButtons = page.locator('button.works-action-btn-danger').filter({ hasText: /^전체 삭제$/ });
+  await expect(deleteAllButtons).toHaveCount(2);
+  await expect(deleteAllButtons.first()).toBeHidden();
+  await expect(deleteAllButtons.last()).toBeHidden();
+  await expect(adminOwnedRow.getByRole('button', { name: '수정', exact: true })).toHaveCount(0);
+  await expect(adminOwnedRow.getByRole('button', { name: '삭제', exact: true })).toHaveCount(0);
+  await expect(artistOwnedRow.getByRole('button', { name: '수정', exact: true })).toHaveCount(1);
+  await expect(artistOwnedRow.getByRole('button', { name: '삭제', exact: true })).toHaveCount(1);
+
+  await page.evaluate(async (exhibitionId) => {
+    const [exhibition] = JSON.parse(localStorage.getItem('exhibitions') || '[]');
+    delete exhibition.works;
+    exhibition.artWorks = [{
+      id: 900301,
+      title: 'CHARACTERIZATION_TEST_ARTWORKS_FALLBACK',
+      saved: true,
+      createdByUserId: 900002
+    }];
+    localStorage.setItem('exhibitions', JSON.stringify([{ ...exhibition, id: exhibitionId }]));
+    await window.initDetailPage();
+  }, EXHIBITION_ID);
+  await page.getByRole('button', { name: '작품 목록', exact: true }).click();
+  await expect(page.locator('tr[data-work-id="900301"]')).toContainText('CHARACTERIZATION_TEST_ARTWORKS_FALLBACK');
+});
 
 test('master calendar preserves recurrence across week and month navigation', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
