@@ -8018,65 +8018,15 @@ function getSortedSoldWorks() {
 }
 
 function exportSalesToExcel() {
-  const soldWorks = getSortedSoldWorks();
-
-  const headers = ['번호', '사진', '제목', '작가', '가격', '판매일시', '구매자 성함', '구매자 연락처', '결제방법', '비고'];
-
-  const escapeHtml = (v) => String(v == null ? '' : v)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-  const headerRow = headers.map(h => `<th style="background:#f0f0f0;font-weight:bold;border:1px solid #ccc;padding:6px 10px;white-space:nowrap">${escapeHtml(h)}</th>`).join('');
-
-  const dataRows = soldWorks.map(sold => {
-    const paymentDisplay = sold.paymentMethod === '기타'
-      ? `기타${sold.paymentMethodEtc ? ` (${sold.paymentMethodEtc})` : ''}`
-      : (sold.paymentMethod || '');
-
-    const soldPreviewDataUrl = getPhotoPreviewDataUrl(sold);
-    const photoCell = soldPreviewDataUrl
-      ? `<td style="border:1px solid #ccc;padding:4px;text-align:center"><img src="${soldPreviewDataUrl}" width="80" height="80" style="object-fit:contain"></td>`
-      : `<td style="border:1px solid #ccc;padding:6px 10px">${escapeHtml(sold.photoName || '')}</td>`;
-
-    const cells = [
-      sold.manualNumber || '',
-      null, // photo handled separately
-      sold.title || '',
-      sold.author || '',
-      sold.price || '',
-      sold.soldAtKst || '',
-      sold.buyerName || '',
-      sold.buyerPhone || '',
-      paymentDisplay,
-      sold.note || ''
-    ];
-
-    const tdCells = cells.map((v, i) => {
-      if (i === 1) return photoCell;
-      return `<td style="border:1px solid #ccc;padding:6px 10px;white-space:nowrap">${escapeHtml(v)}</td>`;
-    }).join('');
-
-    return `<tr>${tdCells}</tr>`;
-  }).join('');
-
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="UTF-8">
-<style>table{border-collapse:collapse}td,th{font-family:Arial,sans-serif;font-size:12px}</style>
-</head><body>
-<table>
-  <thead><tr>${headerRow}</tr></thead>
-  <tbody>${dataRows}</tbody>
-</table>
-</body></html>`;
-
-  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${(exhibitionDetailState.exhibition?.title || 'exhibition').replace(/[^a-zA-Z0-9가-힣._-]/g, '_')}-sales.xls`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  const exportData = globalThis.ExhibitionExportModel.buildSalesExport({
+    title: exhibitionDetailState.exhibition?.title,
+    soldWorks: getSortedSoldWorks(),
+    getPhotoPreviewDataUrl
+  });
+  downloadBlobFile(
+    new Blob([exportData.content], { type: exportData.mimeType }),
+    exportData.filename
+  );
 }
 
 function getSoldSortValue(sold, field) {
@@ -8179,166 +8129,29 @@ function toggleSalesSort(field) {
 
 function exportAccountingToExcel() {
   const exhibition = getCurrentExhibition();
-  const expenseItems = getExhibitionExpenseItems();
-  const revenueItems = getExhibitionRevenueItems();
-  const revenueTotals = {
-    art: revenueItems.find((item) => item.id === 'art')?.amount || 0,
-    goods: revenueItems.find((item) => item.id === 'goods')?.amount || 0
-  };
-
-  const expenseRows = expenseItems.map((item) => ({
-    division: item.division || '',
-    amount: formatAccountingAmount(getExpenseEffectiveAmount(item, revenueTotals))
-  }));
-
-  const revenueRows = revenueItems.map((item) => ({
-    division: item.division || '',
-    amount: formatAccountingAmount(item.amount)
-  }));
-
-  const expenseTotal = expenseItems.reduce((sum, item) => sum + getExpenseEffectiveAmount(item, revenueTotals), 0);
-  const revenueTotal = revenueItems.reduce((sum, item) => sum + parseAccountingAmount(item.amount), 0);
-  const profitTotal = revenueTotal - expenseTotal;
-
-  const escapeHtml = (v) => String(v == null ? '' : v)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-
-  const buildRows = (rows) => rows.map((row) => `
-    <tr>
-      <td style="border:1px solid #ccc;padding:8px 10px;">${escapeHtml(row.division)}</td>
-      <td style="border:1px solid #ccc;padding:8px 10px;">${escapeHtml(row.amount)}</td>
-    </tr>
-  `).join('');
-
-  const html = `
-    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        table { border-collapse: collapse; margin-bottom: 16px; width: 100%; }
-        th, td { font-family: Arial, sans-serif; font-size: 12px; }
-      </style>
-    </head>
-    <body>
-      <h2>${escapeHtml(exhibition.title || '전시 회계')}</h2>
-      <p>기간: ${escapeHtml((exhibition.startDate || '') + ' ~ ' + (exhibition.endDate || ''))}</p>
-
-      <table>
-        <thead>
-          <tr>
-            <th colspan="2" style="border:1px solid #ccc;padding:8px 10px;background:#f3f4f6;text-align:left;">지출</th>
-          </tr>
-          <tr>
-            <th style="border:1px solid #ccc;padding:8px 10px;background:#f9fafb;text-align:left;">구분</th>
-            <th style="border:1px solid #ccc;padding:8px 10px;background:#f9fafb;text-align:left;">금액</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${buildRows(expenseRows)}
-          <tr>
-            <td style="border:1px solid #ccc;padding:8px 10px;font-weight:700;background:#eef2ff;">합계</td>
-            <td style="border:1px solid #ccc;padding:8px 10px;font-weight:700;background:#eef2ff;">${escapeHtml(formatAccountingAmount(expenseTotal))}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <table>
-        <thead>
-          <tr>
-            <th colspan="2" style="border:1px solid #ccc;padding:8px 10px;background:#f3f4f6;text-align:left;">수입</th>
-          </tr>
-          <tr>
-            <th style="border:1px solid #ccc;padding:8px 10px;background:#f9fafb;text-align:left;">구분</th>
-            <th style="border:1px solid #ccc;padding:8px 10px;background:#f9fafb;text-align:left;">금액</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${buildRows(revenueRows)}
-          <tr>
-            <td style="border:1px solid #ccc;padding:8px 10px;font-weight:700;background:#eef2ff;">합계</td>
-            <td style="border:1px solid #ccc;padding:8px 10px;font-weight:700;background:#eef2ff;">${escapeHtml(formatAccountingAmount(revenueTotal))}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <table>
-        <tbody>
-          <tr>
-            <td style="border:1px solid #ccc;padding:8px 10px;font-weight:700;background:#ecfdf5;">총이익</td>
-            <td style="border:1px solid #ccc;padding:8px 10px;font-weight:700;background:#ecfdf5;">${escapeHtml(formatAccountingAmount(profitTotal))}</td>
-          </tr>
-        </tbody>
-      </table>
-    </body>
-    </html>
-  `;
-
-  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${(exhibition.title || 'exhibition').replace(/[^a-zA-Z0-9가-힣._-]/g, '_')}-accounting.xls`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  const exportData = globalThis.ExhibitionExportModel.buildAccountingExport({
+    exhibition,
+    expenseItems: getExhibitionExpenseItems(),
+    revenueItems: getExhibitionRevenueItems(),
+    formatAmount: formatAccountingAmount,
+    getExpenseEffectiveAmount,
+    parseAmount: parseAccountingAmount
+  });
+  downloadBlobFile(
+    new Blob([exportData.content], { type: exportData.mimeType }),
+    exportData.filename
+  );
 }
 
 function exportWorksToExcel() {
-  const works = getSortedWorks();
-  const rows = [
-    ['번호', '사진', '제목', '작가', '가격', '재료', '크기', '연도', '분류']
-  ];
-
-  works.forEach(work => {
-    rows.push([
-      work.manualNumber || '',
-      work.photoName || '',
-      work.title || '',
-      work.author || '',
-      work.price || '',
-      work.materials || '',
-      work.size || '',
-      work.year || '',
-      work.category || ''
-    ]);
+  const exportData = globalThis.ExhibitionExportModel.buildWorksExport({
+    title: exhibitionDetailState.exhibition?.title,
+    works: getSortedWorks()
   });
-
-  const escapeXml = (value) => String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-
-  const sheetRows = rows.map(row => {
-    const cells = row.map(value => `<Cell><Data ss:Type="String">${escapeXml(value)}</Data></Cell>`).join('');
-    return `<Row>${cells}</Row>`;
-  }).join('');
-
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-    <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
-      xmlns:o="urn:schemas-microsoft-com:office:office"
-      xmlns:x="urn:schemas-microsoft-com:office:excel"
-      xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
-      xmlns:html="http://www.w3.org/TR/REC-html40">
-      <Worksheet ss:Name="Sheet1">
-        <Table>${sheetRows}</Table>
-      </Worksheet>
-    </Workbook>`;
-
-  const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${(exhibitionDetailState.exhibition?.title || 'exhibition').replace(/[^a-zA-Z0-9가-힣._-]/g, '_')}-works.xls`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  downloadBlobFile(
+    new Blob([exportData.content], { type: exportData.mimeType }),
+    exportData.filename
+  );
 }
 
 function toggleWorkListExpanded() {

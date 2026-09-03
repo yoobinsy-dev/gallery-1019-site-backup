@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { exposeClassicScriptFunctions } = require('../helpers/load-source');
 const salesModel = require('../../exhibitions/sales-model');
 const accountingProjection = require('../../exhibitions/accounting-projection');
+const exportModel = require('../../exhibitions/export-model');
 
 function loadExhibition() {
   return exposeClassicScriptFunctions('exhibition-detail.js', [
@@ -37,7 +38,8 @@ function loadExhibition() {
       Image: class Image {},
       DOMParser: class DOMParser {},
       ExhibitionSalesModel: salesModel,
-      ExhibitionAccountingProjection: accountingProjection
+      ExhibitionAccountingProjection: accountingProjection,
+      ExhibitionExportModel: exportModel
     }
   }).exposed;
 }
@@ -198,4 +200,56 @@ test('exhibition accounting characterizes revenue, commission, ordering, and tot
   assert.equal(exhibition.getExpenseEffectiveAmount({ code: 'commission-goods', amount: 1 }, revenueTotals), 6000);
   assert.equal(exhibition.getExpenseEffectiveAmount({ code: 'custom', amount: '₩ 1,250' }, revenueTotals), 1250);
   assert.equal(exhibition.exhibitionDetailState.exhibition.manualRevenueItems[0].unknownField, 'keep');
+});
+
+test('exhibition exports preserve rows, formatting, escaping, totals, and filenames', () => {
+  const soldWorks = [{
+    manualNumber: 'A-1',
+    title: 'A&B',
+    buyerName: 'Buyer A',
+    paymentMethod: '기타',
+    paymentMethodEtc: '현금',
+    photoPreviewUrl: 'preview-a',
+    unknownField: 'keep'
+  }];
+  const sales = exportModel.buildSalesExport({
+    title: 'Exhibition / One',
+    soldWorks,
+    getPhotoPreviewDataUrl: (sold) => sold.photoPreviewUrl
+  });
+  assert.equal(sales.filename, 'Exhibition___One-sales.xls');
+  assert.equal(sales.mimeType, 'application/vnd.ms-excel;charset=utf-8;');
+  assert.match(sales.content, /A&amp;B/);
+  assert.match(sales.content, /src="preview-a"/);
+  assert.match(sales.content, /기타 \(현금\)/);
+  assert.ok(sales.content.indexOf('번호') < sales.content.indexOf('Buyer A'));
+
+  const works = exportModel.buildWorksExport({
+    title: 'Exhibition / One',
+    works: [{ manualNumber: 'W-1', title: '<Work>', unknownField: 'keep' }]
+  });
+  assert.equal(works.filename, 'Exhibition___One-works.xls');
+  assert.match(works.content, /&lt;Work&gt;/);
+  assert.ok(works.content.indexOf('번호') < works.content.indexOf('W-1'));
+
+  const revenues = [
+    { id: 'art', division: '작품 판매', amount: 100000 },
+    { id: 'goods', division: '굿즈 판매', amount: 10000 },
+    { id: 'manual', division: '후원', amount: 5000 }
+  ];
+  const accounting = exportModel.buildAccountingExport({
+    exhibition: { title: 'Exhibition / One', startDate: '2026-08-01', endDate: '2026-08-31' },
+    expenseItems: [{ code: 'commission-art', division: '작가 지급' }],
+    revenueItems: revenues,
+    formatAmount: accountingProjection.formatAmount,
+    getExpenseEffectiveAmount: accountingProjection.getExpenseEffectiveAmount,
+    parseAmount: accountingProjection.parseAmount
+  });
+  assert.equal(accounting.filename, 'Exhibition___One-accounting.xls');
+  assert.match(accounting.content, /2026-08-01 ~ 2026-08-31/);
+  assert.match(accounting.content, /₩ 60,000/);
+  assert.match(accounting.content, /₩ 115,000/);
+  assert.match(accounting.content, /₩ 55,000/);
+  assert.ok(accounting.content.indexOf('작품 판매') < accounting.content.indexOf('후원'));
+  assert.equal(soldWorks[0].unknownField, 'keep');
 });
