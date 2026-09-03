@@ -12,7 +12,9 @@ function loadCalendar(globals = {}) {
     'slotToTime', 'timeToSlot', 'getWeekStart', 'getMonthStart', 'addDays', 'addMonths', 'formatDateInput',
     'getDayIndexFromDateString', 'getEventsForDate', 'state', 'isExhibitionKind',
     'loadStudioUsers', 'getStudentUsersForEvents', 'getPersonalUsersForEvents',
-    'getActivePersonalWorkEntries', 'loadStudioInstructors', 'loadState', 'saveState'
+    'getActivePersonalWorkEntries', 'loadStudioInstructors', 'loadState', 'saveState',
+    'findLane', 'canPlaceInLane', 'createEmptyDailyOccupancy', 'cloneDailyOccupancy',
+    'markLaneOccupancy', 'buildDailyOccupancyMap', 'hasEnoughCapacityForRange'
   ], { globals: {
     MasterCalendarDateTime: dateTime,
     MasterCalendarOccurrences: occurrences,
@@ -124,6 +126,43 @@ test('calendar characterizes date and slot malformed and boundary behavior', () 
   assert.equal(calendar.getDayIndexFromDateString('2026-08-31'), 0);
   assert.equal(calendar.getDayIndexFromDateString('2026-08-30'), 6);
   assert.equal(calendar.getDayIndexFromDateString('invalid'), -1);
+});
+
+test('calendar occupancy characterizes first-fit lanes, capacity, exclusion, and ignored kinds', () => {
+  const calendar = loadCalendar();
+  calendar.state.events = [
+    { id: 'one', kind: '개인작업', date: '2026-08-03', start: '10:00', end: '11:00', capacity: 1 },
+    { id: 'two', kind: '수강', date: '2026-08-03', start: '10:30', end: '11:30', capacity: 2 },
+    { id: 'overflow', kind: '개인작업', date: '2026-08-03', start: '10:30', end: '11:00', capacity: 1 },
+    { id: 'other', kind: '기타', date: '2026-08-03', start: '10:00', end: '11:00', capacity: 3 },
+    { id: 'exhibition', kind: '전시', date: '2026-08-03', start: '00:00', end: '24:00', capacity: 3 },
+    { id: 'clamped', kind: '개인작업', date: '2026-08-03', start: '12:00', end: '12:30', capacity: 99 }
+  ];
+
+  const occupancy = calendar.buildDailyOccupancyMap('2026-08-03');
+  assert.deepEqual(JSON.parse(JSON.stringify(occupancy[20])), [true, false, false]);
+  assert.deepEqual(JSON.parse(JSON.stringify(occupancy[21])), [true, true, true]);
+  assert.deepEqual(JSON.parse(JSON.stringify(occupancy[22])), [false, true, true]);
+  assert.deepEqual(JSON.parse(JSON.stringify(occupancy[24])), [true, true, true]);
+  assert.equal(calendar.hasEnoughCapacityForRange(occupancy, 20, 21, 2), true);
+  assert.equal(calendar.hasEnoughCapacityForRange(occupancy, 21, 22, 1), false);
+
+  const excluded = calendar.buildDailyOccupancyMap('2026-08-03', 'one');
+  assert.deepEqual(JSON.parse(JSON.stringify(excluded[20])), [false, false, false]);
+  assert.deepEqual(JSON.parse(JSON.stringify(excluded[21])), [true, true, true]);
+});
+
+test('calendar occupancy characterizes strict lane inputs and cloned boolean shape', () => {
+  const calendar = loadCalendar();
+  const occupancy = calendar.createEmptyDailyOccupancy();
+  assert.equal(calendar.findLane(occupancy, 1, 3, 2), 0);
+  calendar.markLaneOccupancy(occupancy, 1, 3, 0, 2);
+  assert.equal(calendar.findLane(occupancy, 1, 3, 1), 2);
+  assert.equal(calendar.canPlaceInLane(occupancy, 1, 3, 1, 2), true);
+  assert.equal(calendar.canPlaceInLane(occupancy, 1, 1, 1, 0), false);
+  assert.equal(calendar.canPlaceInLane([], 1, 3, 1, 0), false);
+  assert.equal(calendar.canPlaceInLane(occupancy, 1, 3, 4, 0), false);
+  assert.deepEqual(JSON.parse(JSON.stringify(calendar.cloneDailyOccupancy([[1, 0, 'yes']])[0])), [true, false, true]);
 });
 
 test('canonical calendar occurrences preserve weekly boundaries, skips, ranges, ordering, and inputs', () => {
