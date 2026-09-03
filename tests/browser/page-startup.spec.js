@@ -647,6 +647,55 @@ test('master calendar preserves week and month DOM projection', async ({ page })
   await expect(exhibition).toHaveCSS('top', '534px');
 });
 
+test('master calendar recurring delete preserves one-occurrence prompt behavior', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
+  await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+  await page.evaluate(() => {
+    localStorage.setItem('studio-calendar-state-v1', JSON.stringify({
+      events: [{
+        id: 'CHARACTERIZATION_TEST_RECURRING_DELETE',
+        kind: '개인작업',
+        title: 'CHARACTERIZATION_TEST_RECURRING_DELETE',
+        date: '2026-08-19',
+        start: '14:00',
+        end: '15:00',
+        capacity: 1,
+        repeatWeekly: true,
+        repeatEndDate: '2026-09-02',
+        repeatSkipDates: []
+      }],
+      baseRules: [],
+      baseRuleTimeline: [],
+      baseWeekOverrides: {}
+    }));
+    window.dispatchEvent(new CustomEvent('cloud-sync:state-applied', {
+      detail: { keys: ['studio-calendar-state-v1'] }
+    }));
+  });
+
+  const occurrence = page.locator('.event-bubble[data-event-id="CHARACTERIZATION_TEST_RECURRING_DELETE"]');
+  await expect(occurrence).toHaveAttribute('data-date', '2026-08-26');
+  await occurrence.locator('.event-bubble-delete').click();
+  await expect(page.locator('#recurring-delete-modal')).toHaveClass(/open/);
+  await page.locator('#delete-recurring-one-btn').click();
+  await expect(page.locator('#recurring-delete-modal')).not.toHaveClass(/open/);
+  await expect(occurrence).toHaveCount(0);
+
+  const storedEvent = await page.evaluate(() => {
+    const documentState = JSON.parse(localStorage.getItem('studio-calendar-state-v1') || '{}');
+    return documentState.events?.find((eventItem) => eventItem.id === 'CHARACTERIZATION_TEST_RECURRING_DELETE');
+  });
+  expect(storedEvent).toMatchObject({
+    date: '2026-08-19',
+    repeatWeekly: true,
+    repeatEndDate: '2026-09-02',
+    repeatSkipDates: ['2026-08-26']
+  });
+
+  await page.locator('#next-week-btn').click();
+  await expect(page.locator('.event-bubble[data-event-id="CHARACTERIZATION_TEST_RECURRING_DELETE"]')).toHaveAttribute('data-date', '2026-09-02');
+});
+
 test('master calendar event modal preserves reset and single listener behavior', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
   await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
