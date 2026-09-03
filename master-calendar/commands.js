@@ -98,7 +98,44 @@
     };
   }
 
-  const api = Object.freeze({ planEventCreation });
+  function planPointerEdit(options = {}) {
+    const edit = options.edit;
+    const event = options.event;
+    const target = options.target;
+    if (!event || !edit?.validPreview || !target) return { action: 'none' };
+    if (!Number.isInteger(target.dayIndex)
+      || !Number.isInteger(target.startSlot)
+      || !Number.isInteger(target.endSlot)
+      || target.endSlot <= target.startSlot) {
+      return { action: 'none' };
+    }
+
+    const changed = String(options.originalDate || '') !== String(target.date || '')
+      || String(options.originalStart || '') !== String(target.start || '')
+      || String(options.originalEnd || '') !== String(target.end || '');
+    if (changed && event.repeatWeekly && options.viewMode === 'week' && edit.pointerMoved) {
+      return {
+        action: 'prompt-recurring',
+        recurringMove: {
+          eventId: String(event.id || ''),
+          occurrenceDate: String(edit.occurrenceDate || target.date),
+          nextDate: target.date,
+          nextStart: target.start,
+          nextEnd: target.end,
+          nextClassType: String(options.nextClassRule?.className || event.classType || ''),
+          nextInstructor: String(options.nextClassRule?.instructor || event.instructor || '').trim(),
+          nextBaseRuleId: String(options.nextClassRule?.id || event.baseRuleId || '')
+        }
+      };
+    }
+
+    return {
+      action: 'update',
+      patch: { date: target.date, start: target.start, end: target.end }
+    };
+  }
+
+  const api = Object.freeze({ planEventCreation, planPointerEdit });
   root.MasterCalendarCommands = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

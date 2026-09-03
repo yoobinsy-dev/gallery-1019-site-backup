@@ -17,7 +17,7 @@ function loadCalendar(globals = {}) {
     'getActivePersonalWorkEntries', 'loadStudioInstructors', 'loadState', 'saveState',
     'findLane', 'canPlaceInLane', 'createEmptyDailyOccupancy', 'cloneDailyOccupancy',
     'markLaneOccupancy', 'buildDailyOccupancyMap', 'hasEnoughCapacityForRange',
-    'isEventPlacementAllowed', 'saveEventFromModal'
+    'isEventPlacementAllowed', 'saveEventFromModal', 'finalizeMasterCalendarEdit'
   ], { globals: {
     MasterCalendarDateTime: dateTime,
     MasterCalendarOccurrences: occurrences,
@@ -310,6 +310,106 @@ test('calendar event command characterizes class metadata and exact event shape'
     start: '10:00', end: '12:00', classType: 'Wheel', instructor: 'Teacher', baseRuleId: 'rule-1',
     kilnCategory: '', capacity: 3, repeatWeekly: true
   } });
+});
+
+function setMasterEdit(calendar, overrides = {}) {
+  Object.assign(calendar.state.masterEdit, {
+    active: true,
+    eventId: 'event-1',
+    occurrenceDate: '2026-08-03',
+    mode: 'move',
+    dayIndex: 0,
+    startSlot: 20,
+    endSlot: 22,
+    kind: '기타',
+    validPreview: true,
+    targetDayIndex: 1,
+    targetStartSlot: 22,
+    targetEndSlot: 24,
+    pointerMoved: true,
+    ...overrides
+  });
+}
+
+test('calendar pointer finalization characterizes ordinary update and persistence', () => {
+  const writes = [];
+  const calendar = loadCalendar({ localStorage: {
+    getItem() { return null; },
+    setItem(key, value) { writes.push([key, value]); }
+  } });
+  calendar.state.weekStart = new Date('2026-08-03T00:00:00');
+  calendar.state.events = [{
+    id: 'event-1', kind: '기타', title: 'Other', date: '2026-08-03',
+    start: '10:00', end: '11:00', repeatWeekly: false
+  }];
+  setMasterEdit(calendar);
+
+  assert.throws(() => calendar.finalizeMasterCalendarEdit(), /Cannot set properties of null/);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(calendar.state.events[0])),
+    { id: 'event-1', kind: '기타', title: 'Other', date: '2026-08-04', start: '11:00', end: '12:00', repeatWeekly: false }
+  );
+  assert.equal(writes.at(-1)[0], 'studio-calendar-state-v1');
+});
+
+test('calendar pointer finalization characterizes recurring prompt without mutation', () => {
+  const calendar = loadCalendar();
+  calendar.state.weekStart = new Date('2026-08-03T00:00:00');
+  calendar.state.viewMode = 'week';
+  calendar.state.events = [{
+    id: 'event-1', kind: '기타', title: 'Weekly', date: '2026-08-03',
+    start: '10:00', end: '11:00', repeatWeekly: true
+  }];
+  setMasterEdit(calendar);
+
+  assert.throws(() => calendar.finalizeMasterCalendarEdit(), /Cannot set properties of null/);
+  assert.deepEqual(JSON.parse(JSON.stringify(calendar.state.events[0])), {
+    id: 'event-1', kind: '기타', title: 'Weekly', date: '2026-08-03',
+    start: '10:00', end: '11:00', repeatWeekly: true
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(calendar.state.recurringMove)), {
+    eventId: 'event-1', occurrenceDate: '2026-08-03', nextDate: '2026-08-04',
+    nextStart: '11:00', nextEnd: '12:00', nextClassType: '', nextInstructor: '', nextBaseRuleId: ''
+  });
+});
+
+test('calendar pointer finalization characterizes invalid preview cancellation', () => {
+  const calendar = loadCalendar();
+  calendar.state.weekStart = new Date('2026-08-03T00:00:00');
+  calendar.state.events = [{ id: 'event-1', kind: '기타', date: '2026-08-03', start: '10:00', end: '11:00' }];
+  setMasterEdit(calendar, { validPreview: false });
+
+  assert.throws(() => calendar.finalizeMasterCalendarEdit(), /Cannot set properties of null/);
+  assert.equal(calendar.state.events[0].date, '2026-08-03');
+  assert.equal(calendar.state.masterEdit.active, false);
+});
+
+test('calendar pointer command preserves unchanged updates and recurring class metadata', () => {
+  const edit = { validPreview: true, pointerMoved: true, occurrenceDate: '2026-08-03' };
+  const event = {
+    id: 'event-1', repeatWeekly: true, classType: 'Old Class', instructor: 'Old Teacher', baseRuleId: 'old-rule'
+  };
+  const target = {
+    dayIndex: 0, startSlot: 20, endSlot: 22,
+    date: '2026-08-03', start: '10:00', end: '11:00'
+  };
+  assert.deepEqual(commands.planPointerEdit({
+    edit, event, target, viewMode: 'week',
+    originalDate: target.date, originalStart: target.start, originalEnd: target.end
+  }), { action: 'update', patch: { date: target.date, start: target.start, end: target.end } });
+
+  assert.deepEqual(commands.planPointerEdit({
+    edit, event, target: { ...target, date: '2026-08-10' }, viewMode: 'week',
+    originalDate: target.date, originalStart: target.start, originalEnd: target.end,
+    nextClassRule: { id: 'new-rule', className: 'New Class', instructor: ' New Teacher ' }
+  }), {
+    action: 'prompt-recurring',
+    recurringMove: {
+      eventId: 'event-1', occurrenceDate: '2026-08-03', nextDate: '2026-08-10',
+      nextStart: '10:00', nextEnd: '11:00', nextClassType: 'New Class',
+      nextInstructor: 'New Teacher', nextBaseRuleId: 'new-rule'
+    }
+  });
 });
 
 test('canonical calendar occurrences preserve weekly boundaries, skips, ranges, ordering, and inputs', () => {

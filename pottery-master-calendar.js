@@ -1774,31 +1774,33 @@
       }
 
       const eventItem = state.events.find((item) => item.id === edit.eventId);
-      if (
-        eventItem
-        && edit.validPreview
-        && Number.isInteger(edit.targetDayIndex)
-        && Number.isInteger(edit.targetStartSlot)
-        && Number.isInteger(edit.targetEndSlot)
-        && edit.targetEndSlot > edit.targetStartSlot
-      ) {
+      if (eventItem && edit.validPreview) {
         const nextDate = formatDateInput(addDays(state.weekStart, edit.targetDayIndex));
         const nextStart = slotToTime(edit.targetStartSlot);
         const nextEnd = slotToTime(edit.targetEndSlot);
         const nextClassRule = eventItem.kind === '수강'
           ? getClassBaseRuleForRange(nextDate, nextStart, nextEnd)
           : null;
-        const changed = isMasterEditChanged(edit, nextDate, nextStart, nextEnd);
+        const plan = globalThis.MasterCalendarCommands.planPointerEdit({
+          edit,
+          event: eventItem,
+          viewMode: state.viewMode,
+          originalDate: String(edit.occurrenceDate || formatDateInput(addDays(state.weekStart, edit.dayIndex || 0)) || ''),
+          originalStart: slotToTime(Number(edit.startSlot || 0)),
+          originalEnd: slotToTime(Number(edit.endSlot || 1)),
+          target: {
+            dayIndex: edit.targetDayIndex,
+            startSlot: edit.targetStartSlot,
+            endSlot: edit.targetEndSlot,
+            date: nextDate,
+            start: nextStart,
+            end: nextEnd
+          },
+          nextClassRule
+        });
 
-        if (changed && eventItem.repeatWeekly && state.viewMode === 'week' && edit.pointerMoved) {
-          state.recurringMove.eventId = String(eventItem.id || '');
-          state.recurringMove.occurrenceDate = String(edit.occurrenceDate || nextDate);
-          state.recurringMove.nextDate = nextDate;
-          state.recurringMove.nextStart = nextStart;
-          state.recurringMove.nextEnd = nextEnd;
-          state.recurringMove.nextClassType = String(nextClassRule?.className || eventItem.classType || '');
-          state.recurringMove.nextInstructor = String(nextClassRule?.instructor || eventItem.instructor || '').trim();
-          state.recurringMove.nextBaseRuleId = String(nextClassRule?.id || eventItem.baseRuleId || '');
+        if (plan.action === 'prompt-recurring') {
+          Object.assign(state.recurringMove, plan.recurringMove);
 
           resetMasterEditState();
           renderCalendar();
@@ -1806,11 +1808,11 @@
           return;
         }
 
-        eventItem.date = nextDate;
-        eventItem.start = nextStart;
-        eventItem.end = nextEnd;
-        applyClassEventBaseMetadata(eventItem, nextDate);
-        saveState();
+        if (plan.action === 'update') {
+          Object.assign(eventItem, plan.patch);
+          applyClassEventBaseMetadata(eventItem, nextDate);
+          saveState();
+        }
       }
 
       resetMasterEditState();
@@ -1915,16 +1917,6 @@
     state.masterEdit.touchIdentifier = null;
     state.masterEdit.pointerMoved = false;
     state.masterEdit.suppressClickUntil = Date.now() + 220;
-  }
-
-  function isMasterEditChanged(edit, nextDate, nextStart, nextEnd) {
-    if (!edit) return false;
-    const originalDate = String(edit.occurrenceDate || formatDateInput(addDays(state.weekStart, edit.dayIndex || 0)) || '');
-    const originalStart = slotToTime(Number(edit.startSlot || 0));
-    const originalEnd = slotToTime(Number(edit.endSlot || 1));
-    return originalDate !== String(nextDate || '')
-      || originalStart !== String(nextStart || '')
-      || originalEnd !== String(nextEnd || '');
   }
 
   function openQuickEditEventModal(eventId, occurrenceDate) {
