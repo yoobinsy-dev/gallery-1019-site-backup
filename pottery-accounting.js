@@ -330,59 +330,30 @@
   }
 
   function loadAccountingEntries() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      state.entries = Array.isArray(parsed)
-        ? parsed.map(normalizeAccountingEntry).filter(Boolean)
-        : [];
-    } catch (_error) {
-      state.entries = [];
-    }
+    state.entries = globalThis.AccountingRepository.repository
+      .loadEntries()
+      .map(normalizeAccountingEntry)
+      .filter(Boolean);
   }
 
   function loadExhibitions() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(EXHIBITIONS_KEY) || '[]');
-      state.exhibitions = Array.isArray(parsed) ? parsed : [];
-    } catch (_error) {
-      state.exhibitions = [];
-    }
+    state.exhibitions = globalThis.AccountingRepository.repository.loadExhibitions();
   }
 
   function loadStudents() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(STUDENTS_KEY) || '[]');
-      state.students = Array.isArray(parsed) ? parsed : [];
-    } catch (_error) {
-      state.students = [];
-    }
+    state.students = globalThis.AccountingRepository.repository.loadStudents();
   }
 
   function loadPersonalWorkEntries() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(PERSONAL_WORK_KEY) || '[]');
-      state.personalWorkEntries = Array.isArray(parsed) ? parsed : [];
-    } catch (_error) {
-      state.personalWorkEntries = [];
-    }
+    state.personalWorkEntries = globalThis.AccountingRepository.repository.loadPersonalWorkEntries();
   }
 
   function loadMaterialOrders() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(MATERIAL_ORDERS_KEY) || '[]');
-      state.materialOrders = Array.isArray(parsed) ? parsed : [];
-    } catch (_error) {
-      state.materialOrders = [];
-    }
+    state.materialOrders = globalThis.AccountingRepository.repository.loadMaterialOrders();
   }
 
   function loadCalendarEvents() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(CALENDAR_KEY) || '{}');
-      state.calendarEvents = Array.isArray(parsed?.events) ? parsed.events : [];
-    } catch (_error) {
-      state.calendarEvents = [];
-    }
+    state.calendarEvents = globalThis.AccountingRepository.repository.loadCalendarEvents();
   }
 
   function normalizeAccountingEntry(entry) {
@@ -1166,7 +1137,7 @@
   }
 
   function persistEntries() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.entries));
+    globalThis.AccountingRepository.repository.saveEntries(state.entries);
   }
 
   async function exportCurrentTabToExcel() {

@@ -6,6 +6,8 @@ const autoEntries = require('../../accounting/auto-entries');
 const exportFormatter = require('../../accounting/export-formatter');
 const financeProjection = require('../../accounting/finance-projection');
 const calendarOccurrences = require('../../master-calendar/occurrences');
+const { createStorageAdapter } = require('../../storage/storage-adapter');
+const accountingRepository = require('../../storage/accounting-repository');
 const { buildGallerySalesAutoEntriesLegacy } = require('../fixtures/accounting-gallery-sales-legacy');
 
 function getMonthStart(date) {
@@ -38,6 +40,17 @@ function loadAccounting(globals = {}) {
     PotteryAccountingAutoEntries: autoEntries,
     PotteryAccountingExportFormatter: exportFormatter,
     PotteryAccountingFinanceProjection: financeProjection,
+    AccountingRepository: {
+      repository: accountingRepository.createAccountingRepository(
+        createStorageAdapter({
+          storage: globals.localStorage || {
+            getItem() { return null; },
+            setItem() {},
+            removeItem() {}
+          }
+        })
+      )
+    },
     ...globals
   } }).exposed;
 }
@@ -103,6 +116,36 @@ test('accounting persistence characterizes missing state and write exceptions', 
   assert.deepEqual(JSON.parse(JSON.stringify(accounting.state.entries)), []);
   assert.deepEqual(JSON.parse(JSON.stringify(accounting.state.calendarEvents)), []);
   assert.throws(() => accounting.persistEntries(), /storage blocked/);
+});
+
+test('accounting repository preserves keys, defaults, shapes, serialization, and unknown fields', () => {
+  const values = new Map([
+    ['pottery-accounting-v1', '[{"id":1,"unknown":"entry"}]'],
+    ['exhibitions', '[{"id":2,"unknown":"exhibition"}]'],
+    ['pottery-students-v1', '{malformed'],
+    ['pottery-personal-work-v1', '[{"id":3,"unknown":"personal"}]'],
+    ['pottery-material-orders-v1', '{"not":"array"}'],
+    ['studio-calendar-state-v1', '{"events":[{"id":4,"unknown":"event"}],"unknownRoot":true}']
+  ]);
+  const writes = [];
+  const repository = accountingRepository.createAccountingRepository({
+    read(key) { return values.get(key) ?? null; },
+    write(key, value) {
+      writes.push([key, value]);
+      values.set(key, value);
+      return undefined;
+    }
+  });
+
+  assert.equal(repository.loadEntries()[0].unknown, 'entry');
+  assert.equal(repository.loadExhibitions()[0].unknown, 'exhibition');
+  assert.deepEqual(repository.loadStudents(), []);
+  assert.equal(repository.loadPersonalWorkEntries()[0].unknown, 'personal');
+  assert.deepEqual(repository.loadMaterialOrders(), []);
+  assert.equal(repository.loadCalendarEvents()[0].unknown, 'event');
+  const entries = [{ id: 5, unknown: 'saved' }];
+  assert.equal(repository.saveEntries(entries), undefined);
+  assert.deepEqual(writes, [['pottery-accounting-v1', JSON.stringify(entries)]]);
 });
 
 test('accounting characterizes gallery entries, IDs, quantities, ordering, and rounding', () => {
