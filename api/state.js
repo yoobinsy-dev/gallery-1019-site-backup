@@ -4,6 +4,7 @@ const { logStateWriteAttempt, recordAlert, maybeTriggerConflictSpikeAlert } = re
 const { buildTransferSafeExhibitions, migrateExhibitionImageReferences } = require('./_lib/exhibition-image-refs');
 const { createStateReadService } = require('./_lib/state-read-service');
 const { createStateWriteService } = require('./_lib/state-write-service');
+const { createStateDecisionReporter } = require('./_lib/state-decision-reporter');
 
 const ALLOWED_KEYS = new Set([
   'users',
@@ -800,6 +801,12 @@ function mergeExhibitionsStatePreferServerOnConflict(currentValue, incomingValue
   return merged;
 }
 
+const decisionReporter = createStateDecisionReporter({
+  logStateWriteAttempt,
+  recordAlert,
+  maybeTriggerConflictSpikeAlert
+});
+
 const handleStateWrite = createStateWriteService({
   allowedKeys: ALLOWED_KEYS,
   strictVersionKeys: STRICT_VERSION_KEYS,
@@ -808,9 +815,7 @@ const handleStateWrite = createStateWriteService({
   getStateMap,
   getStateMapWithMeta,
   setStateValue,
-  logStateWriteAttempt,
-  recordAlert,
-  maybeTriggerConflictSpikeAlert,
+  decisionReporter,
   migrateExhibitionImageReferences,
   policies: {
     detectLargeUnexpectedInventoryDrop,

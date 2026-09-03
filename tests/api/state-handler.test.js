@@ -41,8 +41,8 @@ function createHarness(initial = {}) {
     './_lib/state-store': stateStore,
     './_lib/audit-store': {
       async logStateWriteAttempt(entry) { operations.push(`audit:${entry.reason}`); audit.push(entry); },
-      async recordAlert(entry) { alerts.push(entry); },
-      async maybeTriggerConflictSpikeAlert() {}
+      async recordAlert(entry) { operations.push(`alert:${entry.alertType}`); alerts.push(entry); },
+      async maybeTriggerConflictSpikeAlert() { operations.push('alert:conflict-spike-check'); }
     },
     './_lib/exhibition-image-refs': {
       buildTransferSafeExhibitions(exhibitions) {
@@ -105,10 +105,16 @@ test('state handler characterizes rejected keys, malformed body, methods, and st
   assert.equal((await invoke(harness, 'PUT', { body: { key: 'invalid', value: [] } })).statusCode, 400);
   assert.equal((await invoke(harness, 'POST')).statusCode, 405);
 
+  harness.operations.length = 0;
   const conflict = await invoke(harness, 'PUT', { body: { key: 'users', value: [] } });
   assert.equal(conflict.statusCode, 409);
   assert.equal(conflict.json().conflict.key, 'users');
   assert.equal(harness.audit[0].reason, 'missing-client-base-version');
+  assert.deepEqual(harness.operations, [
+    'read-meta:users',
+    'audit:missing-client-base-version',
+    'alert:conflict-spike-check'
+  ]);
 });
 
 test('PUT /api/state characterizes successful writes, safeguards, audit, and response shape', async () => {
@@ -136,6 +142,10 @@ test('PUT /api/state characterizes successful writes, safeguards, audit, and res
   });
   assert.equal(noAdmin.statusCode, 422);
   assert.equal(rejected.alerts[0].alertType, 'users-admin-invariant-rejected');
+  assert.deepEqual(rejected.operations.slice(-2), [
+    'audit:users-missing-admin-with-password',
+    'alert:users-admin-invariant-rejected'
+  ]);
 });
 
 test('DELETE /api/state characterizes blocked users deletion and accepted disposable-key deletion', async () => {

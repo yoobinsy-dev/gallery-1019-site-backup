@@ -7,9 +7,7 @@ function createStateWriteService(dependencies) {
     getStateMap,
     getStateMapWithMeta,
     setStateValue,
-    logStateWriteAttempt,
-    recordAlert,
-    maybeTriggerConflictSpikeAlert,
+    decisionReporter,
     migrateExhibitionImageReferences,
     policies
   } = dependencies;
@@ -30,15 +28,13 @@ function createStateWriteService(dependencies) {
     const serverUpdatedAt = currentMeta?.[key]?.updatedAt || '';
 
     if (strictVersionKeys.has(key) && policies.hasKnownServerVersion(serverUpdatedAt) && !baseUpdatedAt) {
-      await logStateWriteAttempt({ requestId, stateKey: key, action: 'PUT', decision: 'conflict_rejected', reason: 'missing-client-base-version', baseUpdatedAt, serverUpdatedAt, clientId });
-      await maybeTriggerConflictSpikeAlert();
+      await decisionReporter.conflict({ requestId, stateKey: key, action: 'PUT', decision: 'conflict_rejected', reason: 'missing-client-base-version', baseUpdatedAt, serverUpdatedAt, clientId });
       sendJson(res, 409, { ok: false, error: 'State conflict: missing client base version for users data.', conflict: { key, serverUpdatedAt, baseUpdatedAt: null } });
       return;
     }
 
     if (strictVersionKeys.has(key) && policies.isStaleComparedToServer(baseUpdatedAt, serverUpdatedAt)) {
-      await logStateWriteAttempt({ requestId, stateKey: key, action: 'PUT', decision: 'conflict_rejected', reason: 'server-newer-than-client-base', baseUpdatedAt, serverUpdatedAt, clientId });
-      await maybeTriggerConflictSpikeAlert();
+      await decisionReporter.conflict({ requestId, stateKey: key, action: 'PUT', decision: 'conflict_rejected', reason: 'server-newer-than-client-base', baseUpdatedAt, serverUpdatedAt, clientId });
       sendJson(res, 409, { ok: false, error: 'State conflict: server has newer users data.', conflict: { key, serverUpdatedAt, baseUpdatedAt: baseUpdatedAt || null } });
       return;
     }
@@ -61,40 +57,37 @@ function createStateWriteService(dependencies) {
 
       const blockedDrop = policies.detectSuspiciousUserDrop(currentUsers, valueToPersist, removedIds);
       if (blockedDrop) {
-        await logStateWriteAttempt({
+        await decisionReporter.reject({
           requestId, stateKey: key, action: 'PUT', decision: 'drop_blocked',
           reason: 'large-unexpected-user-drop-without-explicit-removals',
           baseUpdatedAt, serverUpdatedAt, incomingCount: body.value.length,
           serverCount: currentUsers.length, mergedCount: valueToPersist.length, clientId,
           details: { ...blockedDrop, syncMode }
-        });
-        await recordAlert({ alertType: 'large-user-drop-blocked', severity: 'critical', message: `Blocked suspicious user drop from ${blockedDrop.previousCount} to ${blockedDrop.nextCount}.`, details: blockedDrop });
+        }, { alertType: 'large-user-drop-blocked', severity: 'critical', message: `Blocked suspicious user drop from ${blockedDrop.previousCount} to ${blockedDrop.nextCount}.`, details: blockedDrop });
         sendJson(res, 422, { ok: false, error: 'Blocked suspicious user account drop. Retry with explicit removals from a fresh client state.', blocked: blockedDrop });
         return;
       }
 
       if (policies.hasUsersWithMissingPasswords(valueToPersist)) {
         const details = { syncMode, removedIdsCount: removedIds.length };
-        await logStateWriteAttempt({
+        await decisionReporter.reject({
           requestId, stateKey: key, action: 'PUT', decision: 'rejected',
           reason: 'users-missing-password-after-merge', baseUpdatedAt, serverUpdatedAt,
           incomingCount: body.value.length, serverCount: currentUsers.length,
           mergedCount: valueToPersist.length, clientId, details
-        });
-        await recordAlert({ alertType: 'users-missing-password-rejected', severity: 'critical', message: 'Rejected users write because one or more accounts had missing passwords after merge.', details });
+        }, { alertType: 'users-missing-password-rejected', severity: 'critical', message: 'Rejected users write because one or more accounts had missing passwords after merge.', details });
         sendJson(res, 422, { ok: false, error: 'Rejected users write: one or more accounts would have missing passwords.' });
         return;
       }
 
       if (!policies.hasAtLeastOneAdminWithPassword(valueToPersist)) {
         const details = { syncMode, removedIdsCount: removedIds.length };
-        await logStateWriteAttempt({
+        await decisionReporter.reject({
           requestId, stateKey: key, action: 'PUT', decision: 'rejected',
           reason: 'users-missing-admin-with-password', baseUpdatedAt, serverUpdatedAt,
           incomingCount: body.value.length, serverCount: currentUsers.length,
           mergedCount: valueToPersist.length, clientId, details
-        });
-        await recordAlert({ alertType: 'users-admin-invariant-rejected', severity: 'critical', message: 'Rejected users write because no admin account with password would remain.', details });
+        }, { alertType: 'users-admin-invariant-rejected', severity: 'critical', message: 'Rejected users write because no admin account with password would remain.', details });
         sendJson(res, 422, { ok: false, error: 'Rejected users write: at least one admin account with password must remain.' });
         return;
       }
@@ -125,7 +118,7 @@ function createStateWriteService(dependencies) {
       const staleConflict = policies.isStaleComparedToServer(baseUpdatedAt, serverUpdatedAt);
 
       if (syncMode === 'delta' && incomingExhibitions.length === 0) {
-        await logStateWriteAttempt({ requestId, stateKey: key, action: 'PUT', decision: 'accepted', reason: 'delta-noop', baseUpdatedAt, serverUpdatedAt, incomingCount: 0, serverCount: currentExhibitions.length, mergedCount: currentExhibitions.length, clientId, details: { syncMode } });
+        await decisionReporter.audit({ requestId, stateKey: key, action: 'PUT', decision: 'accepted', reason: 'delta-noop', baseUpdatedAt, serverUpdatedAt, incomingCount: 0, serverCount: currentExhibitions.length, mergedCount: currentExhibitions.length, clientId, details: { syncMode } });
         sendJson(res, 200, { ok: true, meta: { key, updatedAt: serverUpdatedAt || null }, mergedOnConflict: false });
         return;
       }
@@ -135,14 +128,13 @@ function createStateWriteService(dependencies) {
         : null;
       const blockedDrop = policies.detectLargeUnexpectedInventoryDrop(currentExhibitions, incomingExhibitions, { onlyTouchedIds: touchedIds, treatMissingAsZero: syncMode !== 'delta' });
       if (blockedDrop) {
-        await logStateWriteAttempt({
+        await decisionReporter.reject({
           requestId, stateKey: key, action: 'PUT', decision: 'drop_blocked',
           reason: 'large-unexpected-inventory-drop-without-marker', baseUpdatedAt,
           serverUpdatedAt, incomingCount: incomingExhibitions.length,
           serverCount: currentExhibitions.length, mergedCount: currentExhibitions.length,
           clientId, details: { ...blockedDrop, syncMode }
-        });
-        await recordAlert({ alertType: 'large-drop-blocked', severity: 'critical', message: `Blocked large inventory drop for exhibition ${blockedDrop.exhibitionId}.`, details: blockedDrop });
+        }, { alertType: 'large-drop-blocked', severity: 'critical', message: `Blocked large inventory drop for exhibition ${blockedDrop.exhibitionId}.`, details: blockedDrop });
         sendJson(res, 422, { ok: false, error: 'Blocked suspicious large inventory drop. Add explicit clear marker to allow this reset.', blocked: blockedDrop });
         return;
       }
@@ -158,7 +150,7 @@ function createStateWriteService(dependencies) {
     }
 
     const updatedAt = await setStateValue(key, valueToPersist);
-    await logStateWriteAttempt({
+    await decisionReporter.audit({
       requestId,
       stateKey: key,
       action: 'PUT',
