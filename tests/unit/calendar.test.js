@@ -7,6 +7,7 @@ const occurrences = require('../../master-calendar/occurrences');
 const occupancy = require('../../master-calendar/occupancy');
 const commands = require('../../master-calendar/commands');
 const pointerController = require('../../master-calendar/pointer-controller');
+const modalController = require('../../master-calendar/modal-controller');
 const monthView = require('../../master-calendar/month-view');
 const weekView = require('../../master-calendar/week-view');
 const { createStorageAdapter } = require('../../storage/storage-adapter');
@@ -29,6 +30,7 @@ function loadCalendar(globals = {}) {
     MasterCalendarOccupancy: occupancy,
     MasterCalendarCommands: commands,
     MasterCalendarPointerController: pointerController,
+    MasterCalendarModalController: modalController,
     MasterCalendarMonthView: monthView,
     MasterCalendarWeekView: weekView,
     MasterCalendarRepository: {
