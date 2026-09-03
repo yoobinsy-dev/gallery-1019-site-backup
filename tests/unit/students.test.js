@@ -25,9 +25,13 @@ class FixedDate extends RealDate {
   }
 }
 
-function loadStudents() {
+function loadStudents(globals = {}) {
   return exposeIifeFunctions('pottery-students.js', [
     'state',
+    'loadStudents',
+    'saveStudents',
+    'loadCalendarState',
+    'saveCalendarState',
     'getStudentClassStats',
     'getCompletedClassCountSince',
     'getRemainingClassCount',
@@ -45,9 +49,83 @@ function loadStudents() {
   ], { globals: {
     Date: FixedDate,
     MasterCalendarOccurrences: calendarOccurrences,
-    StudentPaymentCredits: paymentCredits
+    StudentPaymentCredits: paymentCredits,
+    ...globals
   } }).exposed;
 }
+
+test('students persistence characterizes student and calendar serialization', () => {
+  const values = new Map([
+    ['pottery-students-v1', JSON.stringify([{
+      id: 1,
+      name: 'Student',
+      studentGroup: 'legacy-group',
+      paymentHistory: ['2026-08-01', ''],
+      unknownStudentField: 'keep'
+    }])],
+    ['studio-calendar-state-v1', JSON.stringify({
+      events: [{ id: 'event', unknownEventField: 'keep' }],
+      baseRules: [{ id: 'rule' }],
+      baseRuleTimeline: [{ weekKey: '2026-08-03', rules: [{ id: 'timeline-rule' }], unknownTimelineField: 'drop' }],
+      baseWeekOverrides: { '2026-08-03': [{ id: 'override' }] },
+      studioUsers: [{ id: 'user' }],
+      classTeachingLog: [{ id: 'log' }],
+      unknownCalendarRoot: 'keep'
+    })]
+  ]);
+  const writes = [];
+  const localStorage = {
+    getItem(key) { return values.get(key) ?? null; },
+    setItem(key, value) {
+      writes.push([key, value]);
+      values.set(key, String(value));
+      return undefined;
+    }
+  };
+  const students = loadStudents({ localStorage });
+  students.loadStudents();
+  students.loadCalendarState();
+
+  assert.equal(students.state.students[0].studentGroup, '정규반');
+  assert.equal(students.state.students[0].unknownStudentField, 'keep');
+  assert.deepEqual(JSON.parse(JSON.stringify(students.state.students[0].paymentHistory)), ['2026-08-01']);
+  assert.equal(students.state.calendar.events[0].unknownEventField, 'keep');
+  assert.equal(students.state.calendar.baseRuleTimeline[0].unknownTimelineField, undefined);
+
+  assert.equal(students.saveStudents(), undefined);
+  assert.equal(students.saveCalendarState(), undefined);
+  assert.deepEqual(writes.map(([key]) => key), ['pottery-students-v1', 'studio-calendar-state-v1']);
+  assert.equal(JSON.parse(writes[0][1])[0].unknownStudentField, 'keep');
+  const savedCalendar = JSON.parse(writes[1][1]);
+  assert.equal(savedCalendar.unknownCalendarRoot, 'keep');
+  assert.equal(savedCalendar.events[0].unknownEventField, 'keep');
+});
+
+test('students persistence characterizes malformed defaults and calendar fallback writes', () => {
+  const writes = [];
+  const students = loadStudents({
+    localStorage: {
+      getItem() { return '{malformed'; },
+      setItem(key, value) {
+        writes.push([key, value]);
+        return undefined;
+      }
+    }
+  });
+  students.loadStudents();
+  students.loadCalendarState();
+  assert.deepEqual(JSON.parse(JSON.stringify(students.state.students)), []);
+  assert.deepEqual(JSON.parse(JSON.stringify(students.state.calendar.events)), []);
+  students.saveCalendarState();
+  assert.deepEqual(Object.keys(JSON.parse(writes[0][1])), [
+    'events',
+    'baseRules',
+    'baseRuleTimeline',
+    'baseWeekOverrides',
+    'studioUsers',
+    'classTeachingLog'
+  ]);
+});
 
 test('students characterize single/weekly attendance, cancellation, ordering, and boundary dates', () => {
   const students = loadStudents();
