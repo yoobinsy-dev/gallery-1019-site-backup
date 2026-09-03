@@ -12,9 +12,11 @@ function getMonthStart(date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
-function loadAccounting() {
+function loadAccounting(globals = {}) {
   return exposeIifeFunctions('pottery-accounting.js', [
     'state',
+    'loadAllData',
+    'persistEntries',
     'buildGallerySalesAutoEntries',
     'buildFinanceForTab',
     'mergeCategoryEntries',
@@ -35,7 +37,8 @@ function loadAccounting() {
     MasterCalendarOccurrences: calendarOccurrences,
     PotteryAccountingAutoEntries: autoEntries,
     PotteryAccountingExportFormatter: exportFormatter,
-    PotteryAccountingFinanceProjection: financeProjection
+    PotteryAccountingFinanceProjection: financeProjection,
+    ...globals
   } }).exposed;
 }
 
@@ -49,6 +52,58 @@ function getGallerySalesHelpers(accounting) {
     normalizeNameKey: accounting.normalizeNameKey
   };
 }
+
+test('accounting persistence characterizes multi-key defaults and exact entry writes', () => {
+  const values = new Map([
+    ['pottery-accounting-v1', JSON.stringify([{
+      id: 'legacy-entry', monthKey: '2026-08', label: 'Legacy', amount: 123, unknownField: 'keep'
+    }])],
+    ['exhibitions', JSON.stringify([{ id: 1, unknownField: 'keep-exhibition' }])],
+    ['pottery-students-v1', '{malformed'],
+    ['pottery-personal-work-v1', JSON.stringify([{ id: 2, legacyField: 'keep-personal' }])],
+    ['pottery-material-orders-v1', JSON.stringify({ not: 'an-array' })],
+    ['studio-calendar-state-v1', JSON.stringify({ events: [{ id: 3, legacyField: 'keep-event' }], unknownRoot: true })]
+  ]);
+  const writes = [];
+  const localStorage = {
+    getItem(key) { return values.get(key) ?? null; },
+    setItem(key, value) {
+      writes.push([key, value]);
+      values.set(key, String(value));
+      return undefined;
+    }
+  };
+  const accounting = loadAccounting({ localStorage });
+  accounting.loadAllData();
+
+  assert.equal(accounting.state.entries[0].unknownField, undefined);
+  assert.equal(accounting.state.exhibitions[0].unknownField, 'keep-exhibition');
+  assert.deepEqual(JSON.parse(JSON.stringify(accounting.state.students)), []);
+  assert.equal(accounting.state.personalWorkEntries[0].legacyField, 'keep-personal');
+  assert.deepEqual(JSON.parse(JSON.stringify(accounting.state.materialOrders)), []);
+  assert.equal(accounting.state.calendarEvents[0].legacyField, 'keep-event');
+
+  accounting.state.entries.push({ id: 'new-entry', unknownField: 'keep-new' });
+  assert.equal(accounting.persistEntries(), undefined);
+  assert.deepEqual(writes, [[
+    'pottery-accounting-v1',
+    JSON.stringify(accounting.state.entries)
+  ]]);
+  assert.equal(JSON.parse(values.get('pottery-accounting-v1'))[1].unknownField, 'keep-new');
+});
+
+test('accounting persistence characterizes missing state and write exceptions', () => {
+  const accounting = loadAccounting({
+    localStorage: {
+      getItem() { return null; },
+      setItem() { throw new Error('storage blocked'); }
+    }
+  });
+  accounting.loadAllData();
+  assert.deepEqual(JSON.parse(JSON.stringify(accounting.state.entries)), []);
+  assert.deepEqual(JSON.parse(JSON.stringify(accounting.state.calendarEvents)), []);
+  assert.throws(() => accounting.persistEntries(), /storage blocked/);
+});
 
 test('accounting characterizes gallery entries, IDs, quantities, ordering, and rounding', () => {
   const accounting = loadAccounting();
