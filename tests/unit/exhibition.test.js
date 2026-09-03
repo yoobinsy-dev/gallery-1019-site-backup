@@ -12,6 +12,7 @@ const inventoryModel = require('../../exhibitions/inventory-model');
 const inventoryRenderer = require('../../exhibitions/inventory-renderer');
 const inventoryBackupModel = require('../../exhibitions/inventory-backup-model');
 const salesAddController = require('../../exhibitions/detail/sales-add-controller');
+const gridNavigation = require('../../exhibitions/detail/grid-navigation');
 const { createStorageAdapter } = require('../../storage/storage-adapter');
 const exhibitionsRepository = require('../../storage/exhibitions-repository');
 const exhibitionDetailRepository = require('../../storage/exhibition-detail-repository');
@@ -93,6 +94,7 @@ function loadExhibition(overrides = {}) {
       ExhibitionInventoryRenderer: inventoryRenderer,
       ExhibitionInventoryBackupModel: inventoryBackupModel,
       ExhibitionDetailSalesAddController: salesAddController,
+      ExhibitionDetailGridNavigation: gridNavigation,
       ExhibitionsRepository: { repository: exhibitionsRepository.createExhibitionsRepository(adapter) },
       ExhibitionDetailRepository: { repository: exhibitionDetailRepository.createExhibitionDetailRepository(adapter) },
       ...overrides
