@@ -676,6 +676,45 @@ test('master calendar event modal preserves reset and single listener behavior',
   await expect(modal).toHaveClass(/open/);
 });
 
+test('master calendar quick edit preserves population, reset, and single save behavior', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
+  await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+  await page.locator('#next-week-btn').click();
+
+  const eventBubble = page.locator('.event-bubble[data-event-id="CHARACTERIZATION_TEST_CALENDAR_SINGLE"]');
+  const modal = page.locator('#event-quick-edit-modal');
+  await eventBubble.click();
+  await expect(modal).toHaveClass(/open/);
+  await expect(page.locator('#quick-edit-kind')).toHaveText('기타');
+  await expect(page.locator('#quick-edit-title-row')).toBeVisible();
+  await expect(page.locator('#quick-edit-user-row')).toBeHidden();
+  await expect(page.locator('#quick-edit-title')).toHaveValue('CHARACTERIZATION_TEST_CALENDAR_SINGLE');
+  await expect(page.locator('#quick-edit-date')).toHaveValue('2026-09-01');
+  await expect(page.locator('#quick-edit-start')).toHaveValue('12:00');
+  await expect(page.locator('#quick-edit-end')).toHaveValue('13:00');
+
+  await page.locator('#quick-edit-title').fill('STALE_QUICK_EDIT_VALUE');
+  await page.locator('[data-close-modal="event-quick-edit-modal"]').click();
+  await eventBubble.click();
+  await expect(page.locator('#quick-edit-title')).toHaveValue('CHARACTERIZATION_TEST_CALENDAR_SINGLE');
+
+  await page.locator('#quick-edit-title').fill('CHARACTERIZATION_TEST_CALENDAR_SINGLE_EDITED');
+  await page.locator('#save-event-quick-edit-btn').click();
+  await expect(modal).not.toHaveClass(/open/);
+  await expect(page.getByText('CHARACTERIZATION_TEST_CALENDAR_SINGLE_EDITED', { exact: true })).toHaveCount(1);
+  const changedEvents = await page.evaluate(() => {
+    const documentState = JSON.parse(localStorage.getItem('studio-calendar-state-v1') || '{}');
+    return (documentState.events || []).filter((eventItem) => eventItem.title === 'CHARACTERIZATION_TEST_CALENDAR_SINGLE_EDITED');
+  });
+  expect(changedEvents).toHaveLength(1);
+  expect(changedEvents[0]).toMatchObject({
+    id: 'CHARACTERIZATION_TEST_CALENDAR_SINGLE',
+    date: '2026-09-01',
+    start: '12:00',
+    end: '13:00'
+  });
+});
+
 test('material orders preserve grouping, editing, merge overlap, undo, keyboard focus, and export', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2025-04-15T12:00:00'));
   await page.goto('/pottery-material-orders.html', { waitUntil: 'networkidle' });
