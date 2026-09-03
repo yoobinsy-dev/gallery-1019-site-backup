@@ -2195,48 +2195,23 @@
   }
 
   function findLane(occupancy, startSlot, endSlot, need) {
-    for (let lane = 0; lane <= 3 - need; lane += 1) {
-      if (canPlaceInLane(occupancy, startSlot, endSlot, need, lane)) {
-        return lane;
-      }
-    }
-    return -1;
+    return globalThis.MasterCalendarOccupancy.findLane(occupancy, startSlot, endSlot, need);
   }
 
   function canPlaceInLane(occupancy, startSlot, endSlot, need, lane) {
-    if (!Array.isArray(occupancy)) return false;
-    if (!Number.isInteger(startSlot) || !Number.isInteger(endSlot) || endSlot <= startSlot) return false;
-    if (!Number.isInteger(need) || need < 1 || need > 3) return false;
-    if (!Number.isInteger(lane) || lane < 0 || lane + need > 3) return false;
-
-    for (let s = startSlot; s < endSlot; s += 1) {
-      if (!Array.isArray(occupancy[s])) return false;
-      for (let l = lane; l < lane + need; l += 1) {
-        if (occupancy[s][l]) {
-          return false;
-        }
-      }
-    }
-    return true;
+    return globalThis.MasterCalendarOccupancy.canPlaceInLane(occupancy, startSlot, endSlot, need, lane);
   }
 
   function createEmptyDailyOccupancy() {
-    return Array.from({ length: SLOTS_PER_DAY }, () => [false, false, false]);
+    return globalThis.MasterCalendarOccupancy.createEmptyDailyOccupancy(SLOTS_PER_DAY);
   }
 
   function cloneDailyOccupancy(occupancy) {
-    return Array.from({ length: SLOTS_PER_DAY }, (_unused, slot) => {
-      const row = Array.isArray(occupancy?.[slot]) ? occupancy[slot] : [];
-      return [Boolean(row[0]), Boolean(row[1]), Boolean(row[2])];
-    });
+    return globalThis.MasterCalendarOccupancy.cloneDailyOccupancy(occupancy, SLOTS_PER_DAY);
   }
 
   function markLaneOccupancy(occupancy, startSlot, endSlot, lane, need) {
-    for (let slot = startSlot; slot < endSlot; slot += 1) {
-      for (let l = lane; l < lane + need; l += 1) {
-        occupancy[slot][l] = true;
-      }
-    }
+    globalThis.MasterCalendarOccupancy.markLaneOccupancy(occupancy, startSlot, endSlot, lane, need);
   }
 
   function buildMasterEditOccupancySnapshot(excludeEventId) {
@@ -2748,25 +2723,19 @@
   }
 
   function buildDailyOccupancyMap(date, excludeEventId) {
-    const occupancy = createEmptyDailyOccupancy();
-    const events = getEventsForDate(date);
-
-    events.forEach((event) => {
-      if (excludeEventId && event && event.id === excludeEventId) return;
-      if (event && (event.kind === '기타' || isAllDayKind(event.kind))) return;
-      const s = timeToSlot(event.start);
-      const e = Math.max(s + 1, timeToSlot(event.end));
-      const need = Math.max(1, Math.min(3, Number(event.capacity || 1)));
-      const lane = findLane(occupancy, s, e, need);
-      if (lane < 0) return;
-      markLaneOccupancy(occupancy, s, e, lane, need);
+    return globalThis.MasterCalendarOccupancy.buildDailyOccupancy({
+      events: getEventsForDate(date),
+      excludeEventId,
+      slotCount: SLOTS_PER_DAY,
+      timeToSlot,
+      isIgnoredKind(kind) {
+        return kind === '기타' || isAllDayKind(kind);
+      }
     });
-
-    return occupancy;
   }
 
   function hasEnoughCapacityForRange(occupancy, startSlot, endSlot, need) {
-    return findLane(occupancy, startSlot, endSlot, need) >= 0;
+    return globalThis.MasterCalendarOccupancy.hasEnoughCapacityForRange(occupancy, startSlot, endSlot, need);
   }
 
   function getDayIndexFromDateString(date) {
@@ -3838,32 +3807,15 @@
   }
 
   function isEventPlacementAllowed(kind, dayIndex, startSlot, endSlot) {
-    if (dayIndex < 0 || endSlot <= startSlot) return false;
     const weekStart = getEventSelectorWeekStartDate() || state.weekStart;
-
-    if (kind === '기타' || isAllDayKind(kind)) {
-      return true;
-    }
-
-    if (kind === '수강') {
-      const startRule = getBaseRuleForSlot(dayIndex, startSlot, weekStart);
-      const endRule = getBaseRuleForSlot(dayIndex, endSlot - 1, weekStart);
-      if (!startRule || !endRule) return false;
-      if (startRule.id !== endRule.id) return false;
-      return startRule.type === '수업시간'
-        && Number(startRule.startSlot) === Number(startSlot)
-        && Number(startRule.endSlot) === Number(endSlot);
-    }
-
-    for (let slot = startSlot; slot < endSlot; slot += 1) {
-      const rule = getBaseRuleForSlot(dayIndex, slot, weekStart);
-      if (kind === '개인작업') {
-        if (!rule || rule.type !== '개인작업 시간') return false;
-      } else if (kind === '강사 지도 하 개인작업') {
-        if (!rule || rule.type !== '수업시간') return false;
-      }
-    }
-    return true;
+    return globalThis.MasterCalendarOccupancy.isPlacementAllowed({
+      kind,
+      dayIndex,
+      startSlot,
+      endSlot,
+      rules: getRulesForWeek(weekStart),
+      isAllDayKind
+    });
   }
 
   function getBlockCapacityLabel(rule, dayOcc) {

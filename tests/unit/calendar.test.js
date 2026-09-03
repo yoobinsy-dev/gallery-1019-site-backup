@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { exposeIifeFunctions } = require('../helpers/load-source');
 const dateTime = require('../../master-calendar/date-time');
 const occurrences = require('../../master-calendar/occurrences');
+const occupancy = require('../../master-calendar/occupancy');
 const { createStorageAdapter } = require('../../storage/storage-adapter');
 const masterCalendarRepository = require('../../storage/master-calendar-repository');
 
@@ -14,10 +15,12 @@ function loadCalendar(globals = {}) {
     'loadStudioUsers', 'getStudentUsersForEvents', 'getPersonalUsersForEvents',
     'getActivePersonalWorkEntries', 'loadStudioInstructors', 'loadState', 'saveState',
     'findLane', 'canPlaceInLane', 'createEmptyDailyOccupancy', 'cloneDailyOccupancy',
-    'markLaneOccupancy', 'buildDailyOccupancyMap', 'hasEnoughCapacityForRange'
+    'markLaneOccupancy', 'buildDailyOccupancyMap', 'hasEnoughCapacityForRange',
+    'isEventPlacementAllowed'
   ], { globals: {
     MasterCalendarDateTime: dateTime,
     MasterCalendarOccurrences: occurrences,
+    MasterCalendarOccupancy: occupancy,
     MasterCalendarRepository: {
       repository: masterCalendarRepository.createMasterCalendarRepository(
         createStorageAdapter({
@@ -163,6 +166,26 @@ test('calendar occupancy characterizes strict lane inputs and cloned boolean sha
   assert.equal(calendar.canPlaceInLane([], 1, 3, 1, 0), false);
   assert.equal(calendar.canPlaceInLane(occupancy, 1, 3, 4, 0), false);
   assert.deepEqual(JSON.parse(JSON.stringify(calendar.cloneDailyOccupancy([[1, 0, 'yes']])[0])), [true, false, true]);
+});
+
+test('calendar placement characterizes exact class blocks and kind-specific rule coverage', () => {
+  const calendar = loadCalendar();
+  calendar.state.weekStart = new Date('2026-08-03T00:00:00');
+  calendar.state.baseRules = [
+    { id: 'class', type: '수업시간', day: 0, startSlot: 20, endSlot: 24 },
+    { id: 'personal', type: '개인작업 시간', day: 0, startSlot: 24, endSlot: 28 }
+  ];
+
+  assert.equal(calendar.isEventPlacementAllowed('수강', 0, 20, 24), true);
+  assert.equal(calendar.isEventPlacementAllowed('수강', 0, 20, 23), false);
+  assert.equal(calendar.isEventPlacementAllowed('개인작업', 0, 24, 28), true);
+  assert.equal(calendar.isEventPlacementAllowed('개인작업', 0, 23, 25), false);
+  assert.equal(calendar.isEventPlacementAllowed('강사 지도 하 개인작업', 0, 21, 23), true);
+  assert.equal(calendar.isEventPlacementAllowed('강사 지도 하 개인작업', 0, 23, 25), false);
+  assert.equal(calendar.isEventPlacementAllowed('기타', 6, 0, 48), true);
+  assert.equal(calendar.isEventPlacementAllowed('전시', 6, 0, 48), true);
+  assert.equal(calendar.isEventPlacementAllowed('개인작업', -1, 24, 28), false);
+  assert.equal(calendar.isEventPlacementAllowed('개인작업', 0, 28, 28), false);
 });
 
 test('canonical calendar occurrences preserve weekly boundaries, skips, ranges, ordering, and inputs', () => {
