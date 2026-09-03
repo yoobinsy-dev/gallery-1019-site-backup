@@ -451,6 +451,31 @@ test('exhibition sales shell preserves table and duplicated action controls', as
   await expect(page.locator('#sales-add-modal')).toHaveCSS('display', 'flex');
 });
 
+test('exhibition accounting shell preserves projection, rows, and duplicated controls', async ({ page }) => {
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.locator('.tab-button[data-tab="exhibition-accounting"]').click();
+
+  await expect(page.locator('.accounting-card')).toHaveCount(2);
+  await expect(page.locator('.accounting-table')).toHaveCount(2);
+  await expect(page.locator('.accounting-table thead th')).toHaveCount(8);
+  await expect(page.locator('.accounting-card').nth(0).locator('tbody tr')).toHaveCount(4);
+  await expect(page.locator('.accounting-card').nth(1).locator('tbody tr')).toHaveCount(2);
+  await expect(page.getByRole('button', { name: '+ 지출 항목 추가', exact: true })).toHaveCount(2);
+  await expect(page.getByRole('button', { name: '+ 수입 항목 추가', exact: true })).toHaveCount(2);
+  await expect(page.locator('#expense-select-all-btn')).toHaveCount(1);
+  await expect(page.locator('#expense-select-all-btn-bottom')).toHaveCount(1);
+  await expect(page.locator('#revenue-select-all-btn')).toHaveCount(1);
+  await expect(page.locator('#revenue-select-all-btn-bottom')).toHaveCount(1);
+  await expect(page.locator('.accounting-profit-ticker')).toHaveClass(/positive/);
+  await expect(page.locator('.accounting-profit-meta')).toHaveText('수입 합계 ₩ 260,001 · 지출 합계 ₩ 158,000.6');
+  await expect(page.locator('.accounting-profit-value')).toHaveText('₩ 102,000.4');
+
+  await page.getByRole('button', { name: '+ 지출 항목 추가', exact: true }).first().click();
+  await expect(page.locator('.accounting-card').nth(0).locator('tbody tr')).toHaveCount(5);
+  await expect(page.locator('.accounting-card').nth(0).locator('tbody .accounting-text-input')).toHaveCount(1);
+  await expect(page.locator('.accounting-card').nth(0).locator('tbody .accounting-amount-input')).toHaveCount(1);
+});
+
 test('exhibition snapshot client preserves requests, defaults, and refresh order', async ({ page }) => {
   const requests = [];
   await page.route('**/api/exhibition-snapshots*', async (route) => {
