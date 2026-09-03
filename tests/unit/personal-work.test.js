@@ -6,6 +6,8 @@ const { exposeIifeFunctions } = require('../helpers/load-source');
 const personalWorkCycles = require('../../personal-work/cycles');
 const legacyCycles = require('../fixtures/personal-work-cycles-legacy');
 const calendarOccurrences = require('../../master-calendar/occurrences');
+const { createStorageAdapter } = require('../../storage/storage-adapter');
+const personalWorkRepository = require('../../storage/personal-work-repository');
 
 function loadPersonalWork(globals = {}) {
   return exposeIifeFunctions('pottery-personal-work.js', [
@@ -25,6 +27,17 @@ function loadPersonalWork(globals = {}) {
   ], { globals: {
     MasterCalendarOccurrences: calendarOccurrences,
     PersonalWorkCycles: personalWorkCycles,
+    PersonalWorkRepository: {
+      repository: personalWorkRepository.createPersonalWorkRepository(
+        createStorageAdapter({
+          storage: globals.localStorage || {
+            getItem() { return null; },
+            setItem() {},
+            removeItem() {}
+          }
+        })
+      )
+    },
     ...globals
   } }).exposed;
 }
@@ -63,6 +76,25 @@ test('personal work persistence characterizes dependencies, defaults, and exact 
   personal.loadCalendarEvents();
   assert.deepEqual(JSON.parse(JSON.stringify(personal.state.entries)), []);
   assert.deepEqual(JSON.parse(JSON.stringify(personal.state.calendarEvents)), []);
+});
+
+test('personal work repository preserves raw dependency fields and exact entry serialization', () => {
+  const values = new Map([
+    ['users', '[{"id":1,"unknown":"user"}]'],
+    ['studio-calendar-state-v1', '{"events":[{"id":2,"unknown":"event"}],"unknownRoot":true}'],
+    ['pottery-personal-work-v1', '[{"id":3,"unknown":"entry"}]']
+  ]);
+  const writes = [];
+  const repository = personalWorkRepository.createPersonalWorkRepository({
+    read(key) { return values.get(key) ?? null; },
+    write(key, value) { writes.push([key, value]); return undefined; }
+  });
+  assert.equal(repository.loadUsers()[0].unknown, 'user');
+  assert.equal(repository.loadCalendarEvents()[0].unknown, 'event');
+  assert.equal(repository.loadEntries()[0].unknown, 'entry');
+  const entries = [{ id: 4, legacyField: 'keep' }];
+  assert.equal(repository.saveEntries(entries), undefined);
+  assert.deepEqual(writes, [['pottery-personal-work-v1', JSON.stringify(entries)]]);
 });
 
 test('personal work characterizes month-end cycles, invalid legacy anchors, and payment history', () => {

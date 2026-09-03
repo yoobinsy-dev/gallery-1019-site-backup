@@ -148,26 +148,19 @@
   }
 
   function loadUsers() {
-    try {
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      const filtered = Array.isArray(users)
-        ? users.filter((user) => {
+    const users = globalThis.PersonalWorkRepository.repository.loadUsers();
+    const filtered = users.filter((user) => {
             const role = getEffectiveStudioRole(user);
             const access = normalizeSiteAccess(user?.siteAccess);
             const allowedRole = role === '작가' || role === '어드민' || role === '강사';
             const allowedAccess = access === 'pottery' || access === 'both';
             return Boolean(allowedRole && allowedAccess && user?.approved !== false);
-          })
-        : [];
-
-      state.users = Array.from(new Set(
-        filtered
-          .map((user) => String(user?.name || user?.username || '').trim())
-          .filter(Boolean)
-      )).sort((a, b) => a.localeCompare(b, 'ko'));
-    } catch (error) {
-      state.users = [];
-    }
+          });
+    state.users = Array.from(new Set(
+      filtered
+        .map((user) => String(user?.name || user?.username || '').trim())
+        .filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, 'ko'));
   }
 
   function renderUserOptions(selectedName) {
@@ -188,23 +181,14 @@
   }
 
   function loadCalendarEvents() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(CALENDAR_STORAGE_KEY) || '{}');
-      state.calendarEvents = Array.isArray(parsed?.events) ? parsed.events : [];
-    } catch (error) {
-      state.calendarEvents = [];
-    }
+    state.calendarEvents = globalThis.PersonalWorkRepository.repository.loadCalendarEvents();
   }
 
   function loadEntries() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      state.entries = Array.isArray(parsed)
-        ? parsed.map((entry) => normalizeEntry(entry)).filter(Boolean)
-        : [];
-    } catch (error) {
-      state.entries = [];
-    }
+    state.entries = globalThis.PersonalWorkRepository.repository
+      .loadEntries()
+      .map((entry) => normalizeEntry(entry))
+      .filter(Boolean);
   }
 
   function normalizeEntry(entry) {
@@ -239,7 +223,7 @@
   }
 
   function saveEntries() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.entries));
+    globalThis.PersonalWorkRepository.repository.saveEntries(state.entries);
   }
 
   function addEntry() {
