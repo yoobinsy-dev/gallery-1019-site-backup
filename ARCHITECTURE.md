@@ -56,7 +56,23 @@ Postgres is the authoritative shared state store. `api/state.js` reads and mutat
 
 Supporting tables own full-state snapshots, per-exhibition snapshots, write audit records, and alerts: `app_state_snapshots`, `exhibition_state_snapshots`, `app_state_write_audit`, and `app_state_alerts`.
 
-Browsers use local storage as a client cache and working copy. `cloud-sync.js` hydrates from and synchronizes to the API; local storage is not an isolated server-side environment.
+Browsers use local storage as a client cache and working copy; local storage is not an isolated server-side environment. Cloud synchronization is split into ordered classic-script modules:
+
+- `sync/cloud-sync-protocol.js` owns the seven-key contract and pathname-to-active-key mapping.
+- `sync/cloud-sync-model.js` owns pure signatures, delta calculation, and transfer-safe exhibition payload shaping.
+- `sync/cloud-sync-reconciliation.js` owns pure material-order merge and exhibition preview/drop decisions.
+- `cloud-sync.js` remains the effectful orchestrator for storage interception, metadata and ETags, debounce, API transport, conflict pulls, state application, repair scheduling, status, readiness, and events.
+
+Each sync-enabled HTML entry point must load those files in that order. The globals `window.cloudSyncReady`, `window.cloudSyncStatus`, `cloud-sync:ready`, and `cloud-sync:state-applied` remain compatibility contracts.
+
+## Automated verification
+
+- `npm test` runs the maintained Node unit and API suites.
+- `npm run test:browser` runs the maintained Playwright browser suite.
+- `npm run test:all` runs both gates.
+- Scripts under `tests/e2e/` exercise isolated development resources only and are not part of the default local gate.
+
+Cloud-sync changes require focused `tests/unit/cloud-sync.test.js` coverage plus page-startup verification because classic-script order is a runtime dependency.
 
 ## Image URL architecture
 

@@ -382,6 +382,7 @@ This is the executable sequence. Stage 0 is not authorized by this revision. Eve
 - **Abort/rollback:** abort on auth/status/audit/restoration uncertainty; restore branch.
 
 ### Stage 46: Cloud-sync deltas and signatures
+- **Status:** Complete in Batch 5 as `sync/cloud-sync-model.js`, with focused push/delta characterization.
 - **Branch/objective:** `refactor/46-sync-deltas`; extract pure signatures and user/exhibition deltas.
 - **Source/targets/modules:** `cloud-sync.js`; stringify/signature, exhibition/user delta and identity; create one cohesive sync-model module.
 - **Identical behavior:** signatures, changed/removed values, identity/order/fields.
@@ -390,6 +391,7 @@ This is the executable sequence. Stage 0 is not authorized by this revision. Eve
 - **Abort/rollback:** abort on payload/signature/push difference; restore inline helpers.
 
 ### Stage 47: Cloud-sync reconciliation rules
+- **Status:** Complete in Batch 5 as `sync/cloud-sync-reconciliation.js`, with black-box pull and direct no-mutation coverage.
 - **Branch/objective:** `refactor/47-sync-reconciliation`; isolate pure per-key merge/preference decisions.
 - **Source/targets/modules:** `cloud-sync.js`; material orders, preview merge, suspicious drop, timestamps; create cohesive reconciliation module.
 - **Identical behavior:** fields/order, preview precedence, push-back, winner.
@@ -398,6 +400,7 @@ This is the executable sequence. Stage 0 is not authorized by this revision. Eve
 - **Abort/rollback:** abort on winner/field/preview difference; restore inline rules.
 
 ### Stage 48: Cloud-sync transport
+- **Status:** Retained in `cloud-sync.js` during Batch 5. Fetch behavior is coupled to debounce, metadata, conflict-triggered pulls, and repair scheduling; extraction would not create a cohesive independently reusable port under the current classic-script architecture.
 - **Branch/objective:** `refactor/48-sync-transport`; isolate GET/PUT HTTP adaptation.
 - **Source/targets/modules:** `cloud-sync.js`; fetch portions of `schedulePush`/`pullRemoteState`; create `core/sync-client.js`, omitting redundant `stateClient` unless distinct.
 - **Identical behavior:** URLs/methods/headers/bodies/ETags/status/errors/client ID.
@@ -406,6 +409,7 @@ This is the executable sequence. Stage 0 is not authorized by this revision. Eve
 - **Abort/rollback:** abort on request/status/metadata difference; restore fetch paths.
 
 ### Stage 49: Cloud-sync state application and events
+- **Status:** Retained in `cloud-sync.js` during Batch 5. State application, no-echo suppression, status, readiness, and event order form one effectful lifecycle and remain characterized together.
 - **Branch/objective:** `refactor/49-sync-application`; isolate application, readiness, status, and events while preserving order.
 - **Source/targets/modules:** `cloud-sync.js`; remote guard, native storage, metadata, readiness and event portions of pull; colocate events unless independently reusable.
 - **Identical behavior:** order, no echo, event detail/timing, readiness/status/failures.
@@ -414,6 +418,7 @@ This is the executable sequence. Stage 0 is not authorized by this revision. Eve
 - **Abort/rollback:** abort on push/event/readiness/startup difference; restore inline application.
 
 ### Stage 50: Cloud-sync storage-wrapper migration
+- **Status:** Compatibility override retained in Batch 5. Existing repositories still depend on patched native storage semantics; migration remains deferred until every synchronized writer has proven repository coverage.
 - **Branch/objective:** `refactor/50-sync-storage-wrapper`; migrate or retain a minimal global interception wrapper only after all repositories are proven.
 - **Source/targets/modules:** `cloud-sync.js`, storage adapter, all repositories/pages; `Storage.prototype` overrides and queue entrypoints; no new forwarding layer.
 - **Identical behavior:** key enablement, debounce/baseline, native semantics, quota, no echo, status.

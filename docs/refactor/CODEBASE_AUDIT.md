@@ -53,6 +53,8 @@ Postgres `app_state` is the authoritative shared copy. Browser `localStorage` is
 
 The five largest browser page controllers total 21,680 lines and mix business rules, persistence, rendering, event wiring, and compatibility handling. Their size is a symptom; mixed ownership and hidden side effects are the actual refactor drivers.
 
+> **Current-state correction (Batch 5):** The table above is the original planning baseline, not a live inventory. `cloud-sync.js` is now a 662-line effectful orchestrator. Pure contracts live in `sync/cloud-sync-protocol.js`, `sync/cloud-sync-model.js`, and `sync/cloud-sync-reconciliation.js`; sync-enabled HTML files load them in that order before the orchestrator.
+
 ### Styles and pages
 
 - Fourteen HTML entry points compose the site.
@@ -123,9 +125,9 @@ Role normalization and effective-access calculations recur in `auth.js`, `users.
 
 The refactor must record existing failure behavior before making it more uniform; changing error semantics during extraction would make regressions hard to distinguish from intended improvements.
 
-### 7. Automated characterization is absent
+### 7. Automated characterization was absent at the audit baseline
 
-No `*.test.*`, `*.spec.*`, `test/`, or `tests/` files and no test dependencies/scripts were found. `tmp/` contains valuable operational verification, dry-run, recovery, and migration tooling, but it is not a maintained regression suite. Test scaffolding is therefore Stage 0, not a follow-up.
+At the commit audited above, no `*.test.*`, `*.spec.*`, `test/`, or `tests/` files and no test dependencies/scripts were found. That historical finding is superseded. The repository now has maintained Node unit/API suites under `tests/unit/` and `tests/api/`, Playwright coverage under `tests/browser/`, isolated development checks under `tests/e2e/`, and `npm test`, `npm run test:browser`, and `npm run test:all` commands. Files under `tmp/` remain operational artifacts rather than the regression suite.
 
 ## Duplication classification
 

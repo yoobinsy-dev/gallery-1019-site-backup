@@ -43,7 +43,10 @@ Local-only state includes `currentUser`, page UI preferences/backups, cloud meta
 
 | File | Loaded by / dependents | Depends on | State and external effects | Mixed responsibility evidence |
 | --- | --- | --- | --- | --- |
-| `cloud-sync.js` | Most stateful pages; every synchronized writer indirectly | `fetch`, `localStorage`, `sessionStorage`, `Storage.prototype`, custom events | GET/PUT `/api/state`; reads/writes seven keys and sync metadata; patches storage methods | Protocol, persistence interception, per-domain deltas/merges, readiness, conflict response |
+| `sync/cloud-sync-protocol.js` | `cloud-sync.js`; sync-enabled HTML composition roots | pathname only | None; returns the frozen seven-key contract and active page keys | Pure protocol policy |
+| `sync/cloud-sync-model.js` | `cloud-sync.js`, reconciliation module, unit tests | values only | None; signatures, deltas, transfer shaping | Pure push model |
+| `sync/cloud-sync-reconciliation.js` | `cloud-sync.js`, unit tests | sync model URL normalization | None; material-order and exhibition merge/preference decisions | Pure pull reconciliation |
+| `cloud-sync.js` | Most stateful pages; every synchronized writer indirectly | Three ordered sync modules, `fetch`, `localStorage`, `sessionStorage`, `Storage.prototype`, custom events | GET/PUT `/api/state`; reads/writes seven keys and sync metadata; patches storage methods | Effectful orchestration, transport, application, repair scheduling, readiness, conflicts |
 | `auth.js` | All authenticated pages | Browser storage/DOM; optionally cloud readiness | `users` and `currentUser`; quota compaction; redirects; injected modal/styles | Login/signup, role/session helpers, profile editor, local-preview repair, storage recovery |
 | `landing.js` | `index.html` | `currentUser`, DOM/navigation | Session read and route selection | Small composition script; retain page-local |
 | `script.js` | `gallery-lounge.html` | `currentUser`, DOM/navigation | Logout and access-aware navigation | Small gallery landing controller |
@@ -96,7 +99,11 @@ Local-only state includes `currentUser`, page UI preferences/backups, cloud meta
 ```mermaid
 flowchart LR
   Pages[Page controllers] --> LS[localStorage working copy]
-  LS --> Sync[cloud-sync.js]
+  LS --> Sync[cloud-sync.js orchestrator]
+  Protocol[sync protocol] --> Sync
+  Model[sync model] --> Sync
+  Reconciliation[sync reconciliation] --> Sync
+  Model --> Reconciliation
   Sync --> StateAPI[/api/state]
   StateAPI --> DB[(Postgres app_state)]
   DB --> StateAPI
