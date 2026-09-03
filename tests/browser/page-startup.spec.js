@@ -478,6 +478,111 @@ test('master calendar preserves recurrence across week and month navigation', as
   await expect(page.locator('.month-mini-pill').filter({ hasText: 'CHARACTERIZATION_TEST_CALENDAR_WEEKLY' })).toHaveCount(1);
 });
 
+test('master calendar preserves week and month DOM projection', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
+  await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+
+  const events = [
+    { id: 'GOLD_ORDINARY', kind: '개인작업', title: 'GOLD_ORDINARY', date: '2026-08-24', start: '10:00', end: '11:00', capacity: 1 },
+    { id: 'GOLD_OVERLAP', kind: '개인작업', title: 'GOLD_OVERLAP', date: '2026-08-24', start: '10:30', end: '11:30', capacity: 1 },
+    { id: 'GOLD_ADJACENT', kind: '개인작업', title: 'GOLD_ADJACENT', date: '2026-08-24', start: '11:00', end: '12:00', capacity: 1 },
+    { id: 'GOLD_RECURRING', kind: '개인작업', title: 'GOLD_RECURRING', date: '2026-08-17', start: '14:00', end: '15:00', capacity: 1, repeatWeekly: true, repeatEndDate: '2026-08-31', repeatSkipDates: [] },
+    { id: 'GOLD_CANCELLED', kind: '개인작업', title: 'GOLD_CANCELLED', date: '2026-08-19', start: '15:00', end: '16:00', capacity: 1, repeatWeekly: true, repeatEndDate: '2026-09-02', repeatSkipDates: ['2026-08-26'] },
+    { id: 'GOLD_OVERRIDE', kind: '개인작업', title: 'GOLD_OVERRIDE', date: '2026-08-26', start: '15:30', end: '16:30', capacity: 1 },
+    { id: 'GOLD_BOUNDARY', kind: '개인작업', title: 'GOLD_BOUNDARY', date: '2026-08-30', start: '23:30', end: '24:00', capacity: 1 },
+    { id: 'GOLD_EXHIBITION', kind: '전시회', title: 'GOLD_EXHIBITION', date: '2026-08-24', endDate: '2026-08-26', start: '00:00', end: '24:00' }
+  ];
+  await page.evaluate((nextEvents) => {
+    localStorage.setItem('studio-calendar-state-v1', JSON.stringify({
+      events: nextEvents,
+      baseRules: [],
+      baseRuleTimeline: [],
+      baseWeekOverrides: {}
+    }));
+    window.dispatchEvent(new CustomEvent('cloud-sync:state-applied', {
+      detail: { keys: ['studio-calendar-state-v1'] }
+    }));
+  }, events);
+
+  await expect(page.locator('#calendar-day-header .day-header')).toHaveCount(7);
+  await expect(page.locator('#calendar-body .day-slot')).toHaveCount(336);
+  const ordinary = page.locator('.event-bubble[data-event-id="GOLD_ORDINARY"]');
+  const overlap = page.locator('.event-bubble[data-event-id="GOLD_OVERLAP"]');
+  const adjacent = page.locator('.event-bubble[data-event-id="GOLD_ADJACENT"]');
+  const recurring = page.locator('.event-bubble[data-event-id="GOLD_RECURRING"]');
+  const boundary = page.locator('.event-bubble[data-event-id="GOLD_BOUNDARY"]');
+  await expect(ordinary).toHaveAttribute('data-day-index', '0');
+  await expect(ordinary).toHaveAttribute('data-start-slot', '20');
+  await expect(ordinary).toHaveAttribute('data-end-slot', '22');
+  await expect(ordinary).toHaveAttribute('data-lane', '0');
+  await expect(ordinary).toHaveCSS('top', '561px');
+  await expect(ordinary).toHaveCSS('height', '54px');
+  await expect(overlap).toHaveAttribute('data-lane', '1');
+  await expect(adjacent).toHaveAttribute('data-lane', '0');
+  await expect(recurring).toHaveAttribute('data-date', '2026-08-24');
+  await expect(page.getByText('GOLD_CANCELLED', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('GOLD_OVERRIDE', { exact: true })).toHaveCount(1);
+  await expect(boundary).toHaveAttribute('data-start-slot', '47');
+  await expect(boundary).toHaveAttribute('data-end-slot', '48');
+  await expect(boundary).toHaveCSS('height', '26px');
+  await expect(page.locator('.all-day-pill').filter({ hasText: 'GOLD_EXHIBITION' })).toHaveCount(1);
+
+  const ordinaryBox = await ordinary.boundingBox();
+  expect(ordinaryBox).not.toBeNull();
+  await ordinary.dispatchEvent('pointerdown', {
+    pointerId: 71,
+    pointerType: 'mouse',
+    button: 0,
+    clientX: ordinaryBox.x + ordinaryBox.width / 2,
+    clientY: ordinaryBox.y + ordinaryBox.height / 2
+  });
+  await expect(ordinary).toHaveClass(/editing/);
+  await page.locator('body').dispatchEvent('pointercancel', { pointerId: 71, pointerType: 'mouse' });
+  await expect(ordinary).not.toHaveClass(/editing/);
+
+  await page.locator('#month-view-btn').click();
+  await expect(page.locator('#calendar-body .month-day-cell')).toHaveCount(42);
+  const august24 = page.locator('#calendar-body .month-day-cell').nth(28);
+  await expect(august24.locator('.month-mini-pill')).toHaveText([
+    '10:00 GOLD_ORDINARY',
+    '10:30 GOLD_OVERLAP',
+    '11:00 GOLD_ADJACENT',
+    '14:00 GOLD_RECURRING'
+  ]);
+  const exhibition = page.locator('.month-span-pill').filter({ hasText: 'GOLD_EXHIBITION' });
+  await expect(exhibition).toHaveCount(1);
+  await expect(exhibition).toHaveCSS('top', '534px');
+});
+
+test('master calendar event modal preserves reset and single listener behavior', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
+  await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+
+  const modal = page.locator('#event-modal');
+  await page.locator('#open-add-event-btn').click();
+  await expect(modal).toHaveClass(/open/);
+  await expect(page.locator('#event-date')).toHaveValue('2026-08-24');
+  await expect(page.locator('#event-selector-grid .event-select-cell')).toHaveCount(336);
+  await page.locator('#event-kind').selectOption('기타');
+  await page.locator('#event-title').fill('SHOULD_RESET');
+  await page.locator('[data-close-modal="event-modal"]').click();
+  await expect(modal).not.toHaveClass(/open/);
+
+  await page.locator('#open-add-event-btn').click();
+  await expect(modal).toHaveClass(/open/);
+  await expect(page.locator('#event-kind')).toHaveValue('수강');
+  await expect(page.locator('#event-title')).toHaveValue('');
+
+  let dialogCount = 0;
+  page.on('dialog', async (dialog) => {
+    dialogCount += 1;
+    await dialog.dismiss();
+  });
+  await page.locator('#save-event-btn').click();
+  await expect.poll(() => dialogCount).toBe(1);
+  await expect(modal).toHaveClass(/open/);
+});
+
 test('material orders preserve grouping, editing, merge overlap, undo, keyboard focus, and export', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2025-04-15T12:00:00'));
   await page.goto('/pottery-material-orders.html', { waitUntil: 'networkidle' });
