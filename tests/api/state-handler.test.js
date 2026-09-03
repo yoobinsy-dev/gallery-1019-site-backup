@@ -11,8 +11,10 @@ function createHarness(initial = {}) {
   const alerts = [];
   const deleted = [];
   const reads = { values: 0, meta: 0 };
+  const operations = [];
   const getStateMap = async (keys) => {
     reads.values += 1;
+    operations.push(`read:${keys.join(',')}`);
     return Object.fromEntries(keys.map((key) => [key, values[key]]));
   };
   const getStateMetaMap = async (keys) => {
@@ -22,8 +24,12 @@ function createHarness(initial = {}) {
   const stateStore = {
     getStateMap,
     getStateMetaMap,
-    async getStateMapWithMeta(keys) { return { data: await getStateMap(keys), meta: await getStateMetaMap(keys) }; },
+    async getStateMapWithMeta(keys) {
+      operations.push(`read-meta:${keys.join(',')}`);
+      return { data: Object.fromEntries(keys.map((key) => [key, values[key]])), meta: await getStateMetaMap(keys) };
+    },
     async setStateValue(key, value) {
+      operations.push(`write:${key}`);
       values[key] = structuredClone(value);
       const updatedAt = '2026-08-28T12:00:00.000Z';
       meta[key] = { updatedAt };
@@ -34,7 +40,7 @@ function createHarness(initial = {}) {
   const handler = loadCommonJsWithMocks('api/state.js', {
     './_lib/state-store': stateStore,
     './_lib/audit-store': {
-      async logStateWriteAttempt(entry) { audit.push(entry); },
+      async logStateWriteAttempt(entry) { operations.push(`audit:${entry.reason}`); audit.push(entry); },
       async recordAlert(entry) { alerts.push(entry); },
       async maybeTriggerConflictSpikeAlert() {}
     },
@@ -45,7 +51,7 @@ function createHarness(initial = {}) {
       async migrateExhibitionImageReferences(exhibitions) { return { exhibitions, stats: { uploaded: 0 } }; }
     }
   });
-  return { handler, values, meta, audit, alerts, deleted, reads };
+  return { handler, values, meta, audit, alerts, deleted, reads, operations };
 }
 
 async function invoke(harness, method, options = {}) {
@@ -117,6 +123,12 @@ test('PUT /api/state characterizes successful writes, safeguards, audit, and res
   assert.equal(harness.values.users[0].password, 'secret');
   assert.equal(harness.audit.at(-1).decision, 'accepted');
   assert.equal(harness.audit.at(-1).reason, 'users-delta-merged');
+  assert.deepEqual(harness.operations, [
+    'read-meta:users',
+    'read:users',
+    'write:users',
+    'audit:users-delta-merged'
+  ]);
 
   const rejected = createHarness({ values: { users: [admin] }, meta: { users: { updatedAt: null } } });
   const noAdmin = await invoke(rejected, 'PUT', {
