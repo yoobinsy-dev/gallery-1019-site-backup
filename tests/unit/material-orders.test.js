@@ -6,16 +6,47 @@ const mergePlanning = require('../../material-orders/merge-planning');
 const model = require('../../material-orders/model');
 const rowProjection = require('../../material-orders/row-projection');
 
-function loadOrders() {
+function loadOrders(globals = {}) {
   return exposeIifeFunctions('pottery-material-orders.js', [
     'state', 'normalizeOrder', 'normalizeItem', 'getLineTotal', 'getOrderTotal', 'getOrdersForMonth',
-    'buildOrderNumberMap', 'compareOrders', 'inferOrderWideByPattern', 'normalizeDateISO'
+    'buildOrderNumberMap', 'compareOrders', 'inferOrderWideByPattern', 'normalizeDateISO',
+    'getProductOptions', 'loadOrders', 'saveOrders'
   ], { globals: {
     PotteryMaterialOrdersMergePlanning: mergePlanning,
     PotteryMaterialOrdersModel: model,
-    PotteryMaterialOrdersRowProjection: rowProjection
+    PotteryMaterialOrdersRowProjection: rowProjection,
+    ...globals
   } }).exposed;
 }
+
+test('material orders persistence characterizes product cache, normalized orders, and exact writes', () => {
+  const values = new Map([
+    ['pottery-material-product-options-v1', JSON.stringify([' Clay ', '', null, 'Glaze'])],
+    ['pottery-material-orders-v1', JSON.stringify([{
+      id: 'order-1', orderDate: '2026-08-01', unknownOrder: 'drop',
+      items: [{ id: 'item-1', product: 'Clay', quantity: 2, unknownItem: 'drop' }]
+    }])]
+  ]);
+  const writes = [];
+  const orders = loadOrders({
+    localStorage: {
+      getItem(key) { return values.get(key) ?? null; },
+      setItem(key, value) { writes.push([key, value]); return undefined; }
+    }
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(orders.getProductOptions())), ['Clay', 'Glaze']);
+  orders.loadOrders();
+  assert.equal(orders.state.orders[0].unknownOrder, undefined);
+  assert.equal(orders.state.orders[0].items[0].unknownItem, undefined);
+  assert.equal(orders.saveOrders(), undefined);
+  assert.deepEqual(writes, [['pottery-material-orders-v1', JSON.stringify(orders.state.orders)]]);
+
+  values.set('pottery-material-orders-v1', '{malformed');
+  values.set('pottery-material-product-options-v1', '{}');
+  orders.loadOrders();
+  assert.deepEqual(JSON.parse(JSON.stringify(orders.state.orders)), []);
+  assert.deepEqual(JSON.parse(JSON.stringify(orders.getProductOptions())), []);
+});
 
 test('material orders characterize totals, discounts, shipping, and inferred order-wide fields', () => {
   const orders = loadOrders();
