@@ -9,6 +9,7 @@ const snapshotClient = require('../../exhibitions/snapshot-client');
 const imageLifecycle = require('../../exhibitions/image-lifecycle');
 const certificateModel = require('../../exhibitions/certificate-model');
 const inventoryModel = require('../../exhibitions/inventory-model');
+const inventoryRenderer = require('../../exhibitions/inventory-renderer');
 
 function loadExhibition() {
   return exposeClassicScriptFunctions('exhibition-detail.js', [
@@ -68,7 +69,8 @@ function loadExhibition() {
       ExhibitionSnapshotClient: snapshotClient,
       ExhibitionImageLifecycle: imageLifecycle,
       ExhibitionCertificateModel: certificateModel,
-      ExhibitionInventoryModel: inventoryModel
+      ExhibitionInventoryModel: inventoryModel,
+      ExhibitionInventoryRenderer: inventoryRenderer
     }
   }).exposed;
 }
@@ -565,4 +567,56 @@ test('exhibition inventory model preserves sorting, goods quantities, and inputs
   assert.equal(inventoryModel.getWorkSortValue(works[1], 'status', options), 'sold');
   assert.equal(works[0].unknownField, 'keep-a');
   assert.equal(works[0].manualNumber, 'B-2');
+});
+
+test('exhibition inventory renderer builds saved, editable, and goods rows', () => {
+  const saved = inventoryRenderer.buildWorkRow({
+    work: { id: 7, manualNumber: 'W-7', title: 'Saved', price: '100', saved: true },
+    index: 1,
+    isGoodsMode: false,
+    isSelected: true,
+    canModifyWork: true,
+    previewDataUrl: 'data:image/png;base64,AAAA',
+    isUnsold: false,
+    isSold: true,
+    isSoloExhibition: false
+  });
+  assert.equal(saved.className, 'work-saved-row');
+  assert.match(saved.html, /class="work-checkbox" checked/);
+  assert.match(saved.html, /toggleWorkEdit\(7\)/);
+  assert.match(saved.html, /class="work-status-badge sold"/);
+
+  const editable = inventoryRenderer.buildWorkRow({
+    work: { id: 8, title: 'Draft', author: 'Artist', price: '미판매', saved: false },
+    index: 2,
+    isGoodsMode: false,
+    isSelected: false,
+    canModifyWork: true,
+    previewDataUrl: '',
+    isUnsold: true,
+    isSold: false,
+    isSoloExhibition: true,
+    sizeParts: { width: '10', height: '20' }
+  });
+  assert.equal(editable.className, '');
+  assert.match(editable.html, /data-field="author" value="Artist" disabled/);
+  assert.match(editable.html, /data-field="price" value="미판매"/);
+  assert.match(editable.html, /data-field="sizeWidth" value="10"/);
+
+  const goods = inventoryRenderer.buildWorkRow({
+    work: { id: 9, title: 'Goods', saved: true },
+    index: 0,
+    isGoodsMode: true,
+    isSelected: false,
+    canModifyWork: false,
+    previewDataUrl: '',
+    isUnsold: false,
+    isSold: false,
+    soldQuantity: 2,
+    stockQuantity: 5,
+    remainingQuantity: 3,
+    isSoloExhibition: false
+  });
+  assert.match(goods.html, /<td>5<\/td>\s*<td>2<\/td>\s*<td>3<\/td>/);
+  assert.doesNotMatch(goods.html, /openDeleteWorkModal/);
 });

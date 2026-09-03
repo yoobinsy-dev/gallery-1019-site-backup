@@ -5478,7 +5478,7 @@ function updateSaveAllButtonVisibility() {
   });
 }
 
-function renderWorkRows() {
+function renderWorkRowsLegacy() {
   const tbody = document.getElementById('works-tbody');
   const exhibition = getCurrentExhibition();
   const isGoodsMode = exhibitionDetailState.inventoryMode === 'goods';
@@ -6425,6 +6425,63 @@ function renderWorkRows() {
         </td>
       `;
     }
+    tbody.appendChild(row);
+  });
+
+  refreshGridKeyboardNavigation('works-tbody');
+}
+
+function renderWorkRows() {
+  const tbody = document.getElementById('works-tbody');
+  const exhibition = getCurrentExhibition();
+  const isGoodsMode = exhibitionDetailState.inventoryMode === 'goods';
+  const works = getSortedWorks();
+  tbody.innerHTML = '';
+
+  exhibitionDetailState.unsavedWorkCount = works.filter((work) => !work.saved).length;
+  updateSaveAllButtonVisibility();
+  updateWorkSelectionActionButtons(works);
+
+  if (works.length === 0) {
+    const emptyRow = document.createElement('tr');
+    emptyRow.innerHTML = `<td colspan="${isGoodsMode ? 9 : 12}" class="no-users">등록된 ${isGoodsMode ? '굿즈가' : '작품이'} 없습니다.</td>`;
+    tbody.appendChild(emptyRow);
+    refreshGridKeyboardNavigation('works-tbody');
+    return;
+  }
+
+  const soldWorkIdSet = new Set(
+    ensureSoldWorksArray()
+      .filter((item) => normalizeSoldItemType(item) === '작품')
+      .map((item) => item.workId)
+  );
+  const selectAllCheckbox = document.getElementById('select-all-works');
+  if (selectAllCheckbox) {
+    selectAllCheckbox.checked = works.every((work) => exhibitionDetailState.selectedWorkIds.includes(work.id));
+  }
+
+  works.forEach((work, index) => {
+    const row = document.createElement('tr');
+    const soldQuantity = isGoodsMode ? getGoodsSoldQuantity(work.id) : 0;
+    const stockQuantity = isGoodsMode ? parseStockQuantity(work.quantity || 0) : 0;
+    const presentation = globalThis.ExhibitionInventoryRenderer.buildWorkRow({
+      work,
+      index,
+      isGoodsMode,
+      isSelected: exhibitionDetailState.selectedWorkIds.includes(work.id),
+      canModifyWork: canCurrentUserModifyOwnedRow(work),
+      previewDataUrl: getPhotoPreviewDataUrl(work),
+      isUnsold: isWorkNotForSale(work.price),
+      isSold: soldWorkIdSet.has(work.id),
+      soldQuantity,
+      stockQuantity,
+      remainingQuantity: Math.max(0, stockQuantity - soldQuantity),
+      isSoloExhibition: exhibition.type === '개인전',
+      sizeParts: parseSizeParts(work.size)
+    });
+    row.setAttribute('data-work-id', String(work.id));
+    row.className = presentation.className;
+    row.innerHTML = presentation.html;
     tbody.appendChild(row);
   });
 
