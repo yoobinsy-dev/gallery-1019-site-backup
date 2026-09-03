@@ -445,8 +445,21 @@ test('exhibition sales shell preserves table and duplicated action controls', as
   await expect(page.locator('#sales-select-all-btn-bottom')).toHaveCount(1);
   await expect(page.locator('#sales-sold-stats-ticker')).toHaveCount(1);
 
+  const savedArtSale = page.locator('#sold-works-tbody tr[data-sold-id="1"]');
+  const unsavedGoodsSale = page.locator('#sold-works-tbody tr[data-sold-id="2"]');
+  await expect(savedArtSale.getByRole('button', { name: '수정', exact: true })).toHaveCount(1);
+  await expect(savedArtSale.getByRole('button', { name: '보증서 만들기', exact: true })).toHaveCount(1);
+  await expect(savedArtSale.locator('input[data-field="soldQuantity"]')).toHaveCount(0);
+  await expect(unsavedGoodsSale.getByRole('button', { name: '저장', exact: true })).toHaveCount(1);
+  await expect(unsavedGoodsSale.locator('input[data-field="soldQuantity"]')).toHaveValue('2');
+  await expect(unsavedGoodsSale.locator('select[data-field="paymentMethod"]')).toHaveValue('');
+  await expect(unsavedGoodsSale.getByRole('button', { name: /보증서/ })).toHaveCount(0);
+
   await page.locator('#sales-search').fill('CHARACTERIZATION_TEST_WORKS_PRECEDENCE');
   await expect(page.locator('#sold-works-tbody tr')).toHaveCount(1);
+  await page.locator('#sales-search').fill('CHARACTERIZATION_TEST_NO_MATCH');
+  await expect(page.locator('#sold-works-tbody')).toHaveText('검색 결과가 없습니다.');
+  await page.locator('#sales-search').fill('');
   await page.getByRole('button', { name: '+ 판매 항목 추가', exact: true }).first().click();
   await expect(page.locator('#sales-add-modal')).toHaveCSS('display', 'flex');
 });
