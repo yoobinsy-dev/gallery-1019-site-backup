@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { exposeIifeFunctions } = require('../helpers/load-source');
+const CloudSyncProtocol = require('../../sync/cloud-sync-protocol');
 
 const SYNCED_KEYS = [
   'users',
@@ -75,6 +76,7 @@ function createCloudSyncHarness({
   exposeIifeFunctions('cloud-sync.js', [], {
     globals: {
       CustomEvent: TestCustomEvent,
+      CloudSyncProtocol,
       Storage: TestStorage,
       fetch,
       localStorage,

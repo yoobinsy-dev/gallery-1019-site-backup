@@ -1,13 +1,10 @@
 (function () {
-  const SYNCED_KEYS = new Set([
-    'users',
-    'exhibitions',
-    'pottery-students-v1',
-    'pottery-personal-work-v1',
-    'studio-calendar-state-v1',
-    'pottery-material-orders-v1',
-    'pottery-accounting-v1'
-  ]);
+  const cloudSyncProtocol = globalThis.CloudSyncProtocol;
+  if (!cloudSyncProtocol) {
+    throw new Error('CloudSyncProtocol must load before cloud-sync.js.');
+  }
+
+  const SYNCED_KEYS = new Set(cloudSyncProtocol.SYNCED_KEYS);
   const PUSH_DEBOUNCE_MS = 1500;
   const META_KEY = '__sync_updated_at__';
   const SESSION_META_KEY = '__sync_updated_at_session__';
@@ -28,7 +25,10 @@
   const pendingTimers = new Map();
   const lastSyncedStateSignatures = new Map();
 
-  const activeSyncKeys = resolveActiveSyncKeys();
+  const pathname = typeof window !== 'undefined' && window.location
+    ? window.location.pathname
+    : '';
+  const activeSyncKeys = cloudSyncProtocol.resolveActiveSyncKeys(pathname);
   const activeSyncKeySet = new Set(activeSyncKeys);
 
   let applyingRemoteState = false;
@@ -69,74 +69,6 @@
         detail: cloudSyncStatus
       }));
     }
-  }
-
-  function getCurrentPageName() {
-    if (typeof window === 'undefined' || !window.location) {
-      return '';
-    }
-
-    const pathname = String(window.location.pathname || '').trim();
-    if (!pathname) return '';
-    const segments = pathname.split('/').filter(Boolean);
-    return segments.length > 0 ? segments[segments.length - 1].toLowerCase() : '';
-  }
-
-  function resolveActiveSyncKeys() {
-    const page = getCurrentPageName();
-    if (!page) {
-      return Array.from(SYNCED_KEYS);
-    }
-
-    if (page === 'login.html' || page === 'users.html') {
-      return ['users'];
-    }
-
-    if (page === 'pottery-master-calendar.html') {
-      return ['users', 'pottery-personal-work-v1', 'studio-calendar-state-v1'];
-    }
-
-    if (page === 'pottery-personal-work.html') {
-      return ['users', 'pottery-personal-work-v1', 'studio-calendar-state-v1'];
-    }
-
-    if (page === 'pottery-material-orders.html') {
-      return ['users', 'pottery-material-orders-v1'];
-    }
-
-    if (page === 'pottery-students.html') {
-      return ['users', 'pottery-students-v1', 'studio-calendar-state-v1'];
-    }
-
-    if (page === 'pottery-accounting.html') {
-      return [
-        'users',
-        'exhibitions',
-        'pottery-students-v1',
-        'pottery-personal-work-v1',
-        'studio-calendar-state-v1',
-        'pottery-material-orders-v1',
-        'pottery-accounting-v1'
-      ];
-    }
-
-    if (page === 'gallery-lounge.html') {
-      return [];
-    }
-
-    if (page === 'inventory.html') {
-      return [];
-    }
-
-    if (page === 'exhibitions.html') {
-      return ['exhibitions'];
-    }
-
-    if (page === 'exhibition-detail.html') {
-      return ['users', 'exhibitions'];
-    }
-
-    return Array.from(SYNCED_KEYS);
   }
 
   function isKeyEnabled(key) {
