@@ -2364,123 +2364,46 @@
   }
 
   function saveEventFromModal() {
-    const kind = document.getElementById('event-kind').value;
-    const user = document.getElementById('event-user').value;
-    const customTitle = String(document.getElementById('event-title')?.value || '').trim();
-    const kilnCategory = normalizeKilnCategory(document.getElementById('event-kiln-category')?.value || '');
-    const date = document.getElementById('event-date').value;
-    const rangeStart = document.getElementById('event-range-start')?.value || '';
-    const rangeEnd = document.getElementById('event-range-end')?.value || '';
-    const start = document.getElementById('event-start').value;
-    const end = document.getElementById('event-end').value;
-    const weeklyRepeat = Boolean(document.getElementById('event-weekly-repeat').checked);
-    const capacity = isAllDayKind(kind)
-      ? 1
-      : Math.max(1, Math.min(3, Number(document.getElementById('event-capacity').value || 1)));
-
-    if (kind === '기타' || isExhibitionKind(kind)) {
-      if (!customTitle) {
-        alert('제목을 입력해주세요.');
-        return;
-      }
-    } else if (isKilnKind(kind) && !kilnCategory) {
-      alert('가마 소성 구분을 선택해주세요.');
-      return;
-    } else if (!isAllDayKind(kind) && !user) {
-      alert('이용자를 선택해주세요.');
-      return;
-    }
-
-    if (isExhibitionKind(kind)) {
-      if (!rangeStart || !rangeEnd) {
-        alert('전시회 시작/종료 날짜를 입력해주세요.');
-        return;
-      }
-      if (new Date(`${rangeEnd}T00:00:00`) < new Date(`${rangeStart}T00:00:00`)) {
-        alert('종료 날짜는 시작 날짜보다 빠를 수 없습니다.');
-        return;
-      }
-    }
-
-    if ((!isExhibitionKind(kind) && !date) || (!isAllDayKind(kind) && (!start || !end))) {
-      alert('날짜와 시간 정보를 모두 입력해주세요.');
-      return;
-    }
-
-    const eventDate = isExhibitionKind(kind) ? rangeStart : date;
-    const eventEndDate = isExhibitionKind(kind) ? rangeEnd : '';
-
-    const normalizedStart = isAllDayKind(kind) ? '00:00' : start;
-    const normalizedEnd = isAllDayKind(kind) ? '24:00' : end;
-
-    const effectiveTitleForPermission = (kind === '기타' || isExhibitionKind(kind))
-      ? customTitle
-      : (isKilnKind(kind) ? '가마 소성' : user);
-
-    if (isStudioArtist() && kind === '개인작업') {
-      const me = getActiveStudioUserName();
-      if (!getPersonalUsersForEvents().includes(me)) {
-        alert('개인작업 일정은 개인작업 관리에 등록된 이용자만 생성할 수 있습니다. 먼저 개인작업 관리 페이지에 본인을 추가해주세요.');
-        return;
-      }
-    }
-
-    if (!canManageEventPlacementByRole(kind, eventDate, normalizedStart, normalizedEnd, effectiveTitleForPermission)) {
-      alert(ROLE_LOCK_MESSAGE);
-      return;
-    }
-
-    const startSlot = timeToSlot(normalizedStart);
-    const endSlot = timeToSlot(normalizedEnd);
-    if (endSlot <= startSlot) {
-      alert('종료 시간은 시작 시간보다 늦어야 합니다.');
-      return;
-    }
-
-    const dayIndex = getDayIndexFromDateString(eventDate);
-    if (!isEventPlacementAllowed(kind, dayIndex, startSlot, endSlot)) {
-      alert('선택한 시간은 현재 일정 종류로 예약할 수 없습니다.');
-      return;
-    }
-
-    if (kind !== '기타' && !isAllDayKind(kind)) {
-      const occupancyMap = buildDailyOccupancyMap(eventDate);
-      if (!hasEnoughCapacityForRange(occupancyMap, startSlot, endSlot, capacity)) {
-        alert('선택한 시간대의 남은 자리가 부족합니다.');
-        return;
-      }
-    }
-
-    const classRule = kind === '수강'
-      ? getClassBaseRuleForRange(eventDate, normalizedStart, normalizedEnd)
-      : null;
-    if (kind === '수강' && !classRule) {
-      alert('수강 일정은 하나의 수업시간 블록과 정확히 일치해야 합니다.');
-      return;
-    }
-    if (weeklyRepeat && kind !== '기타' && !isAllDayKind(kind) && !isBaseRangeRepeatingWeekly(eventDate, normalizedStart, normalizedEnd)) {
-      alert('선택한 베이스 블록은 매주 반복되지 않습니다. 매주 반복으로 등록할 수 없습니다.');
-      return;
-    }
-
-    state.events.push({
-      id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      kind,
-      title: (kind === '기타' || isExhibitionKind(kind))
-        ? customTitle
-        : (isKilnKind(kind) ? buildKilnEventTitle(kilnCategory) : user),
-      date: eventDate,
-      endDate: eventEndDate,
-      start: normalizedStart,
-      end: normalizedEnd,
-      classType: classRule ? String(classRule.className || '수업시간') : '',
-      instructor: classRule ? String(classRule.instructor || '').trim() : '',
-      baseRuleId: classRule ? String(classRule.id || '') : '',
-      kilnCategory: isKilnKind(kind) ? kilnCategory : '',
-      capacity,
-      repeatWeekly: weeklyRepeat
+    const draft = {
+      kind: document.getElementById('event-kind').value,
+      user: document.getElementById('event-user').value,
+      customTitle: document.getElementById('event-title')?.value || '',
+      kilnCategory: normalizeKilnCategory(document.getElementById('event-kiln-category')?.value || ''),
+      date: document.getElementById('event-date').value,
+      rangeStart: document.getElementById('event-range-start')?.value || '',
+      rangeEnd: document.getElementById('event-range-end')?.value || '',
+      start: document.getElementById('event-start').value,
+      end: document.getElementById('event-end').value,
+      weeklyRepeat: Boolean(document.getElementById('event-weekly-repeat').checked),
+      capacity: document.getElementById('event-capacity').value || 1
+    };
+    const studioArtist = isStudioArtist();
+    const result = globalThis.MasterCalendarCommands.planEventCreation(draft, {
+      activeStudioUserName: getActiveStudioUserName(),
+      buildKilnEventTitle,
+      canManagePlacement: canManageEventPlacementByRole,
+      createEventId: () => `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      getClassRule: getClassBaseRuleForRange,
+      getDayIndexFromDateString,
+      hasCapacity(eventDate, startSlot, endSlot, capacity) {
+        return hasEnoughCapacityForRange(buildDailyOccupancyMap(eventDate), startSlot, endSlot, capacity);
+      },
+      isAllDayKind,
+      isBaseRangeRepeatingWeekly,
+      isExhibitionKind,
+      isKilnKind,
+      isPlacementAllowed: isEventPlacementAllowed,
+      isStudioArtist: studioArtist,
+      personalUsers: studioArtist && draft.kind === '개인작업' ? getPersonalUsersForEvents() : [],
+      roleLockMessage: ROLE_LOCK_MESSAGE,
+      timeToSlot
     });
+    if (!result.ok) {
+      alert(result.reason);
+      return;
+    }
 
+    state.events.push(result.event);
     saveState();
     closeModal('event-modal');
     renderCalendar();

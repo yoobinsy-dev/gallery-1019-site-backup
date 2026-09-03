@@ -5,6 +5,7 @@ const { exposeIifeFunctions } = require('../helpers/load-source');
 const dateTime = require('../../master-calendar/date-time');
 const occurrences = require('../../master-calendar/occurrences');
 const occupancy = require('../../master-calendar/occupancy');
+const commands = require('../../master-calendar/commands');
 const { createStorageAdapter } = require('../../storage/storage-adapter');
 const masterCalendarRepository = require('../../storage/master-calendar-repository');
 
@@ -16,11 +17,12 @@ function loadCalendar(globals = {}) {
     'getActivePersonalWorkEntries', 'loadStudioInstructors', 'loadState', 'saveState',
     'findLane', 'canPlaceInLane', 'createEmptyDailyOccupancy', 'cloneDailyOccupancy',
     'markLaneOccupancy', 'buildDailyOccupancyMap', 'hasEnoughCapacityForRange',
-    'isEventPlacementAllowed'
+    'isEventPlacementAllowed', 'saveEventFromModal'
   ], { globals: {
     MasterCalendarDateTime: dateTime,
     MasterCalendarOccurrences: occurrences,
     MasterCalendarOccupancy: occupancy,
+    MasterCalendarCommands: commands,
     MasterCalendarRepository: {
       repository: masterCalendarRepository.createMasterCalendarRepository(
         createStorageAdapter({
@@ -186,6 +188,128 @@ test('calendar placement characterizes exact class blocks and kind-specific rule
   assert.equal(calendar.isEventPlacementAllowed('전시', 6, 0, 48), true);
   assert.equal(calendar.isEventPlacementAllowed('개인작업', -1, 24, 28), false);
   assert.equal(calendar.isEventPlacementAllowed('개인작업', 0, 28, 28), false);
+});
+
+function createEventModalDocument(values) {
+  return {
+    addEventListener() {},
+    getElementById(id) { return values[id] || null; },
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    body: { classList: { add() {}, remove() {}, toggle() {} } }
+  };
+}
+
+test('calendar modal creation characterizes ordinary and weekly event shapes', () => {
+  const storageValues = new Map([
+    ['currentUser', JSON.stringify({ id: 1, accountType: '어드민', studioRole: '어드민', siteAccess: 'pottery' })]
+  ]);
+  const writes = [];
+  const fields = {
+    'event-kind': { value: '기타' },
+    'event-user': { value: '' },
+    'event-title': { value: 'Other Event' },
+    'event-kiln-category': { value: '' },
+    'event-date': { value: '2026-08-03' },
+    'event-range-start': { value: '' },
+    'event-range-end': { value: '' },
+    'event-start': { value: '10:00' },
+    'event-end': { value: '11:00' },
+    'event-weekly-repeat': { checked: false },
+    'event-capacity': { value: '3' }
+  };
+  const calendar = loadCalendar({
+    document: createEventModalDocument(fields),
+    localStorage: {
+      getItem(key) { return storageValues.get(key) ?? null; },
+      setItem(key, value) { writes.push([key, value]); storageValues.set(key, value); }
+    }
+  });
+  calendar.state.access = { userName: 'Admin', studioRole: '어드민' };
+  assert.throws(() => calendar.saveEventFromModal(), /Cannot set properties of null/);
+  assert.equal(calendar.state.events.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(calendar.state.events[0])), {
+    id: calendar.state.events[0].id,
+    kind: '기타', title: 'Other Event', date: '2026-08-03', endDate: '',
+    start: '10:00', end: '11:00', classType: '', instructor: '', baseRuleId: '',
+    kilnCategory: '', capacity: 3, repeatWeekly: false
+  });
+  assert.equal(writes.at(-1)[0], 'studio-calendar-state-v1');
+
+  fields['event-title'].value = 'Weekly Other';
+  fields['event-weekly-repeat'].checked = true;
+  assert.throws(() => calendar.saveEventFromModal(), /Cannot set properties of null/);
+  assert.equal(calendar.state.events[1].repeatWeekly, true);
+});
+
+test('calendar modal creation characterizes first validation failure without mutation', () => {
+  const alerts = [];
+  const fields = {
+    'event-kind': { value: '기타' }, 'event-user': { value: '' }, 'event-title': { value: '' },
+    'event-kiln-category': { value: '' }, 'event-date': { value: '' },
+    'event-range-start': { value: '' }, 'event-range-end': { value: '' },
+    'event-start': { value: '' }, 'event-end': { value: '' },
+    'event-weekly-repeat': { checked: false }, 'event-capacity': { value: '1' }
+  };
+  const calendar = loadCalendar({
+    alert(message) { alerts.push(message); },
+    document: createEventModalDocument(fields),
+    localStorage: { getItem() { return null; }, setItem() { throw new Error('must not save'); } }
+  });
+  calendar.saveEventFromModal();
+  assert.deepEqual(alerts, ['제목을 입력해주세요.']);
+  assert.equal(calendar.state.events.length, 0);
+});
+
+function createEventCommandPolicies(overrides = {}) {
+  return {
+    activeStudioUserName: 'Artist',
+    buildKilnEventTitle: (category) => `Kiln ${category}`,
+    canManagePlacement: () => true,
+    createEventId: () => 'evt-fixed',
+    getClassRule: () => null,
+    getDayIndexFromDateString: () => 0,
+    hasCapacity: () => true,
+    isAllDayKind: (kind) => kind === '전시' || kind === '가마 소성',
+    isBaseRangeRepeatingWeekly: () => true,
+    isExhibitionKind: (kind) => kind === '전시',
+    isKilnKind: (kind) => kind === '가마 소성',
+    isPlacementAllowed: () => true,
+    isStudioArtist: false,
+    personalUsers: [],
+    roleLockMessage: 'locked',
+    timeToSlot: (time) => Number(time.slice(0, 2)) * 2 + Number(time.slice(3, 5)) / 30,
+    ...overrides
+  };
+}
+
+test('calendar event command characterizes capacity and recurring-base rejection', () => {
+  const draft = {
+    kind: '개인작업', user: 'Artist', date: '2026-08-03', start: '10:00', end: '11:00',
+    capacity: 2, weeklyRepeat: false
+  };
+  const capacityResult = commands.planEventCreation(draft, createEventCommandPolicies({ hasCapacity: () => false }));
+  assert.deepEqual(capacityResult, { ok: false, reason: '선택한 시간대의 남은 자리가 부족합니다.' });
+
+  const recurringResult = commands.planEventCreation(
+    { ...draft, weeklyRepeat: true },
+    createEventCommandPolicies({ isBaseRangeRepeatingWeekly: () => false })
+  );
+  assert.deepEqual(recurringResult, { ok: false, reason: '선택한 베이스 블록은 매주 반복되지 않습니다. 매주 반복으로 등록할 수 없습니다.' });
+});
+
+test('calendar event command characterizes class metadata and exact event shape', () => {
+  const result = commands.planEventCreation({
+    kind: '수강', user: 'Student', date: '2026-08-03', start: '10:00', end: '12:00',
+    capacity: 3, weeklyRepeat: true
+  }, createEventCommandPolicies({
+    getClassRule: () => ({ id: 'rule-1', className: 'Wheel', instructor: ' Teacher ' })
+  }));
+  assert.deepEqual(result, { ok: true, event: {
+    id: 'evt-fixed', kind: '수강', title: 'Student', date: '2026-08-03', endDate: '',
+    start: '10:00', end: '12:00', classType: 'Wheel', instructor: 'Teacher', baseRuleId: 'rule-1',
+    kilnCategory: '', capacity: 3, repeatWeekly: true
+  } });
 });
 
 test('canonical calendar occurrences preserve weekly boundaries, skips, ranges, ordering, and inputs', () => {
