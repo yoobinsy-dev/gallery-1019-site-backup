@@ -676,6 +676,42 @@ test('master calendar event modal preserves reset and single listener behavior',
   await expect(modal).toHaveClass(/open/);
 });
 
+test('master calendar event selector preserves drag selection and single save behavior', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
+  await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+  await page.locator('#open-add-event-btn').click();
+  await page.locator('#event-kind').selectOption('기타');
+  await page.locator('#event-title').fill('CHARACTERIZATION_TEST_SELECTOR_CREATED');
+
+  const startCell = page.locator('.event-select-cell[data-day="2"][data-slot="24"]');
+  const endCell = page.locator('.event-select-cell[data-day="2"][data-slot="25"]');
+  await startCell.dispatchEvent('mousedown', { button: 0 });
+  await endCell.dispatchEvent('mouseenter');
+  await endCell.dispatchEvent('mouseup', { button: 0 });
+  await expect(page.locator('#event-date')).toHaveValue('2026-08-26');
+  await expect(page.locator('#event-start')).toHaveValue('12:00');
+  await expect(page.locator('#event-end')).toHaveValue('13:00');
+  await expect(page.locator('.event-selector-bubble.is-preview')).toHaveCount(1);
+  await expect(page.locator('.event-selector-bubble.is-preview')).toHaveText('CHARACTERIZATION_TEST_SELECTOR_CREATED');
+
+  await page.locator('#save-event-btn').click();
+  await expect(page.locator('#event-modal')).not.toHaveClass(/open/);
+  await expect(page.locator('#calendar-body').getByText('CHARACTERIZATION_TEST_SELECTOR_CREATED', { exact: true })).toHaveCount(1);
+  const createdEvents = await page.evaluate(() => {
+    const documentState = JSON.parse(localStorage.getItem('studio-calendar-state-v1') || '{}');
+    return (documentState.events || []).filter((eventItem) => eventItem.title === 'CHARACTERIZATION_TEST_SELECTOR_CREATED');
+  });
+  expect(createdEvents).toHaveLength(1);
+  expect(createdEvents[0]).toMatchObject({
+    kind: '기타',
+    title: 'CHARACTERIZATION_TEST_SELECTOR_CREATED',
+    date: '2026-08-26',
+    start: '12:00',
+    end: '13:00',
+    repeatWeekly: false
+  });
+});
+
 test('master calendar quick edit preserves population, reset, and single save behavior', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
   await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
