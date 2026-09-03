@@ -10,8 +10,15 @@ function createHarness(initial = {}) {
   const audit = [];
   const alerts = [];
   const deleted = [];
-  const getStateMap = async (keys) => Object.fromEntries(keys.map((key) => [key, values[key]]));
-  const getStateMetaMap = async (keys) => Object.fromEntries(keys.map((key) => [key, meta[key]]));
+  const reads = { values: 0, meta: 0 };
+  const getStateMap = async (keys) => {
+    reads.values += 1;
+    return Object.fromEntries(keys.map((key) => [key, values[key]]));
+  };
+  const getStateMetaMap = async (keys) => {
+    reads.meta += 1;
+    return Object.fromEntries(keys.map((key) => [key, meta[key]]));
+  };
   const stateStore = {
     getStateMap,
     getStateMetaMap,
@@ -38,7 +45,7 @@ function createHarness(initial = {}) {
       async migrateExhibitionImageReferences(exhibitions) { return { exhibitions, stats: { uploaded: 0 } }; }
     }
   });
-  return { handler, values, meta, audit, alerts, deleted };
+  return { handler, values, meta, audit, alerts, deleted, reads };
 }
 
 async function invoke(harness, method, options = {}) {
@@ -58,12 +65,27 @@ test('GET /api/state characterizes allowed keys, response structure, ETag, and 3
   assert.equal(first.json().ok, true);
   assert.match(first.headers.etag, /^W\/"state-/);
   assert.equal(first.headers['cache-control'], 'private, max-age=0, must-revalidate');
+  assert.equal(first.headers['x-state-response-bytes'], String(Buffer.byteLength(first.body, 'utf8')));
+  assert.deepEqual(harness.reads, { values: 1, meta: 1 });
 
+  harness.reads.values = 0;
+  harness.reads.meta = 0;
   const cached = await invoke(harness, 'GET', {
     query: { keys: 'users,exhibitions' }, headers: { 'if-none-match': first.headers.etag }
   });
   assert.equal(cached.statusCode, 304);
   assert.equal(cached.body, undefined);
+  assert.deepEqual(harness.reads, { values: 0, meta: 1 });
+
+  const summary = await invoke(harness, 'GET', { query: { keys: 'exhibitions', view: 'summary' } });
+  assert.deepEqual(summary.json().data.exhibitions, [{
+    id: 2,
+    participants: [],
+    staff: { planners: [], artists: [], staffs: [] },
+    active: false,
+    createdAt: null,
+    updatedAt: null
+  }]);
 });
 
 test('state handler characterizes rejected keys, malformed body, methods, and strict conflicts', async () => {

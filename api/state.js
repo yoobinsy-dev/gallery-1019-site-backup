@@ -1,8 +1,8 @@
 const { sendJson, methodNotAllowed, readJsonBody } = require('./_lib/http');
-const { createHash } = require('crypto');
 const { getStateMap, getStateMetaMap, getStateMapWithMeta, setStateValue, deleteStateValue } = require('./_lib/state-store');
 const { logStateWriteAttempt, recordAlert, maybeTriggerConflictSpikeAlert } = require('./_lib/audit-store');
 const { buildTransferSafeExhibitions, migrateExhibitionImageReferences } = require('./_lib/exhibition-image-refs');
+const { createStateReadService } = require('./_lib/state-read-service');
 
 const ALLOWED_KEYS = new Set([
   'users',
@@ -27,6 +27,14 @@ const HARD_DROP_RATIO = 0.7;
 const USER_DROP_MIN_PREVIOUS_TOTAL = 3;
 const USER_DROP_MIN_ABSOLUTE = 2;
 const USER_DROP_RATIO = 0.5;
+
+const handleStateRead = createStateReadService({
+  allowedKeys: ALLOWED_KEYS,
+  buildTransferSafeExhibitions,
+  getStateMap,
+  getStateMetaMap,
+  sendJson
+});
 
 function toEpochMs(value) {
   const parsed = new Date(value || '').getTime();
@@ -791,132 +799,10 @@ function mergeExhibitionsStatePreferServerOnConflict(currentValue, incomingValue
   return merged;
 }
 
-function sanitizeRequestedKeys(raw) {
-  if (!raw) return ['users', 'exhibitions', 'pottery-students-v1', 'pottery-personal-work-v1', 'studio-calendar-state-v1', 'pottery-material-orders-v1', 'pottery-accounting-v1'];
-  const parsed = raw
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .filter((item) => ALLOWED_KEYS.has(item));
-
-  return parsed.length > 0 ? parsed : ['users', 'exhibitions', 'pottery-students-v1', 'pottery-personal-work-v1', 'studio-calendar-state-v1', 'pottery-material-orders-v1', 'pottery-accounting-v1'];
-}
-
-function buildExhibitionsSummary(exhibitions) {
-  if (!Array.isArray(exhibitions)) return [];
-
-  return exhibitions.map((exhibition) => {
-    if (!exhibition || typeof exhibition !== 'object') return exhibition;
-    return {
-      id: exhibition.id,
-      title: exhibition.title,
-      startDate: exhibition.startDate,
-      endDate: exhibition.endDate,
-      type: exhibition.type,
-      participants: Array.isArray(exhibition.participants) ? exhibition.participants : [],
-      staff: exhibition.staff || { planners: [], artists: [], staffs: [] },
-      active: Boolean(exhibition.active),
-      createdAt: exhibition.createdAt || null,
-      updatedAt: exhibition.updatedAt || null
-    };
-  });
-}
-
-function buildTransferSafeStateData(data, options = {}) {
-  const view = String(options.view || '').trim().toLowerCase();
-  if (!data || typeof data !== 'object') {
-    return {
-      data,
-      stats: null
-    };
-  }
-
-  if (!Array.isArray(data.exhibitions)) {
-    return {
-      data,
-      stats: null
-    };
-  }
-
-  const transferSafe = buildTransferSafeExhibitions(data.exhibitions);
-  const nextData = { ...data, exhibitions: transferSafe.exhibitions };
-  if (view === 'summary') {
-    nextData.exhibitions = buildExhibitionsSummary(nextData.exhibitions);
-  }
-
-  return {
-    data: nextData,
-    stats: transferSafe.stats
-  };
-}
-
-function normalizeStateMeta(keys, rawMeta) {
-  const normalized = {};
-  keys.forEach((key) => {
-    normalized[key] = {
-      updatedAt: rawMeta?.[key]?.updatedAt || null
-    };
-  });
-  return normalized;
-}
-
-function buildStateEtag(keys, meta) {
-  const fingerprint = keys
-    .map((key) => `${key}:${meta?.[key]?.updatedAt || 'null'}`)
-    .join('|');
-  const digest = createHash('sha1').update(fingerprint).digest('hex');
-  return `W/"state-${digest}"`;
-}
-
-function requestHasMatchingEtag(ifNoneMatchHeader, etag) {
-  if (!ifNoneMatchHeader || !etag) return false;
-  const normalized = String(ifNoneMatchHeader)
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-  return normalized.includes('*') || normalized.includes(etag);
-}
-
 module.exports = async function handler(req, res) {
   try {
     if (req.method === 'GET') {
-      const keys = sanitizeRequestedKeys(req.query.keys);
-      const view = String(req.query.view || '').trim().toLowerCase();
-      const rawMeta = await getStateMetaMap(keys);
-      const meta = normalizeStateMeta(keys, rawMeta);
-      const etag = buildStateEtag(keys, meta);
-
-      res.setHeader('ETag', etag);
-      res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
-
-      if (requestHasMatchingEtag(req.headers?.['if-none-match'], etag)) {
-        res.statusCode = 304;
-        res.end();
-        return;
-      }
-
-      const data = await getStateMap(keys);
-      const transferSafe = buildTransferSafeStateData(data, { view });
-      const responsePayload = {
-        ok: true,
-        data: transferSafe.data,
-        meta
-      };
-
-      const responseBytes = Buffer.byteLength(JSON.stringify(responsePayload), 'utf8');
-      res.setHeader('X-State-Response-Bytes', String(responseBytes));
-
-      if (Array.isArray(transferSafe.data?.exhibitions)) {
-        console.log('[api/state:get]', {
-          keys,
-          view: view || 'full',
-          responseBytes,
-          exhibitionCount: transferSafe.data.exhibitions.length,
-          transferStats: transferSafe.stats || null
-        });
-      }
-
-      sendJson(res, 200, responsePayload);
+      await handleStateRead(req, res);
       return;
     }
 
