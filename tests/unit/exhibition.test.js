@@ -12,6 +12,11 @@ function loadExhibition() {
     'exhibitionDetailState',
     'getPhotoPreviewDataUrl',
     'getPhotoDataUrl',
+    'buildPhotoUploadFileName',
+    'parseDataUrlMimeType',
+    'snapshotWorkPhotoFields',
+    'applyWorkPhotoFields',
+    'clearPendingWorkPhotoFields',
     'getCertificateImageDataUrl',
     'hasGeneratedCertificate',
     'normalizeCertificateDateText',
@@ -64,6 +69,53 @@ test('exhibition images characterize pending, URL, and legacy preview precedence
   assert.equal(exhibition.getPhotoPreviewDataUrl(item), 'preview-url');
   assert.equal(exhibition.getPhotoDataUrl(item), 'full-url');
   assert.equal(exhibition.getPhotoPreviewDataUrl({ photoDataUrl: 'legacy-full' }), 'legacy-full');
+});
+
+test('exhibition images characterize filenames, snapshots, rollback, and transient cleanup', () => {
+  const exhibition = loadExhibition();
+  assert.equal(exhibition.buildPhotoUploadFileName('작품 A.jpeg', 'preview', 'image/webp'), '___A-preview.webp');
+  assert.equal(exhibition.buildPhotoUploadFileName('', 'full', 'image/unknown'), 'work-image-full.bin');
+  assert.equal(exhibition.parseDataUrlMimeType('data:image/png;base64,AAAA'), 'image/png');
+  assert.equal(exhibition.parseDataUrlMimeType('https://example.test/image.png'), '');
+
+  const work = {
+    photoName: 'original.png',
+    photoUrl: 'full-url',
+    photoPreviewUrl: 'preview-url',
+    photoPath: 'full-path',
+    photoPreviewPath: 'preview-path',
+    photoDataUrl: 'legacy-full',
+    photoPreviewDataUrl: 'legacy-preview',
+    photoMimeType: 'image/png',
+    photoByteSize: 42,
+    pendingPhotoDataUrl: 'pending-full',
+    pendingPhotoPreviewDataUrl: 'pending-preview',
+    unknownField: 'keep'
+  };
+  const snapshot = JSON.parse(JSON.stringify(exhibition.snapshotWorkPhotoFields(work)));
+  assert.deepEqual(snapshot, {
+    photoName: 'original.png',
+    photoUrl: 'full-url',
+    photoPreviewUrl: 'preview-url',
+    photoPath: 'full-path',
+    photoPreviewPath: 'preview-path',
+    photoDataUrl: 'legacy-full',
+    photoPreviewDataUrl: 'legacy-preview',
+    photoMimeType: 'image/png',
+    photoByteSize: 42,
+    pendingPhotoDataUrl: 'pending-full',
+    pendingPhotoPreviewDataUrl: 'pending-preview'
+  });
+  work.photoUrl = 'replacement';
+  work.photoByteSize = Number.NaN;
+  exhibition.applyWorkPhotoFields(work, snapshot);
+  assert.equal(work.photoUrl, 'full-url');
+  assert.equal(work.photoByteSize, 42);
+  exhibition.clearPendingWorkPhotoFields(work);
+  assert.equal(work.pendingPhotoDataUrl, '');
+  assert.equal(work.pendingPhotoPreviewDataUrl, '');
+  assert.equal(work.photoDataUrl, 'legacy-full');
+  assert.equal(work.unknownField, 'keep');
 });
 
 test('certificate inputs characterize artwork fallback, ready version, date, and safe filename', () => {
