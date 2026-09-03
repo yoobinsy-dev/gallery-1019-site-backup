@@ -2445,57 +2445,34 @@
   }
 
   function handleDeleteRecurringOne() {
-    const eventId = String(state.recurringDelete.eventId || '');
-    const occurrenceDate = String(state.recurringDelete.occurrenceDate || '');
-    const eventItem = state.events.find((item) => item && item.id === eventId);
-    if (!eventItem || !occurrenceDate) {
-      closeModal('recurring-delete-modal');
-      return;
-    }
-
-    const skipDates = Array.isArray(eventItem.repeatSkipDates) ? eventItem.repeatSkipDates.slice() : [];
-    if (!skipDates.includes(occurrenceDate)) {
-      skipDates.push(occurrenceDate);
-      skipDates.sort();
-    }
-    eventItem.repeatSkipDates = skipDates;
-
-    saveState();
-    closeModal('recurring-delete-modal');
-    renderCalendar();
-    refreshWorkshopUsageUi();
+    applyRecurringDeletePlan('one');
   }
 
   function handleDeleteRecurringFollowing() {
     const eventId = String(state.recurringDelete.eventId || '');
     const occurrenceDate = String(state.recurringDelete.occurrenceDate || '');
     const eventItem = state.events.find((item) => item && item.id === eventId);
-    if (!eventItem || !occurrenceDate) {
+    const plan = globalThis.MasterCalendarCommands.planRecurringDelete({
+      scope: 'following', event: eventItem, occurrenceDate
+    });
+    finishRecurringDeletePlan(plan, eventId, eventItem);
+  }
+
+  function applyRecurringDeletePlan(scope) {
+    const eventId = String(state.recurringDelete.eventId || '');
+    const occurrenceDate = String(state.recurringDelete.occurrenceDate || '');
+    const eventItem = state.events.find((item) => item && item.id === eventId);
+    const plan = globalThis.MasterCalendarCommands.planRecurringDelete({ scope, event: eventItem, occurrenceDate });
+    finishRecurringDeletePlan(plan, eventId, eventItem);
+  }
+
+  function finishRecurringDeletePlan(plan, eventId, eventItem) {
+    if (plan.action === 'none') {
       closeModal('recurring-delete-modal');
       return;
     }
-
-    const seriesStart = new Date(`${eventItem.date}T00:00:00`);
-    const occurrence = new Date(`${occurrenceDate}T00:00:00`);
-    if (Number.isNaN(seriesStart.getTime()) || Number.isNaN(occurrence.getTime())) {
-      closeModal('recurring-delete-modal');
-      return;
-    }
-
-    if (occurrence <= seriesStart) {
-      state.events = state.events.filter((item) => item.id !== eventId);
-      saveState();
-      closeModal('recurring-delete-modal');
-      renderCalendar();
-      refreshWorkshopUsageUi();
-      return;
-    }
-
-    const previousOccurrence = addDays(occurrence, -7);
-    eventItem.repeatEndDate = formatDateInput(previousOccurrence);
-
-    const skipDates = Array.isArray(eventItem.repeatSkipDates) ? eventItem.repeatSkipDates : [];
-    eventItem.repeatSkipDates = skipDates.filter((d) => d <= eventItem.repeatEndDate);
+    if (plan.action === 'remove') state.events = state.events.filter((item) => item.id !== eventId);
+    else Object.assign(eventItem, plan.patch);
 
     saveState();
     closeModal('recurring-delete-modal');
@@ -2504,53 +2481,14 @@
   }
 
   function handleMoveRecurringOne() {
-    const eventId = String(state.recurringMove.eventId || '');
-    const occurrenceDate = String(state.recurringMove.occurrenceDate || '');
-    const nextDate = String(state.recurringMove.nextDate || '');
-    const nextStart = String(state.recurringMove.nextStart || '');
-    const nextEnd = String(state.recurringMove.nextEnd || '');
-    const eventItem = state.events.find((item) => item && item.id === eventId);
-    const nextClassType = String(state.recurringMove.nextClassType || eventItem?.classType || '');
-    const nextInstructor = String(state.recurringMove.nextInstructor || eventItem?.instructor || '').trim();
-    const nextBaseRuleId = String(state.recurringMove.nextBaseRuleId || eventItem?.baseRuleId || '');
-    if (!eventItem || !occurrenceDate || !nextDate || !nextStart || !nextEnd) {
-      resetRecurringMoveState();
-      closeModal('recurring-move-modal');
-      return;
-    }
-
-    const skipDates = Array.isArray(eventItem.repeatSkipDates) ? eventItem.repeatSkipDates.slice() : [];
-    if (!skipDates.includes(occurrenceDate)) {
-      skipDates.push(occurrenceDate);
-      skipDates.sort();
-    }
-    eventItem.repeatSkipDates = skipDates;
-
-    const movedEvent = {
-      id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      kind: eventItem.kind,
-      title: eventItem.title,
-      date: nextDate,
-      endDate: '',
-      start: nextStart,
-      end: nextEnd,
-      classType: nextClassType,
-      instructor: nextInstructor,
-      baseRuleId: nextBaseRuleId,
-      capacity: Math.max(1, Math.min(3, Number(eventItem.capacity || 1))),
-      repeatWeekly: false
-    };
-    applyClassEventBaseMetadata(movedEvent, nextDate);
-    state.events.push(movedEvent);
-
-    saveState();
-    resetRecurringMoveState();
-    closeModal('recurring-move-modal');
-    renderCalendar();
-    refreshWorkshopUsageUi();
+    applyRecurringMovePlan('one');
   }
 
   function handleMoveRecurringFollowing() {
+    applyRecurringMovePlan('following');
+  }
+
+  function applyRecurringMovePlan(scope) {
     const eventId = String(state.recurringMove.eventId || '');
     const occurrenceDate = String(state.recurringMove.occurrenceDate || '');
     const nextDate = String(state.recurringMove.nextDate || '');
@@ -2560,64 +2498,27 @@
     const nextClassType = String(state.recurringMove.nextClassType || eventItem?.classType || '');
     const nextInstructor = String(state.recurringMove.nextInstructor || eventItem?.instructor || '').trim();
     const nextBaseRuleId = String(state.recurringMove.nextBaseRuleId || eventItem?.baseRuleId || '');
-    if (!eventItem || !occurrenceDate || !nextDate || !nextStart || !nextEnd) {
+    const plan = globalThis.MasterCalendarCommands.planRecurringMove({
+      scope,
+      event: eventItem,
+      occurrenceDate,
+      nextDate,
+      nextStart,
+      nextEnd,
+      nextClassType,
+      nextInstructor,
+      nextBaseRuleId,
+      createEventId: () => `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    });
+    if (plan.action === 'none') {
       resetRecurringMoveState();
       closeModal('recurring-move-modal');
       return;
     }
-
-    const seriesStart = new Date(`${eventItem.date}T00:00:00`);
-    const occurrence = new Date(`${occurrenceDate}T00:00:00`);
-    if (Number.isNaN(seriesStart.getTime()) || Number.isNaN(occurrence.getTime())) {
-      resetRecurringMoveState();
-      closeModal('recurring-move-modal');
-      return;
-    }
-
-    const oldRepeatEndDate = String(eventItem.repeatEndDate || '');
-
-    if (occurrence <= seriesStart) {
-      eventItem.date = nextDate;
-      eventItem.start = nextStart;
-      eventItem.end = nextEnd;
-      eventItem.classType = nextClassType;
-      eventItem.instructor = nextInstructor;
-      eventItem.baseRuleId = nextBaseRuleId;
-      if (Array.isArray(eventItem.repeatSkipDates)) {
-        eventItem.repeatSkipDates = eventItem.repeatSkipDates.filter((d) => d >= nextDate);
-      }
-      applyClassEventBaseMetadata(eventItem, nextDate);
-      saveState();
-      resetRecurringMoveState();
-      closeModal('recurring-move-modal');
-      renderCalendar();
-      refreshWorkshopUsageUi();
-      return;
-    }
-
-    const previousOccurrence = addDays(occurrence, -7);
-    eventItem.repeatEndDate = formatDateInput(previousOccurrence);
-    const oldSkipDates = Array.isArray(eventItem.repeatSkipDates) ? eventItem.repeatSkipDates.slice() : [];
-    eventItem.repeatSkipDates = oldSkipDates.filter((d) => d <= eventItem.repeatEndDate);
-
-    const movedSeries = {
-      id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      kind: eventItem.kind,
-      title: eventItem.title,
-      date: nextDate,
-      endDate: '',
-      start: nextStart,
-      end: nextEnd,
-      classType: nextClassType,
-      instructor: nextInstructor,
-      baseRuleId: nextBaseRuleId,
-      capacity: Math.max(1, Math.min(3, Number(eventItem.capacity || 1))),
-      repeatWeekly: true,
-      repeatEndDate: oldRepeatEndDate || '',
-      repeatSkipDates: []
-    };
-    applyClassEventBaseMetadata(movedSeries, nextDate);
-    state.events.push(movedSeries);
+    Object.assign(eventItem, plan.patch);
+    const movedEvent = plan.event;
+    if (movedEvent) state.events.push(movedEvent);
+    applyClassEventBaseMetadata(movedEvent || eventItem, nextDate);
 
     saveState();
     resetRecurringMoveState();

@@ -135,7 +135,128 @@
     };
   }
 
-  const api = Object.freeze({ planEventCreation, planPointerEdit });
+  function planRecurringDelete(options = {}) {
+    const event = options.event;
+    const occurrenceDate = String(options.occurrenceDate || '');
+    if (!event || !occurrenceDate) return { action: 'none' };
+
+    if (options.scope === 'one') {
+      const repeatSkipDates = Array.isArray(event.repeatSkipDates) ? event.repeatSkipDates.slice() : [];
+      if (!repeatSkipDates.includes(occurrenceDate)) {
+        repeatSkipDates.push(occurrenceDate);
+        repeatSkipDates.sort();
+      }
+      return { action: 'update', patch: { repeatSkipDates } };
+    }
+
+    const seriesStart = new Date(`${event.date}T00:00:00`);
+    const occurrence = new Date(`${occurrenceDate}T00:00:00`);
+    if (Number.isNaN(seriesStart.getTime()) || Number.isNaN(occurrence.getTime())) {
+      return { action: 'none' };
+    }
+    if (occurrence <= seriesStart) return { action: 'remove' };
+
+    occurrence.setDate(occurrence.getDate() - 7);
+    const repeatEndDate = formatDate(occurrence);
+    const repeatSkipDates = Array.isArray(event.repeatSkipDates) ? event.repeatSkipDates : [];
+    return {
+      action: 'update',
+      patch: {
+        repeatEndDate,
+        repeatSkipDates: repeatSkipDates.filter((date) => date <= repeatEndDate)
+      }
+    };
+  }
+
+  function planRecurringMove(options = {}) {
+    const event = options.event;
+    const occurrenceDate = String(options.occurrenceDate || '');
+    const nextDate = String(options.nextDate || '');
+    const nextStart = String(options.nextStart || '');
+    const nextEnd = String(options.nextEnd || '');
+    if (!event || !occurrenceDate || !nextDate || !nextStart || !nextEnd) return { action: 'none' };
+
+    const movedFields = {
+      date: nextDate,
+      start: nextStart,
+      end: nextEnd,
+      classType: String(options.nextClassType || event.classType || ''),
+      instructor: String(options.nextInstructor || event.instructor || '').trim(),
+      baseRuleId: String(options.nextBaseRuleId || event.baseRuleId || '')
+    };
+    if (options.scope === 'one') {
+      const repeatSkipDates = Array.isArray(event.repeatSkipDates) ? event.repeatSkipDates.slice() : [];
+      if (!repeatSkipDates.includes(occurrenceDate)) {
+        repeatSkipDates.push(occurrenceDate);
+        repeatSkipDates.sort();
+      }
+      return {
+        action: 'append',
+        patch: { repeatSkipDates },
+        event: buildMovedEvent(event, movedFields, options.createEventId(), false, '')
+      };
+    }
+
+    const seriesStart = new Date(`${event.date}T00:00:00`);
+    const occurrence = new Date(`${occurrenceDate}T00:00:00`);
+    if (Number.isNaN(seriesStart.getTime()) || Number.isNaN(occurrence.getTime())) {
+      return { action: 'none' };
+    }
+    if (occurrence <= seriesStart) {
+      const patch = { ...movedFields };
+      if (Array.isArray(event.repeatSkipDates)) {
+        patch.repeatSkipDates = event.repeatSkipDates.filter((date) => date >= nextDate);
+      }
+      return { action: 'update', patch };
+    }
+
+    occurrence.setDate(occurrence.getDate() - 7);
+    const repeatEndDate = formatDate(occurrence);
+    const oldSkipDates = Array.isArray(event.repeatSkipDates) ? event.repeatSkipDates.slice() : [];
+    return {
+      action: 'split',
+      patch: {
+        repeatEndDate,
+        repeatSkipDates: oldSkipDates.filter((date) => date <= repeatEndDate)
+      },
+      event: buildMovedEvent(
+        event,
+        movedFields,
+        options.createEventId(),
+        true,
+        String(event.repeatEndDate || '')
+      )
+    };
+  }
+
+  function buildMovedEvent(event, fields, id, repeatWeekly, repeatEndDate) {
+    return {
+      id,
+      kind: event.kind,
+      title: event.title,
+      date: fields.date,
+      endDate: '',
+      start: fields.start,
+      end: fields.end,
+      classType: fields.classType,
+      instructor: fields.instructor,
+      baseRuleId: fields.baseRuleId,
+      capacity: Math.max(1, Math.min(3, Number(event.capacity || 1))),
+      repeatWeekly,
+      ...(repeatWeekly ? { repeatEndDate, repeatSkipDates: [] } : {})
+    };
+  }
+
+  function formatDate(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  }
+
+  const api = Object.freeze({
+    planEventCreation,
+    planPointerEdit,
+    planRecurringDelete,
+    planRecurringMove
+  });
   root.MasterCalendarCommands = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

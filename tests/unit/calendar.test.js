@@ -17,7 +17,9 @@ function loadCalendar(globals = {}) {
     'getActivePersonalWorkEntries', 'loadStudioInstructors', 'loadState', 'saveState',
     'findLane', 'canPlaceInLane', 'createEmptyDailyOccupancy', 'cloneDailyOccupancy',
     'markLaneOccupancy', 'buildDailyOccupancyMap', 'hasEnoughCapacityForRange',
-    'isEventPlacementAllowed', 'saveEventFromModal', 'finalizeMasterCalendarEdit'
+    'isEventPlacementAllowed', 'saveEventFromModal', 'finalizeMasterCalendarEdit',
+    'handleDeleteRecurringOne', 'handleDeleteRecurringFollowing',
+    'handleMoveRecurringOne', 'handleMoveRecurringFollowing'
   ], { globals: {
     MasterCalendarDateTime: dateTime,
     MasterCalendarOccurrences: occurrences,
@@ -408,6 +410,140 @@ test('calendar pointer command preserves unchanged updates and recurring class m
       eventId: 'event-1', occurrenceDate: '2026-08-03', nextDate: '2026-08-10',
       nextStart: '10:00', nextEnd: '11:00', nextClassType: 'New Class',
       nextInstructor: 'New Teacher', nextBaseRuleId: 'new-rule'
+    }
+  });
+});
+
+function createRecurringCalendar(events) {
+  const writes = [];
+  const calendar = loadCalendar({ localStorage: {
+    getItem() { return null; },
+    setItem(key, value) { writes.push([key, value]); }
+  } });
+  calendar.state.events = JSON.parse(JSON.stringify(events));
+  return { calendar, writes };
+}
+
+test('calendar recurring delete characterizes one, following, and whole-series boundaries', () => {
+  const source = {
+    id: 'series', kind: '개인작업', title: 'Artist', date: '2026-08-03',
+    start: '10:00', end: '11:00', repeatWeekly: true, repeatEndDate: '2026-09-28',
+    repeatSkipDates: ['2026-08-24', '2026-08-17']
+  };
+  const one = createRecurringCalendar([source]);
+  Object.assign(one.calendar.state.recurringDelete, { eventId: 'series', occurrenceDate: '2026-08-10' });
+  assert.throws(() => one.calendar.handleDeleteRecurringOne(), /Cannot set properties of null/);
+  assert.deepEqual(JSON.parse(JSON.stringify(one.calendar.state.events[0].repeatSkipDates)), [
+    '2026-08-10', '2026-08-17', '2026-08-24'
+  ]);
+
+  const following = createRecurringCalendar([source]);
+  Object.assign(following.calendar.state.recurringDelete, { eventId: 'series', occurrenceDate: '2026-08-17' });
+  assert.throws(() => following.calendar.handleDeleteRecurringFollowing(), /Cannot set properties of null/);
+  assert.equal(following.calendar.state.events[0].repeatEndDate, '2026-08-10');
+  assert.deepEqual(JSON.parse(JSON.stringify(following.calendar.state.events[0].repeatSkipDates)), []);
+
+  const whole = createRecurringCalendar([source]);
+  Object.assign(whole.calendar.state.recurringDelete, { eventId: 'series', occurrenceDate: '2026-08-03' });
+  assert.throws(() => whole.calendar.handleDeleteRecurringFollowing(), /Cannot set properties of null/);
+  assert.deepEqual(JSON.parse(JSON.stringify(whole.calendar.state.events)), []);
+});
+
+test('calendar recurring move characterizes one occurrence and following split', () => {
+  const source = {
+    id: 'series', kind: '개인작업', title: 'Artist', date: '2026-08-03',
+    start: '10:00', end: '11:00', capacity: 9, repeatWeekly: true,
+    repeatEndDate: '2026-09-28', repeatSkipDates: ['2026-08-24']
+  };
+  const one = createRecurringCalendar([source]);
+  Object.assign(one.calendar.state.recurringMove, {
+    eventId: 'series', occurrenceDate: '2026-08-10', nextDate: '2026-08-11',
+    nextStart: '11:00', nextEnd: '12:00'
+  });
+  assert.throws(() => one.calendar.handleMoveRecurringOne(), /Cannot set properties of null/);
+  assert.equal(one.calendar.state.events.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(one.calendar.state.events[0].repeatSkipDates)), ['2026-08-10', '2026-08-24']);
+  assert.match(one.calendar.state.events[1].id, /^evt-/);
+  assert.equal(one.calendar.state.events[1].repeatWeekly, false);
+  assert.equal(one.calendar.state.events[1].capacity, 3);
+
+  const following = createRecurringCalendar([source]);
+  Object.assign(following.calendar.state.recurringMove, {
+    eventId: 'series', occurrenceDate: '2026-08-17', nextDate: '2026-08-18',
+    nextStart: '12:00', nextEnd: '13:00'
+  });
+  assert.throws(() => following.calendar.handleMoveRecurringFollowing(), /Cannot set properties of null/);
+  assert.equal(following.calendar.state.events[0].repeatEndDate, '2026-08-10');
+  assert.deepEqual(JSON.parse(JSON.stringify(following.calendar.state.events[0].repeatSkipDates)), []);
+  assert.equal(following.calendar.state.events[1].date, '2026-08-18');
+  assert.equal(following.calendar.state.events[1].repeatWeekly, true);
+  assert.equal(following.calendar.state.events[1].repeatEndDate, '2026-09-28');
+});
+
+test('calendar recurring move characterizes whole-series update and invalid-date no-op', () => {
+  const source = {
+    id: 'series', kind: '개인작업', title: 'Artist', date: '2026-08-03',
+    start: '10:00', end: '11:00', capacity: 1, repeatWeekly: true,
+    repeatSkipDates: ['2026-08-03', '2026-08-10', '2026-08-24']
+  };
+  const whole = createRecurringCalendar([source]);
+  Object.assign(whole.calendar.state.recurringMove, {
+    eventId: 'series', occurrenceDate: '2026-08-03', nextDate: '2026-08-11',
+    nextStart: '12:00', nextEnd: '13:00'
+  });
+  assert.throws(() => whole.calendar.handleMoveRecurringFollowing(), /Cannot set properties of null/);
+  assert.equal(whole.calendar.state.events.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(whole.calendar.state.events[0].repeatSkipDates)), ['2026-08-24']);
+  assert.equal(whole.calendar.state.events[0].date, '2026-08-11');
+
+  const invalid = createRecurringCalendar([{ ...source, date: 'invalid' }]);
+  Object.assign(invalid.calendar.state.recurringMove, {
+    eventId: 'series', occurrenceDate: '2026-08-03', nextDate: '2026-08-11',
+    nextStart: '12:00', nextEnd: '13:00'
+  });
+  assert.doesNotThrow(() => invalid.calendar.handleMoveRecurringFollowing());
+  assert.equal(invalid.writes.length, 0);
+  assert.equal(invalid.calendar.state.events[0].date, 'invalid');
+});
+
+test('calendar recurring commands preserve exact plans and lazy generated IDs', () => {
+  const event = {
+    id: 'series', kind: '수강', title: 'Student', date: '2026-08-03',
+    start: '10:00', end: '11:00', capacity: 0, repeatWeekly: true,
+    repeatEndDate: '2026-09-28', repeatSkipDates: ['2026-08-24']
+  };
+  const deletePlan = commands.planRecurringDelete({
+    scope: 'following', event, occurrenceDate: '2026-08-17'
+  });
+  assert.deepEqual(deletePlan, {
+    action: 'update',
+    patch: { repeatEndDate: '2026-08-10', repeatSkipDates: [] }
+  });
+
+  let idCalls = 0;
+  const invalidMove = commands.planRecurringMove({
+    scope: 'following', event: { ...event, date: 'invalid' }, occurrenceDate: '2026-08-17',
+    nextDate: '2026-08-18', nextStart: '12:00', nextEnd: '13:00',
+    createEventId() { idCalls += 1; return 'generated'; }
+  });
+  assert.deepEqual(invalidMove, { action: 'none' });
+  assert.equal(idCalls, 0);
+
+  const split = commands.planRecurringMove({
+    scope: 'following', event, occurrenceDate: '2026-08-17',
+    nextDate: '2026-08-18', nextStart: '12:00', nextEnd: '13:00',
+    nextClassType: 'Wheel', nextInstructor: ' Teacher ', nextBaseRuleId: 'rule-2',
+    createEventId() { idCalls += 1; return 'generated'; }
+  });
+  assert.equal(idCalls, 1);
+  assert.deepEqual(split, {
+    action: 'split',
+    patch: { repeatEndDate: '2026-08-10', repeatSkipDates: [] },
+    event: {
+      id: 'generated', kind: '수강', title: 'Student', date: '2026-08-18', endDate: '',
+      start: '12:00', end: '13:00', classType: 'Wheel', instructor: 'Teacher',
+      baseRuleId: 'rule-2', capacity: 1, repeatWeekly: true,
+      repeatEndDate: '2026-09-28', repeatSkipDates: []
     }
   });
 });
