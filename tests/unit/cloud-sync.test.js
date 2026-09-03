@@ -212,6 +212,125 @@ test('cloud sync applies remote startup state without echo before signaling read
   assert.equal(status.hadRemoteData.users, true);
 });
 
+test('cloud sync merges material orders and repairs both local and remote state', async () => {
+  const key = 'pottery-material-orders-v1';
+  const localOrders = [{
+    id: 'order-1',
+    updatedAt: '2026-08-30T10:02:00.000Z',
+    supplier: 'Local supplier',
+    items: [{ id: 'clay', quantity: 2 }]
+  }];
+  const remoteOrders = [{
+    id: 'order-1',
+    updatedAt: '2026-08-30T10:01:00.000Z',
+    supplier: 'Remote supplier',
+    items: [{ id: 'glaze', quantity: 1 }]
+  }];
+  const harness = createCloudSyncHarness({
+    pathname: '/pottery-material-orders.html',
+    initialLocal: { [key]: JSON.stringify(localOrders) },
+    respond(call) {
+      if (!call.options.method) {
+        return response({
+          body: {
+            ok: true,
+            data: { users: [], [key]: remoteOrders },
+            meta: { [key]: { updatedAt: '2026-08-30T10:03:00.000Z' } }
+          }
+        });
+      }
+      return response();
+    }
+  });
+
+  const status = await harness.window.cloudSyncReady;
+  const reconciled = JSON.parse(harness.localStorage.getItem(key));
+
+  assert.equal(reconciled[0].supplier, 'Local supplier');
+  assert.deepEqual(reconciled[0].items, [
+    { id: 'clay', quantity: 2 },
+    { id: 'glaze', quantity: 1 }
+  ]);
+  assert.deepEqual(Array.from(status.appliedRemoteKeys), ['users', key]);
+  assert.equal(harness.timers.size, 1);
+
+  const [runRepair] = harness.timers.values();
+  await runRepair();
+  assert.deepEqual(JSON.parse(harness.fetchCalls[1].options.body), {
+    key,
+    value: reconciled,
+    baseUpdatedAt: null,
+    syncMode: 'full'
+  });
+});
+
+test('cloud sync preserves local exhibition previews while applying and healing newer remote state', async () => {
+  const localExhibitions = [{
+    id: 10,
+    title: 'Local title',
+    artWorks: [{ id: 101, title: 'Vase', photoPreviewDataUrl: 'data:image/jpeg;base64,preview' }]
+  }];
+  const remoteExhibitions = [{
+    id: 10,
+    title: 'Remote title',
+    artWorks: [{ id: 101, title: 'Vase' }]
+  }];
+  const harness = createCloudSyncHarness({
+    pathname: '/exhibitions.html',
+    initialLocal: {
+      exhibitions: JSON.stringify(localExhibitions),
+      __sync_updated_at__: JSON.stringify({ exhibitions: '2026-08-30T10:00:00.000Z' })
+    },
+    respond(call) {
+      if (!call.options.method) {
+        return response({
+          body: {
+            ok: true,
+            data: { exhibitions: remoteExhibitions },
+            meta: { exhibitions: { updatedAt: '2026-08-30T10:01:00.000Z' } }
+          }
+        });
+      }
+      return response();
+    }
+  });
+
+  await harness.window.cloudSyncReady;
+  const applied = JSON.parse(harness.localStorage.getItem('exhibitions'));
+
+  assert.equal(applied[0].title, 'Remote title');
+  assert.equal(applied[0].artWorks[0].photoPreviewDataUrl, 'data:image/jpeg;base64,preview');
+  assert.equal(harness.timers.size, 1);
+});
+
+test('cloud sync rejects a suspicious remote exhibition inventory drop', async () => {
+  const localWorks = Array.from({ length: 20 }, (_, index) => ({ id: index + 1 }));
+  const localExhibitions = [{ id: 10, artWorks: localWorks, goods: [] }];
+  const remoteExhibitions = [{ id: 10, artWorks: [], goods: [] }];
+  const harness = createCloudSyncHarness({
+    pathname: '/exhibitions.html',
+    initialLocal: { exhibitions: JSON.stringify(localExhibitions) },
+    respond(call) {
+      if (!call.options.method) {
+        return response({
+          body: {
+            ok: true,
+            data: { exhibitions: remoteExhibitions },
+            meta: { exhibitions: { updatedAt: '2026-08-30T10:01:00.000Z' } }
+          }
+        });
+      }
+      return response();
+    }
+  });
+
+  const status = await harness.window.cloudSyncReady;
+
+  assert.deepEqual(JSON.parse(harness.localStorage.getItem('exhibitions')), localExhibitions);
+  assert.deepEqual(Array.from(status.appliedRemoteKeys), []);
+  assert.equal(harness.timers.size, 1);
+});
+
 test('cloud sync intercepts users writes as one debounced delta push', async () => {
   const baseline = [
     { id: 1, username: 'admin', role: 'admin' },
