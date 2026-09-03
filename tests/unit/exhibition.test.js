@@ -8,6 +8,7 @@ const exportModel = require('../../exhibitions/export-model');
 const snapshotClient = require('../../exhibitions/snapshot-client');
 const imageLifecycle = require('../../exhibitions/image-lifecycle');
 const certificateModel = require('../../exhibitions/certificate-model');
+const certificateController = require('../../exhibitions/detail/certificate-controller');
 const inventoryModel = require('../../exhibitions/inventory-model');
 const inventoryRenderer = require('../../exhibitions/inventory-renderer');
 const inventoryBackupModel = require('../../exhibitions/inventory-backup-model');
@@ -91,6 +92,7 @@ function loadExhibition(overrides = {}) {
       ExhibitionSnapshotClient: snapshotClient,
       ExhibitionImageLifecycle: imageLifecycle,
       ExhibitionCertificateModel: certificateModel,
+      ExhibitionDetailCertificateController: certificateController,
       ExhibitionInventoryModel: inventoryModel,
       ExhibitionInventoryRenderer: inventoryRenderer,
       ExhibitionInventoryBackupModel: inventoryBackupModel,
