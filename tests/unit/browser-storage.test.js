@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { exposeClassicScriptFunctions } = require('../helpers/load-source');
+const { createStorageAdapter } = require('../../storage/storage-adapter');
 
 function quotaError() {
   const error = new Error('quota');
@@ -137,4 +138,39 @@ test('safe storage recognizes current browser quota error variants', () => {
   assert.equal(model.isStorageQuotaError({ code: 22 }), true);
   assert.equal(model.isStorageQuotaError({ code: 1014 }), true);
   assert.equal(model.isStorageQuotaError(new TypeError('other')), false);
+});
+
+test('browser storage adapter preserves raw reads, safe writes, removals, and failures', () => {
+  const values = new Map([['existing', '{"legacy":true}']]);
+  const calls = [];
+  const storage = {
+    getItem(key) { return values.get(key) ?? null; },
+    setItem(key, value) { values.set(key, String(value)); },
+    removeItem(key) {
+      calls.push(['remove', key]);
+      values.delete(key);
+      return undefined;
+    }
+  };
+  const adapter = createStorageAdapter({
+    storage,
+    safeWrite(key, value) {
+      calls.push(['write', key, value]);
+      storage.setItem(key, value);
+      return key !== 'failed';
+    }
+  });
+
+  assert.equal(adapter.read('missing'), null);
+  assert.equal(adapter.read('existing'), '{"legacy":true}');
+  assert.equal(adapter.write('feature', '[{"unknown":1}]'), true);
+  assert.equal(adapter.read('feature'), '[{"unknown":1}]');
+  assert.equal(adapter.write('failed', 'value'), false);
+  assert.equal(adapter.remove('feature'), undefined);
+  assert.equal(adapter.read('feature'), null);
+  assert.deepEqual(calls, [
+    ['write', 'feature', '[{"unknown":1}]'],
+    ['write', 'failed', 'value'],
+    ['remove', 'feature']
+  ]);
 });
