@@ -558,6 +558,62 @@ test('certificate batch builder preserves page blocks, print area, images, and s
   ]);
 });
 
+test('exhibition files preserve upload, preview, download, ownership, and delete behavior', async ({ page }) => {
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.locator('[data-tab="exhibition-files"]').click();
+  await page.locator('.exhibition-file-upload-card').click();
+  await expect(page.locator('#file-upload-modal')).toHaveCSS('display', 'flex');
+  await expect(page.locator('#file-upload-modal-title')).toHaveText('서류 업로드');
+
+  await page.locator('#file-upload-input').setInputFiles({
+    name: 'CHARACTERIZATION_TEST_FILE.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('CHARACTERIZATION_TEST_FILE_CONTENT')
+  });
+  await expect(page.locator('#file-upload-selected-info')).toHaveText('1개 파일 선택됨');
+  await page.locator('.file-upload-title-input').fill('CHARACTERIZATION_TEST_DOCUMENT');
+  await expect(page.locator('.file-upload-preview-item')).toHaveCount(1);
+  await page.locator('#file-upload-modal .modal-approve').click();
+
+  await expect(page.locator('#file-upload-modal')).toHaveCSS('display', 'none');
+  await expect(page.locator('#file-upload-input')).toHaveValue('');
+  const card = page.locator('.exhibition-file-card').filter({ hasText: 'CHARACTERIZATION_TEST_DOCUMENT' });
+  await expect(card).toHaveCount(1);
+  await expect(card.locator('.exhibition-file-preview-image')).toHaveAttribute('src', /^data:image\/svg\+xml/);
+
+  await page.evaluate(() => {
+    window.__characterizationFileDownload = null;
+    HTMLAnchorElement.prototype.click = function captureFileDownload() {
+      window.__characterizationFileDownload = { href: this.href, download: this.download };
+    };
+  });
+  await card.getByRole('button', { name: '다운로드' }).click();
+  const download = await page.evaluate(() => window.__characterizationFileDownload);
+  expect(download.download).toBe('CHARACTERIZATION_TEST_DOCUMENT.txt');
+  expect(download.href).toMatch(/^data:text\/plain/);
+
+  const storedFile = await page.evaluate(() => {
+    const [exhibition] = JSON.parse(localStorage.getItem('exhibitions') || '[]');
+    return exhibition.filesDocs?.find((fileItem) => fileItem.title === 'CHARACTERIZATION_TEST_DOCUMENT');
+  });
+  expect(storedFile).toMatchObject({
+    title: 'CHARACTERIZATION_TEST_DOCUMENT',
+    fileName: 'CHARACTERIZATION_TEST_FILE.txt',
+    previewKind: 'generic',
+    mimeType: 'text/plain',
+    createdByUserId: currentUser.id
+  });
+  expect(storedFile.fileDataUrl).toMatch(/^data:text\/plain/);
+
+  await card.getByRole('button', { name: '삭제' }).click();
+  await expect(card).toHaveCount(0);
+  const remainingFiles = await page.evaluate(() => {
+    const [exhibition] = JSON.parse(localStorage.getItem('exhibitions') || '[]');
+    return exhibition.filesDocs || [];
+  });
+  expect(remainingFiles).toEqual([]);
+});
+
 test('exhibition exports preserve filenames and key payload cells', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
   const captureExport = async (action) => {
