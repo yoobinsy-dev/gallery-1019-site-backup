@@ -3750,28 +3750,11 @@ function safeCertificateFileName(baseTitle) {
 }
 
 function getPhotoPreviewDataUrl(item) {
-  const pendingPreview = (item?.pendingPhotoPreviewDataUrl || '').toString().trim();
-  if (pendingPreview) return pendingPreview;
-
-  const pendingFull = (item?.pendingPhotoDataUrl || '').toString().trim();
-  if (pendingFull) return pendingFull;
-
-  const previewUrl = (item?.photoPreviewUrl || '').toString().trim();
-  if (previewUrl) return previewUrl;
-
-  const fullUrl = (item?.photoUrl || '').toString().trim();
-  if (fullUrl) return fullUrl;
-
-  return (item?.photoPreviewDataUrl || item?.photoDataUrl || '').toString().trim();
+  return globalThis.ExhibitionImageLifecycle.getPhotoPreviewSource(item);
 }
 
 function getPhotoDataUrl(item) {
-  const pendingFull = (item?.pendingPhotoDataUrl || '').toString().trim();
-  if (pendingFull) return pendingFull;
-
-  const fullUrl = (item?.photoUrl || '').toString().trim();
-  if (fullUrl) return fullUrl;
-  return (item?.photoDataUrl || '').toString().trim();
+  return globalThis.ExhibitionImageLifecycle.getPhotoSource(item);
 }
 
 function getCertificateImageDataUrl(sold, work) {
@@ -7119,8 +7102,6 @@ function handleWorkChange(workId, field, value) {
 
 const MAX_PHOTO_PREVIEW_DATA_URL_LENGTH = 360000;
 const PHOTO_PREVIEW_MAX_DIMENSION = 1280;
-const PHOTO_UPLOAD_ENDPOINT = '/api/upload';
-const PHOTO_UPLOAD_MAX_RETRIES = 1;
 const pendingPhotoUploadTokens = new Map();
 const TRANSIENT_WORK_PHOTO_FIELDS = ['pendingPhotoDataUrl', 'pendingPhotoPreviewDataUrl'];
 
@@ -7130,119 +7111,40 @@ function canUseRemoteUploadApi() {
     && !String(window.location.protocol || '').startsWith('file');
 }
 
-function getExtensionFromMimeType(mimeType) {
-  const normalized = (mimeType || '').toString().toLowerCase();
-  if (normalized.includes('jpeg') || normalized.includes('jpg')) return 'jpg';
-  if (normalized.includes('png')) return 'png';
-  if (normalized.includes('webp')) return 'webp';
-  if (normalized.includes('gif')) return 'gif';
-  return 'bin';
-}
-
 function buildPhotoUploadFileName(baseName, suffix, mimeType) {
-  const stem = (baseName || 'work-image')
-    .toString()
-    .trim()
-    .replace(/\.[^.]+$/, '')
-    .replace(/[^a-zA-Z0-9._-]/g, '_');
-  const ext = getExtensionFromMimeType(mimeType);
-  return `${stem || 'work-image'}-${suffix}.${ext}`;
+  return globalThis.ExhibitionImageLifecycle.buildPhotoUploadFileName(baseName, suffix, mimeType);
 }
 
 function parseDataUrlMimeType(dataUrl) {
-  const match = String(dataUrl || '').match(/^data:([^;]+);base64,/i);
-  return match ? match[1] : '';
+  return globalThis.ExhibitionImageLifecycle.parseDataUrlMimeType(dataUrl);
 }
 
 function snapshotWorkPhotoFields(work) {
-  if (!work || typeof work !== 'object') return null;
-
-  return {
-    photoName: work.photoName || '',
-    photoUrl: work.photoUrl || '',
-    photoPreviewUrl: work.photoPreviewUrl || '',
-    photoPath: work.photoPath || '',
-    photoPreviewPath: work.photoPreviewPath || '',
-    photoDataUrl: work.photoDataUrl || '',
-    photoPreviewDataUrl: work.photoPreviewDataUrl || '',
-    photoMimeType: work.photoMimeType || '',
-    photoByteSize: Number.isFinite(work.photoByteSize) ? work.photoByteSize : 0,
-    pendingPhotoDataUrl: work.pendingPhotoDataUrl || '',
-    pendingPhotoPreviewDataUrl: work.pendingPhotoPreviewDataUrl || ''
-  };
+  return globalThis.ExhibitionImageLifecycle.snapshotPhotoFields(work);
 }
 
 function applyWorkPhotoFields(work, snapshot) {
-  if (!work || typeof work !== 'object' || !snapshot) return;
-
-  work.photoName = snapshot.photoName || '';
-  work.photoUrl = snapshot.photoUrl || '';
-  work.photoPreviewUrl = snapshot.photoPreviewUrl || '';
-  work.photoPath = snapshot.photoPath || '';
-  work.photoPreviewPath = snapshot.photoPreviewPath || '';
-  work.photoDataUrl = snapshot.photoDataUrl || '';
-  work.photoPreviewDataUrl = snapshot.photoPreviewDataUrl || '';
-  work.photoMimeType = snapshot.photoMimeType || '';
-  work.photoByteSize = Number.isFinite(snapshot.photoByteSize) ? snapshot.photoByteSize : 0;
-  work.pendingPhotoDataUrl = snapshot.pendingPhotoDataUrl || '';
-  work.pendingPhotoPreviewDataUrl = snapshot.pendingPhotoPreviewDataUrl || '';
+  globalThis.ExhibitionImageLifecycle.applyPhotoFields(work, snapshot);
 }
 
 function clearPendingWorkPhotoFields(work) {
-  if (!work || typeof work !== 'object') return;
-  TRANSIENT_WORK_PHOTO_FIELDS.forEach((field) => {
-    if (field in work) {
-      work[field] = '';
-    }
-  });
+  globalThis.ExhibitionImageLifecycle.clearPendingPhotoFields(work);
 }
 
 async function verifyUploadedImageFile(uploadedFile) {
-  const url = (uploadedFile?.url || '').toString().trim();
-  if (!url) {
-    return { ok: false, status: 0, contentType: '', isImage: false };
-  }
-
-  try {
-    const response = await fetch(url, { method: 'GET' });
-    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-    return {
-      ok: response.ok && contentType.startsWith('image/'),
-      status: response.status,
-      contentType,
-      isImage: contentType.startsWith('image/')
-    };
-  } catch (error) {
-    return { ok: false, status: 0, contentType: '', isImage: false };
-  }
+  return globalThis.ExhibitionImageLifecycle.verifyUploadedImage({
+    fetchImpl: fetch,
+    uploadedFile
+  });
 }
 
-async function uploadImageDataUrl(dataUrl, fileName, retryCount = 0) {
-  const source = (dataUrl || '').toString().trim();
-  if (!source || !canUseRemoteUploadApi()) return null;
-
-  try {
-    const response = await fetch(PHOTO_UPLOAD_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        dataUrl: source,
-        filename: fileName
-      })
-    });
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok || !payload?.file?.url) {
-      throw new Error(payload?.error || 'upload-failed');
-    }
-
-    return payload.file;
-  } catch (error) {
-    if (retryCount < PHOTO_UPLOAD_MAX_RETRIES) {
-      return uploadImageDataUrl(source, fileName, retryCount + 1);
-    }
-    return null;
-  }
+async function uploadImageDataUrl(dataUrl, fileName) {
+  return globalThis.ExhibitionImageLifecycle.uploadImageDataUrl({
+    fetchImpl: fetch,
+    canUpload: canUseRemoteUploadApi(),
+    dataUrl,
+    fileName
+  });
 }
 
 async function persistWorkPhotoUrls(workId, options = {}) {
@@ -7258,41 +7160,33 @@ async function persistWorkPhotoUrls(workId, options = {}) {
     return { ok: false, reason: 'work-not-found' };
   }
 
-  const replaceExisting = options.replaceExisting !== false;
-  const fullDataUrl = (options.fullDataUrl || work.pendingPhotoDataUrl || work.photoDataUrl || '').toString().trim();
-  const previewDataUrl = (options.previewDataUrl || work.pendingPhotoPreviewDataUrl || work.photoPreviewDataUrl || '').toString().trim();
-  if (!fullDataUrl && !previewDataUrl) {
-    return { ok: false, reason: 'missing-data-url' };
-  }
+  const uploadPlan = globalThis.ExhibitionImageLifecycle.buildUploadPlan(work, {
+    ...options,
+    workId
+  });
+  if (!uploadPlan.ok) return uploadPlan;
 
   const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   pendingPhotoUploadTokens.set(workId, token);
 
-  const baseName = work.photoName || options.fileName || `work-${workId}`;
-  const previewMimeType = parseDataUrlMimeType(previewDataUrl) || parseDataUrlMimeType(fullDataUrl) || 'image/webp';
-  const fullMimeType = parseDataUrlMimeType(fullDataUrl) || previewMimeType;
-
-  const shouldUploadPreview = Boolean(previewDataUrl) && (replaceExisting || !work.photoPreviewUrl);
-  const shouldUploadFull = Boolean(fullDataUrl) && (replaceExisting || !work.photoUrl);
-
-  if (!shouldUploadPreview && !shouldUploadFull) {
+  if (uploadPlan.skipped) {
     clearPendingWorkPhotoFields(work);
     return { ok: true, skipped: true };
   }
 
-  const previewUpload = shouldUploadPreview
-    ? await uploadImageDataUrl(previewDataUrl, buildPhotoUploadFileName(baseName, 'preview', previewMimeType))
+  const previewUpload = uploadPlan.shouldUploadPreview
+    ? await uploadImageDataUrl(uploadPlan.previewDataUrl, uploadPlan.previewFileName)
     : null;
 
-  const fullUpload = shouldUploadFull
-    ? await uploadImageDataUrl(fullDataUrl, buildPhotoUploadFileName(baseName, 'full', fullMimeType))
+  const fullUpload = uploadPlan.shouldUploadFull
+    ? await uploadImageDataUrl(uploadPlan.fullDataUrl, uploadPlan.fullFileName)
     : null;
 
-  if (shouldUploadPreview && !previewUpload?.url) {
+  if (uploadPlan.shouldUploadPreview && !previewUpload?.url) {
     return { ok: false, reason: 'preview-upload-failed' };
   }
 
-  if (shouldUploadFull && !fullUpload?.url) {
+  if (uploadPlan.shouldUploadFull && !fullUpload?.url) {
     return { ok: false, reason: 'full-upload-failed' };
   }
 
@@ -7327,25 +7221,10 @@ async function persistWorkPhotoUrls(workId, options = {}) {
     return { ok: false, reason: 'latest-work-not-found' };
   }
 
-  let changed = false;
-  if (previewUpload?.url) {
-    latestWork.photoPreviewUrl = previewUpload.url;
-    latestWork.photoPreviewPath = previewUpload.pathname || '';
-    changed = true;
-  }
-
-  if (fullUpload?.url) {
-    latestWork.photoUrl = fullUpload.url;
-    latestWork.photoPath = fullUpload.pathname || '';
-    changed = true;
-  }
-
-  if (latestWork.photoPreviewDataUrl || latestWork.photoDataUrl || latestWork.pendingPhotoPreviewDataUrl || latestWork.pendingPhotoDataUrl) {
-    latestWork.photoPreviewDataUrl = '';
-    latestWork.photoDataUrl = '';
-    clearPendingWorkPhotoFields(latestWork);
-    changed = true;
-  }
+  const changed = globalThis.ExhibitionImageLifecycle.applyUploadedPhotoFields(latestWork, {
+    previewUpload,
+    fullUpload
+  });
 
   if (!changed) {
     return { ok: true, skipped: true };

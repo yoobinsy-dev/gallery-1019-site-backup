@@ -6,6 +6,7 @@ const salesModel = require('../../exhibitions/sales-model');
 const accountingProjection = require('../../exhibitions/accounting-projection');
 const exportModel = require('../../exhibitions/export-model');
 const snapshotClient = require('../../exhibitions/snapshot-client');
+const imageLifecycle = require('../../exhibitions/image-lifecycle');
 
 function loadExhibition() {
   return exposeClassicScriptFunctions('exhibition-detail.js', [
@@ -46,7 +47,8 @@ function loadExhibition() {
       ExhibitionSalesModel: salesModel,
       ExhibitionAccountingProjection: accountingProjection,
       ExhibitionExportModel: exportModel,
-      ExhibitionSnapshotClient: snapshotClient
+      ExhibitionSnapshotClient: snapshotClient,
+      ExhibitionImageLifecycle: imageLifecycle
     }
   }).exposed;
 }
@@ -116,6 +118,68 @@ test('exhibition images characterize filenames, snapshots, rollback, and transie
   assert.equal(work.pendingPhotoPreviewDataUrl, '');
   assert.equal(work.photoDataUrl, 'legacy-full');
   assert.equal(work.unknownField, 'keep');
+});
+
+test('exhibition image lifecycle preserves upload planning, application, retry, and verification', async () => {
+  const existingWork = {
+    photoName: '작품 A.jpeg',
+    photoUrl: 'existing-full',
+    photoPreviewUrl: 'existing-preview',
+    photoDataUrl: 'data:image/png;base64,FULL',
+    photoPreviewDataUrl: 'data:image/webp;base64,PREVIEW',
+    pendingPhotoDataUrl: 'pending-full',
+    pendingPhotoPreviewDataUrl: 'pending-preview',
+    unknownField: 'keep'
+  };
+  const skippedPlan = imageLifecycle.buildUploadPlan(existingWork, {
+    workId: 7,
+    replaceExisting: false
+  });
+  assert.equal(skippedPlan.skipped, true);
+  const replacePlan = imageLifecycle.buildUploadPlan(existingWork, { workId: 7 });
+  assert.equal(replacePlan.shouldUploadPreview, true);
+  assert.equal(replacePlan.shouldUploadFull, true);
+  assert.equal(replacePlan.previewFileName, '___A-preview.webp');
+  assert.equal(replacePlan.fullFileName, '___A-full.webp');
+
+  assert.equal(imageLifecycle.applyUploadedPhotoFields(existingWork, {
+    previewUpload: { url: 'new-preview', pathname: 'preview-path' },
+    fullUpload: { url: 'new-full', pathname: 'full-path' }
+  }), true);
+  assert.equal(existingWork.photoPreviewUrl, 'new-preview');
+  assert.equal(existingWork.photoUrl, 'new-full');
+  assert.equal(existingWork.photoPreviewDataUrl, '');
+  assert.equal(existingWork.photoDataUrl, '');
+  assert.equal(existingWork.pendingPhotoPreviewDataUrl, '');
+  assert.equal(existingWork.pendingPhotoDataUrl, '');
+  assert.equal(existingWork.unknownField, 'keep');
+
+  const calls = [];
+  const uploaded = await imageLifecycle.uploadImageDataUrl({
+    canUpload: true,
+    dataUrl: 'data:image/png;base64,AAAA',
+    fileName: 'work-full.png',
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      if (calls.length === 1) throw new Error('retry');
+      return { ok: true, json: async () => ({ ok: true, file: { url: 'uploaded-url' } }) };
+    }
+  });
+  assert.equal(uploaded.url, 'uploaded-url');
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].url, '/api/upload');
+  assert.deepEqual(JSON.parse(calls[1].options.body), {
+    dataUrl: 'data:image/png;base64,AAAA',
+    filename: 'work-full.png'
+  });
+  assert.deepEqual(await imageLifecycle.verifyUploadedImage({
+    uploadedFile: { url: 'uploaded-url' },
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'Image/PNG' }
+    })
+  }), { ok: true, status: 200, contentType: 'image/png', isImage: true });
 });
 
 test('certificate inputs characterize artwork fallback, ready version, date, and safe filename', () => {
