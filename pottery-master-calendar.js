@@ -898,6 +898,35 @@
 
   let weekView = null;
   let monthView = null;
+  let pointerController = null;
+
+  function getPointerController() {
+    if (!pointerController) {
+      pointerController = globalThis.MasterCalendarPointerController.create({
+        document,
+        state,
+        slotsPerDay: SLOTS_PER_DAY,
+        slotHeight: SLOT_HEIGHT,
+        resizeEdgePx: BASE_RESIZE_EDGE_PX,
+        canManageEventOccurrence,
+        getMasterPointerDaySlot,
+        getBaseRuleForSlot,
+        buildMasterEditOccupancySnapshot,
+        formatDateInput,
+        addDays,
+        slotToTime,
+        canManageEventPlacementByRole,
+        isEventPlacementAllowed,
+        getMasterEditOccupancyMap,
+        canPlaceInLane,
+        findLane,
+        resetMasterCreateState,
+        finalizeMasterCalendarEdit,
+        renderCalendar
+      });
+    }
+    return pointerController;
+  }
 
   function renderWeekCalendar(dayHeader, body, wrap) {
     if (!weekView) {
@@ -1123,196 +1152,31 @@
   }
 
   function startMasterEventEdit(event, item, dayIndex, occurrenceDate, startSlot, endSlot, lane, need, bubble) {
-    if (!event) return;
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-    if (!item) return;
-    if (!canManageEventOccurrence(item, occurrenceDate)) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    resetMasterCreateState();
-
-    const edge = item.kind === '수강' ? '' : getMasterEventResizeEdge(event, bubble);
-    const pointer = getMasterPointerDaySlot(event.clientX, event.clientY);
-
-    state.masterEdit.active = true;
-    state.masterEdit.eventId = item.id;
-    state.masterEdit.occurrenceDate = String(occurrenceDate || '');
-    state.masterEdit.mode = edge ? 'resize' : 'move';
-    state.masterEdit.edge = edge || '';
-    state.masterEdit.dayIndex = dayIndex;
-    state.masterEdit.startSlot = startSlot;
-    state.masterEdit.endSlot = endSlot;
-    state.masterEdit.duration = Math.max(1, endSlot - startSlot);
-    state.masterEdit.capacity = Math.max(1, Math.min(3, Number(item.capacity || 1)));
-    state.masterEdit.originLane = Number.isInteger(lane) ? lane : 0;
-    state.masterEdit.kind = String(item.kind || '');
-    state.masterEdit.title = String(item.title || '');
-    state.masterEdit.repeatWeekly = Boolean(item.repeatWeekly);
-    state.masterEdit.anchorOffset = pointer ? Math.max(0, pointer.slot - startSlot) : 0;
-    state.masterEdit.pointerDownX = Number(event.clientX || 0);
-    state.masterEdit.pointerDownY = Number(event.clientY || 0);
-    state.masterEdit.pointerId = event.pointerType === 'touch'
-      ? null
-      : (Number.isFinite(event.pointerId) ? Number(event.pointerId) : null);
-    state.masterEdit.touchIdentifier = event.pointerType === 'touch' && Number.isFinite(event.touchIdentifier)
-      ? Number(event.touchIdentifier)
-      : null;
-    state.masterEdit.pointerMoved = false;
-    state.masterEdit.bubbleEl = bubble;
-    state.masterEdit.occupancySnapshot = buildMasterEditOccupancySnapshot(item.id);
-    state.masterEdit.validPreview = true;
-    state.masterEdit.targetDayIndex = dayIndex;
-    state.masterEdit.targetStartSlot = startSlot;
-    state.masterEdit.targetEndSlot = endSlot;
-    state.masterEdit.targetLane = Number.isInteger(lane) ? lane : 0;
-
-    if (bubble) {
-      bubble.classList.add('editing');
-      if (state.masterEdit.pointerId !== null && typeof bubble.setPointerCapture === 'function') {
-        try {
-          bubble.setPointerCapture(state.masterEdit.pointerId);
-        } catch (_error) {
-          // Ignore capture errors for unsupported environments.
-        }
-      }
-    }
-    document.body.classList.add('is-dragging-base');
+    return getPointerController().startMasterEventEdit(event, item, dayIndex, occurrenceDate, startSlot, endSlot, lane, need, bubble);
   }
 
   function getMasterEventResizeEdge(event, bubble) {
-    if (!event || !bubble) return '';
-    const rect = bubble.getBoundingClientRect();
-    const edgePx = event.pointerType === 'touch'
-      ? Math.max(BASE_RESIZE_EDGE_PX, 14)
-      : BASE_RESIZE_EDGE_PX;
-    const y = Number(event.clientY - rect.top);
-    if (y <= edgePx) return 'start';
-    if (y >= Math.max(0, rect.height - edgePx)) return 'end';
-    return '';
+    return getPointerController().getMasterEventResizeEdge(event, bubble);
   }
 
   function handleMasterCalendarPointerMove(event) {
-    if (!state.masterEdit.active) return;
-    if (state.masterEdit.touchIdentifier !== null) return;
-    if (state.masterEdit.pointerId !== null && Number(event.pointerId) !== state.masterEdit.pointerId) return;
-    applyMasterCalendarEditMove(event?.clientX, event?.clientY, event);
+    return getPointerController().handleMasterCalendarPointerMove(event);
   }
 
   function applyMasterCalendarEditMove(clientX, clientY, sourceEvent) {
-    if (!state.masterEdit.active) return;
-    if (typeof clientX !== 'number' || typeof clientY !== 'number') return;
-    if (sourceEvent && sourceEvent.cancelable) sourceEvent.preventDefault();
-
-    if (
-      Math.abs(clientX - state.masterEdit.pointerDownX) > 3
-      || Math.abs(clientY - state.masterEdit.pointerDownY) > 3
-    ) {
-      state.masterEdit.pointerMoved = true;
-    }
-
-    const pointer = getMasterPointerDaySlot(clientX, clientY);
-    if (!pointer) return;
-
-    let nextDay = state.masterEdit.dayIndex;
-    let nextStart = state.masterEdit.startSlot;
-    let nextEnd = state.masterEdit.endSlot;
-
-    if (state.masterEdit.mode === 'move') {
-      if (state.masterEdit.kind === '수강') {
-        const classRule = getBaseRuleForSlot(pointer.day, pointer.slot);
-        if (!classRule || classRule.type !== '수업시간') {
-          state.masterEdit.validPreview = false;
-          return;
-        }
-        nextDay = pointer.day;
-        nextStart = Number(classRule.startSlot);
-        nextEnd = Number(classRule.endSlot);
-      } else {
-        nextDay = pointer.day;
-        nextStart = Math.max(0, Math.min(pointer.slot - state.masterEdit.anchorOffset, SLOTS_PER_DAY - state.masterEdit.duration));
-        nextEnd = nextStart + state.masterEdit.duration;
-      }
-    } else if (state.masterEdit.mode === 'resize') {
-      nextDay = state.masterEdit.dayIndex;
-      if (state.masterEdit.edge === 'start') {
-        nextStart = Math.max(0, Math.min(pointer.slot, state.masterEdit.endSlot - 1));
-        nextEnd = state.masterEdit.endSlot;
-      } else if (state.masterEdit.edge === 'end') {
-        nextStart = state.masterEdit.startSlot;
-        nextEnd = Math.min(SLOTS_PER_DAY, Math.max(pointer.slot + 1, state.masterEdit.startSlot + 1));
-      }
-    }
-
-    const placement = getMasterEditPlacement(nextDay, nextStart, nextEnd, {
-      preferredLane: state.masterEdit.originLane,
-      requirePreferredLane: state.masterEdit.mode === 'resize'
-    });
-    if (!placement) {
-      state.masterEdit.validPreview = false;
-      return;
-    }
-
-    state.masterEdit.validPreview = true;
-    state.masterEdit.targetDayIndex = nextDay;
-    state.masterEdit.targetStartSlot = nextStart;
-    state.masterEdit.targetEndSlot = nextEnd;
-    state.masterEdit.targetLane = placement.lane;
-    applyMasterEditPreview();
+    return getPointerController().applyMasterCalendarEditMove(clientX, clientY, sourceEvent);
   }
 
   function getMasterEditPlacement(dayIndex, startSlot, endSlot, options) {
-    const kind = state.masterEdit.kind;
-    const cap = state.masterEdit.capacity;
-    if (!kind || endSlot <= startSlot) return null;
-
-    const date = formatDateInput(addDays(state.weekStart, dayIndex));
-    const start = slotToTime(startSlot);
-    const end = slotToTime(endSlot);
-    if (!canManageEventPlacementByRole(kind, date, start, end, state.masterEdit.title)) return null;
-    if (!isEventPlacementAllowed(kind, dayIndex, startSlot, endSlot)) return null;
-
-    const occupancy = getMasterEditOccupancyMap(date);
-    const preferredLaneRaw = Number(options?.preferredLane);
-    const preferredLane = Number.isInteger(preferredLaneRaw) ? preferredLaneRaw : null;
-    const requirePreferredLane = Boolean(options?.requirePreferredLane);
-
-    if (preferredLane !== null && canPlaceInLane(occupancy, startSlot, endSlot, cap, preferredLane)) {
-      return { lane: preferredLane };
-    }
-    if (requirePreferredLane) return null;
-
-    const lane = findLane(occupancy, startSlot, endSlot, cap);
-    if (lane < 0) return null;
-    return { lane };
+    return getPointerController().getMasterEditPlacement(dayIndex, startSlot, endSlot, options);
   }
 
   function applyMasterEditPreview() {
-    const bubble = state.masterEdit.bubbleEl;
-    if (!bubble || !state.masterEdit.validPreview) return;
-
-    const dayIndex = Number(state.masterEdit.targetDayIndex);
-    const startSlot = Number(state.masterEdit.targetStartSlot);
-    const endSlot = Number(state.masterEdit.targetEndSlot);
-    const lane = Number(state.masterEdit.targetLane || 0);
-    const cap = Number(state.masterEdit.capacity || 1);
-
-    bubble.style.top = `${startSlot * SLOT_HEIGHT + 1}px`;
-    bubble.style.height = `${Math.max(SLOT_HEIGHT - 2, (endSlot - startSlot) * SLOT_HEIGHT - 2)}px`;
-    bubble.style.left = `${((dayIndex + (lane / 3)) / 7) * 100}%`;
-    bubble.style.width = `${((cap / 3) / 7) * 100}%`;
+    return getPointerController().applyMasterEditPreview();
   }
 
   function handleMasterCalendarPointerUp(event) {
-    if (!event) return;
-    if (state.masterEdit.touchIdentifier !== null) return;
-    if (state.masterEdit.active && state.masterEdit.pointerId !== null && Number(event.pointerId) !== state.masterEdit.pointerId) {
-      return;
-    }
-    finalizeMasterCalendarEdit(event.clientX, event.clientY);
+    return getPointerController().handleMasterCalendarPointerUp(event);
   }
 
   function finalizeMasterCalendarEdit(clientX, clientY) {
@@ -1404,92 +1268,27 @@
   }
 
   function handleMasterCalendarPointerCancel(event) {
-    if (!state.masterEdit.active) return;
-    if (state.masterEdit.touchIdentifier !== null) return;
-    if (state.masterEdit.pointerId !== null && Number(event?.pointerId) !== state.masterEdit.pointerId) return;
-    resetMasterEditState();
-    renderCalendar();
+    return getPointerController().handleMasterCalendarPointerCancel(event);
   }
 
   function getTrackedMasterTouch(event) {
-    const tracked = state.masterEdit.touchIdentifier;
-    if (!Number.isFinite(tracked)) return null;
-    const changed = Array.from(event?.changedTouches || []);
-    const active = Array.from(event?.touches || []);
-    const allTouches = changed.concat(active);
-    return allTouches.find((touch) => Number(touch.identifier) === Number(tracked)) || null;
+    return getPointerController().getTrackedMasterTouch(event);
   }
 
   function handleMasterCalendarTouchMove(event) {
-    if (!state.masterEdit.active) return;
-    if (state.masterEdit.touchIdentifier === null) return;
-    const touch = getTrackedMasterTouch(event);
-    if (!touch) return;
-    applyMasterCalendarEditMove(touch.clientX, touch.clientY, event);
+    return getPointerController().handleMasterCalendarTouchMove(event);
   }
 
   function handleMasterCalendarTouchEnd(event) {
-    if (!state.masterEdit.active) return;
-    if (state.masterEdit.touchIdentifier === null) return;
-    const touch = getTrackedMasterTouch(event);
-    if (touch) {
-      finalizeMasterCalendarEdit(touch.clientX, touch.clientY);
-      return;
-    }
-    finalizeMasterCalendarEdit();
+    return getPointerController().handleMasterCalendarTouchEnd(event);
   }
 
   function handleMasterCalendarTouchCancel() {
-    if (!state.masterEdit.active) return;
-    if (state.masterEdit.touchIdentifier === null) return;
-    resetMasterEditState();
-    renderCalendar();
+    return getPointerController().handleMasterCalendarTouchCancel();
   }
 
   function resetMasterEditState() {
-    const bubble = state.masterEdit.bubbleEl;
-    const pointerId = state.masterEdit.pointerId;
-    if (bubble) {
-      bubble.classList.remove('editing');
-      if (pointerId !== null && typeof bubble.hasPointerCapture === 'function' && typeof bubble.releasePointerCapture === 'function') {
-        try {
-          if (bubble.hasPointerCapture(pointerId)) {
-            bubble.releasePointerCapture(pointerId);
-          }
-        } catch (_error) {
-          // Ignore release errors for unsupported environments.
-        }
-      }
-    }
-    document.body.classList.remove('is-dragging-base');
-    state.masterEdit.active = false;
-    state.masterEdit.eventId = null;
-    state.masterEdit.occurrenceDate = '';
-    state.masterEdit.mode = '';
-    state.masterEdit.edge = '';
-    state.masterEdit.dayIndex = null;
-    state.masterEdit.startSlot = null;
-    state.masterEdit.endSlot = null;
-    state.masterEdit.duration = 1;
-    state.masterEdit.capacity = 1;
-    state.masterEdit.originLane = 0;
-    state.masterEdit.kind = '';
-    state.masterEdit.title = '';
-    state.masterEdit.repeatWeekly = false;
-    state.masterEdit.anchorOffset = 0;
-    state.masterEdit.bubbleEl = null;
-    state.masterEdit.occupancySnapshot = null;
-    state.masterEdit.validPreview = false;
-    state.masterEdit.targetDayIndex = null;
-    state.masterEdit.targetStartSlot = null;
-    state.masterEdit.targetEndSlot = null;
-    state.masterEdit.targetLane = 0;
-    state.masterEdit.pointerDownX = 0;
-    state.masterEdit.pointerDownY = 0;
-    state.masterEdit.pointerId = null;
-    state.masterEdit.touchIdentifier = null;
-    state.masterEdit.pointerMoved = false;
-    state.masterEdit.suppressClickUntil = Date.now() + 220;
+    return getPointerController().resetMasterEditState();
   }
 
   function openQuickEditEventModal(eventId, occurrenceDate) {
