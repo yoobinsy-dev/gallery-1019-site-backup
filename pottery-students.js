@@ -1382,56 +1382,26 @@
   }
 
   function loadCalendarState() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(CALENDAR_STORAGE_KEY) || '{}');
-      state.calendar.events = Array.isArray(parsed.events) ? parsed.events : [];
-      state.calendar.baseRules = Array.isArray(parsed.baseRules) ? parsed.baseRules : [];
-      state.calendar.baseRuleTimeline = Array.isArray(parsed.baseRuleTimeline)
-        ? parsed.baseRuleTimeline
-            .map((entry) => ({
-              weekKey: String(entry?.weekKey || '').trim(),
-              rules: Array.isArray(entry?.rules) ? entry.rules : []
-            }))
-            .filter((entry) => entry.weekKey)
-        : [];
-      state.calendar.baseWeekOverrides = parsed.baseWeekOverrides && typeof parsed.baseWeekOverrides === 'object'
-        ? parsed.baseWeekOverrides
-        : {};
-      state.calendar.studioUsers = Array.isArray(parsed.studioUsers) ? parsed.studioUsers : [];
-      state.calendar.classTeachingLog = Array.isArray(parsed.classTeachingLog) ? parsed.classTeachingLog : [];
-    } catch (error) {
-      state.calendar.events = [];
-      state.calendar.baseRules = [];
-      state.calendar.baseRuleTimeline = [];
-      state.calendar.baseWeekOverrides = {};
-      state.calendar.studioUsers = [];
-      state.calendar.classTeachingLog = [];
-    }
+    const parsed = globalThis.StudentsRepository.repository.loadCalendarState();
+    state.calendar.events = Array.isArray(parsed.events) ? parsed.events : [];
+    state.calendar.baseRules = Array.isArray(parsed.baseRules) ? parsed.baseRules : [];
+    state.calendar.baseRuleTimeline = Array.isArray(parsed.baseRuleTimeline)
+      ? parsed.baseRuleTimeline
+          .map((entry) => ({
+            weekKey: String(entry?.weekKey || '').trim(),
+            rules: Array.isArray(entry?.rules) ? entry.rules : []
+          }))
+          .filter((entry) => entry.weekKey)
+      : [];
+    state.calendar.baseWeekOverrides = parsed.baseWeekOverrides && typeof parsed.baseWeekOverrides === 'object'
+      ? parsed.baseWeekOverrides
+      : {};
+    state.calendar.studioUsers = Array.isArray(parsed.studioUsers) ? parsed.studioUsers : [];
+    state.calendar.classTeachingLog = Array.isArray(parsed.classTeachingLog) ? parsed.classTeachingLog : [];
   }
 
   function saveCalendarState() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(CALENDAR_STORAGE_KEY) || '{}');
-      const next = {
-        ...parsed,
-        events: state.calendar.events,
-        baseRules: state.calendar.baseRules,
-        baseRuleTimeline: state.calendar.baseRuleTimeline,
-        baseWeekOverrides: state.calendar.baseWeekOverrides,
-        studioUsers: state.calendar.studioUsers,
-        classTeachingLog: state.calendar.classTeachingLog
-      };
-      localStorage.setItem(CALENDAR_STORAGE_KEY, JSON.stringify(next));
-    } catch (error) {
-      localStorage.setItem(CALENDAR_STORAGE_KEY, JSON.stringify({
-        events: state.calendar.events,
-        baseRules: state.calendar.baseRules,
-        baseRuleTimeline: state.calendar.baseRuleTimeline,
-        baseWeekOverrides: state.calendar.baseWeekOverrides,
-        studioUsers: state.calendar.studioUsers,
-        classTeachingLog: state.calendar.classTeachingLog
-      }));
-    }
+    globalThis.StudentsRepository.repository.saveCalendarState(state.calendar);
   }
 
   function getWeekKey(date) {
@@ -1626,10 +1596,9 @@
   }
 
   function loadStudents() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      state.students = Array.isArray(parsed)
-        ? parsed.map((student) => ({
+    state.students = globalThis.StudentsRepository.repository
+      .loadStudents()
+      .map((student) => ({
             ...student,
             studentGroup: normalizeStudentGroup(student?.studentGroup),
             instructor: String(student?.instructor || '').trim(),
@@ -1648,14 +1617,10 @@
               ?? student.remainingCount
               ?? 0
             )
-          }))
-        : [];
-    } catch (error) {
-      state.students = [];
-    }
+          }));
   }
 
   function saveStudents() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.students));
+    globalThis.StudentsRepository.repository.saveStudents(state.students);
   }
 })();

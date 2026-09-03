@@ -5,6 +5,8 @@ const { cloneCalendarEvents } = require('../fixtures/calendar');
 const { exposeIifeFunctions } = require('../helpers/load-source');
 const paymentCredits = require('../../students/payment-credits');
 const calendarOccurrences = require('../../master-calendar/occurrences');
+const { createStorageAdapter } = require('../../storage/storage-adapter');
+const studentsRepository = require('../../storage/students-repository');
 const {
   buildPaymentClassGroupsLegacy,
   computeCarryOverForNewPaymentCycleLegacy,
@@ -50,6 +52,17 @@ function loadStudents(globals = {}) {
     Date: FixedDate,
     MasterCalendarOccurrences: calendarOccurrences,
     StudentPaymentCredits: paymentCredits,
+    StudentsRepository: {
+      repository: studentsRepository.createStudentsRepository(
+        createStorageAdapter({
+          storage: globals.localStorage || {
+            getItem() { return null; },
+            setItem() {},
+            removeItem() {}
+          }
+        })
+      )
+    },
     ...globals
   } }).exposed;
 }
@@ -125,6 +138,37 @@ test('students persistence characterizes malformed defaults and calendar fallbac
     'studioUsers',
     'classTeachingLog'
   ]);
+});
+
+test('students repository preserves unknown calendar roots, fallback shape, and write order', () => {
+  const values = new Map([
+    ['pottery-students-v1', '[{"id":1,"unknown":"student"}]'],
+    ['studio-calendar-state-v1', '{"events":[],"unknownRoot":"keep"}']
+  ]);
+  const writes = [];
+  const repository = studentsRepository.createStudentsRepository({
+    read(key) { return values.get(key) ?? null; },
+    write(key, value) {
+      writes.push([key, value]);
+      values.set(key, value);
+      return undefined;
+    }
+  });
+  assert.equal(repository.loadStudents()[0].unknown, 'student');
+  assert.equal(repository.loadCalendarState().unknownRoot, 'keep');
+  const calendar = {
+    events: [{ id: 2, unknown: 'event' }],
+    baseRules: [],
+    baseRuleTimeline: [],
+    baseWeekOverrides: {},
+    studioUsers: [],
+    classTeachingLog: []
+  };
+  repository.saveStudents([{ id: 1, unknown: 'student' }]);
+  repository.saveCalendarState(calendar);
+  assert.deepEqual(writes.map(([key]) => key), ['pottery-students-v1', 'studio-calendar-state-v1']);
+  assert.equal(JSON.parse(writes[1][1]).unknownRoot, 'keep');
+  assert.equal(JSON.parse(writes[1][1]).events[0].unknown, 'event');
 });
 
 test('students characterize single/weekly attendance, cancellation, ordering, and boundary dates', () => {
