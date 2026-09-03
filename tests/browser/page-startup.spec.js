@@ -338,6 +338,42 @@ test('works renderer preserves controlling body, roles, modes, and works compati
   await expect(page.locator('tr[data-work-id="900301"]')).toContainText('CHARACTERIZATION_TEST_ARTWORKS_FALLBACK');
 });
 
+test('exhibition detail shell preserves tab state, aliases, and single render behavior', async ({ page }) => {
+  await page.addInitScript(({ userId, exhibitionId }) => {
+    localStorage.setItem(`exhibition-detail-last-tab:${userId}:${exhibitionId}`, 'inventory-sales');
+  }, { userId: currentUser.id, exhibitionId: EXHIBITION_ID });
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+
+  const activeTabs = page.locator('.tab-button.active');
+  await expect(activeTabs).toHaveCount(1);
+  await expect(activeTabs).toHaveAttribute('data-tab', 'inventory-sales');
+  await expect(page.locator('#sales-search')).toHaveCount(1);
+
+  for (let index = 0; index < 3; index += 1) {
+    await page.locator('.tab-button[data-tab="exhibition-info"]').click();
+    await expect(page.locator('#tab-content .works-sales-title')).toHaveText('전시 정보');
+    await expect(activeTabs).toHaveCount(1);
+    await page.locator('.tab-button[data-tab="inventory-sales"]').click();
+    await expect(page.locator('#sales-search')).toHaveCount(1);
+    await expect(activeTabs).toHaveCount(1);
+  }
+
+  await page.evaluate(() => window.switchTab('works'));
+  await expect(activeTabs).toHaveAttribute('data-tab', 'inventory-list');
+  await expect(page.locator('#works-tbody')).toHaveCount(1);
+  const preferenceKey = `exhibition-detail-last-tab:${currentUser.id}:${EXHIBITION_ID}`;
+  expect(await page.evaluate((key) => localStorage.getItem(key), preferenceKey))
+    .toBe('inventory-list');
+
+  await page.evaluate((artist) => {
+    localStorage.setItem('currentUser', JSON.stringify(artist));
+    window.switchTab('exhibition-accounting');
+  }, artistUser);
+  await expect(activeTabs).toHaveAttribute('data-tab', 'exhibition-info');
+  await expect(page.locator('.tab-button[data-tab="exhibition-accounting"]')).toBeHidden();
+  await expect(page.locator('#tab-content .works-sales-title')).toHaveText('전시 정보');
+});
+
 test('exhibition snapshot client preserves requests, defaults, and refresh order', async ({ page }) => {
   const requests = [];
   await page.route('**/api/exhibition-snapshots*', async (route) => {
