@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 
 const { exposeClassicScriptFunctions } = require('../helpers/load-source');
 const salesModel = require('../../exhibitions/sales-model');
+const accountingProjection = require('../../exhibitions/accounting-projection');
 
 function loadExhibition() {
   return exposeClassicScriptFunctions('exhibition-detail.js', [
@@ -35,7 +36,8 @@ function loadExhibition() {
       FileReader: class FileReader {},
       Image: class Image {},
       DOMParser: class DOMParser {},
-      ExhibitionSalesModel: salesModel
+      ExhibitionSalesModel: salesModel,
+      ExhibitionAccountingProjection: accountingProjection
     }
   }).exposed;
 }

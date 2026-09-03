@@ -1685,14 +1685,11 @@ async function confirmFileUploadModal() {
 }
 
 function parseAccountingAmount(value) {
-  const n = Number(String(value ?? '').replace(/[^\d.-]/g, ''));
-  if (!Number.isFinite(n)) return 0;
-  return n;
+  return globalThis.ExhibitionAccountingProjection.parseAmount(value);
 }
 
 function formatAccountingAmount(value) {
-  const amount = parseAccountingAmount(value);
-  return `₩ ${amount.toLocaleString('ko-KR')}`;
+  return globalThis.ExhibitionAccountingProjection.formatAmount(value);
 }
 
 function escapeAccountingHtml(value) {
@@ -1732,36 +1729,12 @@ function getExhibitionExpenseItems() {
 }
 
 function getExhibitionRevenueItems() {
-  const soldWorks = ensureSoldWorksArray();
-  let artTotal = 0;
-  let goodsTotal = 0;
-
-  soldWorks.forEach((sold) => {
-    const itemType = normalizeSoldItemType(sold);
-    const unitAmount = parseAccountingAmount(sold.price);
-    const quantity = getSoldQuantityForItemType(itemType, sold.soldQuantity);
-    const rowAmount = unitAmount * quantity;
-
-    if (itemType === '굿즈') {
-      goodsTotal += rowAmount;
-    } else {
-      artTotal += rowAmount;
-    }
+  return globalThis.ExhibitionAccountingProjection.buildRevenueItems({
+    soldWorks: ensureSoldWorksArray(),
+    manualRevenueItems: getExhibitionManualRevenueItems(),
+    normalizeItemType: normalizeSoldItemType,
+    getQuantity: getSoldQuantityForItemType
   });
-
-  const manualRevenueItems = getExhibitionManualRevenueItems();
-  const manualRows = manualRevenueItems.map((item) => ({
-    id: item.id,
-    division: item.division,
-    amount: item.amount,
-    source: 'manual'
-  }));
-
-  return [
-    { id: 'art', division: '작품 판매', amount: artTotal, source: 'auto' },
-    { id: 'goods', division: '굿즈 판매', amount: goodsTotal, source: 'auto' },
-    ...manualRows
-  ];
 }
 
 function getExhibitionManualRevenueItems() {
@@ -1773,14 +1746,7 @@ function getExhibitionManualRevenueItems() {
 }
 
 function getExpenseEffectiveAmount(item, revenueTotals) {
-  if (!item) return 0;
-  if (item.code === 'commission-art') {
-    return (revenueTotals.art || 0) * 0.6;
-  }
-  if (item.code === 'commission-goods') {
-    return (revenueTotals.goods || 0) * 0.8;
-  }
-  return parseAccountingAmount(item.amount);
+  return globalThis.ExhibitionAccountingProjection.getExpenseEffectiveAmount(item, revenueTotals);
 }
 
 function buildAccountingTableRows(items, options = {}) {
@@ -1881,10 +1847,8 @@ function renderExhibitionAccounting(container) {
   const exhibition = getCurrentExhibition();
   const expenseItems = getExhibitionExpenseItems();
   const revenueItems = getExhibitionRevenueItems();
-  const revenueTotals = {
-    art: revenueItems.find((item) => item.id === 'art')?.amount || 0,
-    goods: revenueItems.find((item) => item.id === 'goods')?.amount || 0
-  };
+  const { revenueTotals, expenseTotal, revenueTotal, profitTotal } =
+    globalThis.ExhibitionAccountingProjection.buildFinanceProjection({ expenseItems, revenueItems });
 
   exhibitionDetailState.selectedExpenseIds = exhibitionDetailState.selectedExpenseIds
     .filter((id) => expenseItems.some((item) => item.id === id));
@@ -1894,10 +1858,6 @@ function renderExhibitionAccounting(container) {
     .filter((id) => revenueItems.some((item) => item.id === id));
   exhibitionDetailState.editingRevenueIds = exhibitionDetailState.editingRevenueIds
     .filter((id) => revenueItems.some((item) => item.id === id));
-
-  const expenseTotal = expenseItems.reduce((sum, item) => sum + getExpenseEffectiveAmount(item, revenueTotals), 0);
-  const revenueTotal = revenueItems.reduce((sum, item) => sum + parseAccountingAmount(item.amount), 0);
-  const profitTotal = revenueTotal - expenseTotal;
 
   container.innerHTML = `
     <div class="accounting-wrapper">
