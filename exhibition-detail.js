@@ -6724,31 +6724,19 @@ function syncWorkFromRow(work, row) {
 }
 
 function normalizeManualNumber(value) {
-  return (value || '').toString().trim().toLowerCase();
+  return globalThis.ExhibitionInventoryModel.normalizeManualNumber(value);
 }
 
 function normalizeTitle(value) {
-  return (value || '').toString().trim().toLowerCase();
+  return globalThis.ExhibitionInventoryModel.normalizeTitle(value);
 }
 
 function shouldValidateManualNumberUniqueness(work) {
-  if (!work) return false;
-  const current = normalizeManualNumber(work.manualNumber);
-  if (!current) return false;
-  if (work.wasSaved === undefined) return false;
-  if (!work.wasSaved) return true;
-  const original = normalizeManualNumber(work.editOriginalManualNumber);
-  return current !== original;
+  return globalThis.ExhibitionInventoryModel.shouldValidateManualNumberUniqueness(work);
 }
 
 function shouldValidateTitleUniqueness(work) {
-  if (!work) return false;
-  const current = normalizeTitle(work.title);
-  if (!current) return false;
-  if (work.wasSaved === undefined) return false;
-  if (!work.wasSaved) return true;
-  const original = normalizeTitle(work.editOriginalTitle);
-  return current !== original;
+  return globalThis.ExhibitionInventoryModel.shouldValidateTitleUniqueness(work);
 }
 
 function getAllInventoryWorks(exhibition) {
@@ -6760,121 +6748,23 @@ function getAllInventoryWorks(exhibition) {
 }
 
 function findSavedManualNumberConflict(work, allWorks) {
-  const targetNumber = normalizeManualNumber(work?.manualNumber);
-  if (!targetNumber) return null;
-  return allWorks.find((candidate) => {
-    if (!candidate || candidate.id === work.id) return false;
-    if (!candidate.saved) return false;
-    return normalizeManualNumber(candidate.manualNumber) === targetNumber;
-  }) || null;
+  return globalThis.ExhibitionInventoryModel.findSavedManualNumberConflict(work, allWorks);
 }
 
 function findSavedTitleConflict(work, allWorks) {
-  const targetTitle = normalizeTitle(work?.title);
-  if (!targetTitle) return null;
-  return allWorks.find((candidate) => {
-    if (!candidate || candidate.id === work.id) return false;
-    if (!candidate.saved) return false;
-    return normalizeTitle(candidate.title) === targetTitle;
-  }) || null;
+  return globalThis.ExhibitionInventoryModel.findSavedTitleConflict(work, allWorks);
 }
 
 function getBulkManualNumberConflicts(allWorks, pendingWorks) {
-  const conflictIds = new Set();
-  const pendingIds = new Set(
-    pendingWorks
-      .filter((work) => shouldValidateManualNumberUniqueness(work))
-      .map((work) => work.id)
-  );
-  const savedByNumber = new Map();
-
-  allWorks.forEach((work) => {
-    if (!work || !work.saved || pendingIds.has(work.id)) return;
-    const normalized = normalizeManualNumber(work.manualNumber);
-    if (!normalized) return;
-    if (!savedByNumber.has(normalized)) {
-      savedByNumber.set(normalized, work.id);
-    }
-  });
-
-  const pendingByNumber = new Map();
-  pendingWorks.forEach((work) => {
-    if (!shouldValidateManualNumberUniqueness(work)) return;
-    const normalized = normalizeManualNumber(work.manualNumber);
-    if (!normalized) return;
-
-    if (savedByNumber.has(normalized)) {
-      conflictIds.add(work.id);
-    }
-
-    const ids = pendingByNumber.get(normalized) || [];
-    ids.push(work.id);
-    pendingByNumber.set(normalized, ids);
-  });
-
-  pendingByNumber.forEach((ids) => {
-    if (ids.length > 1) {
-      ids.forEach((id) => conflictIds.add(id));
-    }
-  });
-
-  return conflictIds;
+  return globalThis.ExhibitionInventoryModel.getBulkManualNumberConflicts(allWorks, pendingWorks);
 }
 
 function getBulkTitleConflicts(allWorks, pendingWorks) {
-  const conflictIds = new Set();
-  const pendingIds = new Set(
-    pendingWorks
-      .filter((work) => shouldValidateTitleUniqueness(work))
-      .map((work) => work.id)
-  );
-  const savedByTitle = new Map();
-
-  allWorks.forEach((work) => {
-    if (!work || !work.saved || pendingIds.has(work.id)) return;
-    const normalized = normalizeTitle(work.title);
-    if (!normalized) return;
-    if (!savedByTitle.has(normalized)) {
-      savedByTitle.set(normalized, work.id);
-    }
-  });
-
-  const pendingByTitle = new Map();
-  pendingWorks.forEach((work) => {
-    if (!shouldValidateTitleUniqueness(work)) return;
-    const normalized = normalizeTitle(work.title);
-    if (!normalized) return;
-
-    if (savedByTitle.has(normalized)) {
-      conflictIds.add(work.id);
-    }
-
-    const ids = pendingByTitle.get(normalized) || [];
-    ids.push(work.id);
-    pendingByTitle.set(normalized, ids);
-  });
-
-  pendingByTitle.forEach((ids) => {
-    if (ids.length > 1) {
-      ids.forEach((id) => conflictIds.add(id));
-    }
-  });
-
-  return conflictIds;
+  return globalThis.ExhibitionInventoryModel.getBulkTitleConflicts(allWorks, pendingWorks);
 }
 
 function getMissingRequiredWorkFields(work) {
-  const missing = [];
-  if (!(work.manualNumber || '').toString().trim()) {
-    missing.push('manualNumber');
-  }
-  if (!(work.title || '').toString().trim()) {
-    missing.push('title');
-  }
-  if (!(work.price || '').toString().trim()) {
-    missing.push('price');
-  }
-  return missing;
+  return globalThis.ExhibitionInventoryModel.getMissingRequiredWorkFields(work);
 }
 
 function markMissingRequiredFields(row, missingFields) {
@@ -7292,31 +7182,7 @@ async function handleWorkPhotoChange(workId, event) {
 }
 
 function parseSizeParts(sizeText) {
-  const text = (sizeText || '').toString().trim();
-  if (!text) {
-    return { width: '', height: '' };
-  }
-
-  const normalized = text.replace(/\s+/g, ' ').replace(/×/g, 'x');
-  const fullMatch = normalized.match(/([\d.]+)\s*cm?\s*x\s*([\d.]+)\s*cm?/i)
-    || normalized.match(/([\d.]+)\s*x\s*([\d.]+)/i);
-  if (fullMatch) {
-    return { width: fullMatch[1] || '', height: fullMatch[2] || '' };
-  }
-
-  const widthOnlyMatch = normalized.match(/^([\d.]+)\s*cm?\s*x?\s*$/i)
-    || normalized.match(/^([\d.]+)\s*x\s*$/i);
-  if (widthOnlyMatch) {
-    return { width: widthOnlyMatch[1] || '', height: '' };
-  }
-
-  const heightOnlyMatch = normalized.match(/^x\s*([\d.]+)\s*cm?$/i)
-    || normalized.match(/^x\s*([\d.]+)$/i);
-  if (heightOnlyMatch) {
-    return { width: '', height: heightOnlyMatch[1] || '' };
-  }
-
-  return { width: '', height: '' };
+  return globalThis.ExhibitionInventoryModel.parseSizeParts(sizeText);
 }
 
 function handleWorkSizeChange(workId, part, value) {
@@ -7657,14 +7523,22 @@ function getVisibleWorks() {
 
 function getSortedWorks() {
   const exhibition = getCurrentExhibition();
-  let works = filterWorks(exhibition.works || []);
-  if (!exhibitionDetailState.workSortField) return works;
-
-  const direction = exhibitionDetailState.workSortDirection === 'desc' ? -1 : 1;
-  return [...works].sort((a, b) => {
-    const valueA = getWorkSortValue(a, exhibitionDetailState.workSortField);
-    const valueB = getWorkSortValue(b, exhibitionDetailState.workSortField);
-    return compareWorkValues(valueA, valueB, exhibitionDetailState.workSortField) * direction;
+  const soldWorkIdSet = new Set(
+    ensureSoldWorksArray()
+      .filter((item) => normalizeSoldItemType(item) === '작품')
+      .map((item) => item.workId)
+  );
+  return globalThis.ExhibitionInventoryModel.getSortedWorks({
+    works: exhibition.works || [],
+    advanced: exhibitionDetailState.workAdvanced,
+    filters: exhibitionDetailState.workFilters,
+    search: exhibitionDetailState.workSearch,
+    sortField: exhibitionDetailState.workSortField,
+    sortDirection: exhibitionDetailState.workSortDirection,
+    compareValues: compareWorkValues,
+    parseStockQuantity,
+    getGoodsSoldQuantity,
+    soldWorkIdSet
   });
 }
 
@@ -7674,39 +7548,11 @@ function getWorkSortValue(work, field) {
       .filter((item) => normalizeSoldItemType(item) === '작품')
       .map(item => item.workId)
   );
-  switch (field) {
-    case 'manualNumber':
-      return work.manualNumber || '';
-    case 'photoName':
-      return work.photoName || '';
-    case 'title':
-      return work.title || '';
-    case 'author':
-      return work.author || '';
-    case 'price':
-      return work.price || '';
-    case 'materials':
-      return work.materials || '';
-    case 'size':
-      return work.size || '';
-    case 'year':
-      return work.year || '';
-    case 'category':
-      return work.category || '';
-    case 'quantity':
-      return String(parseStockQuantity(work.quantity || 0));
-    case 'soldQuantity':
-      return String(getGoodsSoldQuantity(work.id));
-    case 'remainingQuantity': {
-      const stockQty = parseStockQuantity(work.quantity || 0);
-      const soldQty = getGoodsSoldQuantity(work.id);
-      return String(Math.max(0, stockQty - soldQty));
-    }
-    case 'status':
-      return soldWorkIdSet.has(work.id) ? 'sold' : '';
-    default:
-      return '';
-  }
+  return globalThis.ExhibitionInventoryModel.getWorkSortValue(work, field, {
+    parseStockQuantity,
+    getGoodsSoldQuantity,
+    soldWorkIdSet
+  });
 }
 
 function getSortedSoldWorks() {
@@ -7986,24 +7832,10 @@ function filterSoldWorks(soldWorks) {
 }
 
 function filterWorks(works) {
-  if (exhibitionDetailState.workAdvanced) {
-    return works.filter(work => {
-      const filters = exhibitionDetailState.workFilters;
-      return Object.keys(filters).every(key => {
-        const value = filters[key].trim().toLowerCase();
-        if (!value) return true;
-        const field = (work[key] || '').toString().toLowerCase();
-        return field.includes(value);
-      });
-    });
-  }
-
-  const search = exhibitionDetailState.workSearch.trim().toLowerCase();
-  if (!search) return works;
-
-  return works.filter(work => {
-    const text = `${work.manualNumber || ''} ${work.title || ''} ${work.author || ''} ${work.price || ''} ${work.materials || ''} ${work.size || ''} ${work.year || ''} ${work.category || ''}`.toLowerCase();
-    return text.includes(search);
+  return globalThis.ExhibitionInventoryModel.filterWorks(works, {
+    advanced: exhibitionDetailState.workAdvanced,
+    filters: exhibitionDetailState.workFilters,
+    search: exhibitionDetailState.workSearch
   });
 }
 

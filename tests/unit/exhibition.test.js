@@ -8,6 +8,7 @@ const exportModel = require('../../exhibitions/export-model');
 const snapshotClient = require('../../exhibitions/snapshot-client');
 const imageLifecycle = require('../../exhibitions/image-lifecycle');
 const certificateModel = require('../../exhibitions/certificate-model');
+const inventoryModel = require('../../exhibitions/inventory-model');
 
 function loadExhibition() {
   return exposeClassicScriptFunctions('exhibition-detail.js', [
@@ -66,7 +67,8 @@ function loadExhibition() {
       ExhibitionExportModel: exportModel,
       ExhibitionSnapshotClient: snapshotClient,
       ExhibitionImageLifecycle: imageLifecycle,
-      ExhibitionCertificateModel: certificateModel
+      ExhibitionCertificateModel: certificateModel,
+      ExhibitionInventoryModel: inventoryModel
     }
   }).exposed;
 }
@@ -538,4 +540,29 @@ test('exhibition inventory characterizes filtering, size parsing, sort values, a
   assert.deepEqual([...exhibition.getBulkManualNumberConflicts([saved, pendingA, pendingB, pendingC], [pendingA, pendingB, pendingC])].sort(), [11, 12, 13]);
   assert.deepEqual([...exhibition.getBulkTitleConflicts([saved, pendingA, pendingB, pendingC], [pendingA, pendingB, pendingC])].sort(), [11, 12, 13]);
   assert.equal(saved.manualNumber, 'A-1');
+});
+
+test('exhibition inventory model preserves sorting, goods quantities, and inputs', () => {
+  const works = [
+    { id: 1, manualNumber: 'B-2', title: 'Beta', quantity: '5', unknownField: 'keep-a' },
+    { id: 2, manualNumber: 'A-1', title: 'Alpha', quantity: '2', unknownField: 'keep-b' }
+  ];
+  const options = {
+    works,
+    advanced: false,
+    search: '',
+    sortField: 'manualNumber',
+    sortDirection: 'asc',
+    compareValues: (left, right) => String(left).localeCompare(String(right), 'en', { numeric: true }),
+    parseStockQuantity: salesModel.parseStockQuantity,
+    getGoodsSoldQuantity: (id) => id === 1 ? 3 : 4,
+    soldWorkIdSet: new Set([2])
+  };
+  assert.deepEqual(inventoryModel.getSortedWorks(options).map((work) => work.id), [2, 1]);
+  assert.equal(inventoryModel.getWorkSortValue(works[0], 'soldQuantity', options), '3');
+  assert.equal(inventoryModel.getWorkSortValue(works[0], 'remainingQuantity', options), '2');
+  assert.equal(inventoryModel.getWorkSortValue(works[1], 'remainingQuantity', options), '0');
+  assert.equal(inventoryModel.getWorkSortValue(works[1], 'status', options), 'sold');
+  assert.equal(works[0].unknownField, 'keep-a');
+  assert.equal(works[0].manualNumber, 'B-2');
 });
