@@ -338,6 +338,30 @@ test('works renderer preserves controlling body, roles, modes, and works compati
   await expect(page.locator('tr[data-work-id="900301"]')).toContainText('CHARACTERIZATION_TEST_ARTWORKS_FALLBACK');
 });
 
+test('exhibition detail grid preserves click, arrow, enter, and modal keyboard behavior', async ({ page }) => {
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.switchTab('inventory-list'));
+
+  const row = page.locator('tr[data-work-id="900101"]');
+  const cells = row.locator('td');
+  const startCell = cells.nth(2);
+  await startCell.click({ position: { x: 5, y: 5 } });
+  await expect(startCell).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(cells.nth(3)).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await expect(startCell).toBeFocused();
+
+  await page.keyboard.press('Enter');
+  await expect(row.locator('input[data-field="manualNumber"]')).toBeVisible();
+  await expect(row.locator('input[data-field="title"]')).toBeVisible();
+
+  await page.evaluate(() => window.openSalesAddModal());
+  await page.locator('#sales-add-search-input').fill('W-ARTIST');
+  await page.locator('#sales-add-search-input').press('ArrowDown');
+  await expect(page.locator('#sales-add-search-results .sales-search-result-highlighted')).toHaveCount(1);
+});
+
 test('exhibition detail shell preserves tab state, aliases, and single render behavior', async ({ page }) => {
   await page.addInitScript(({ userId, exhibitionId }) => {
     localStorage.setItem(`exhibition-detail-last-tab:${userId}:${exhibitionId}`, 'inventory-sales');
