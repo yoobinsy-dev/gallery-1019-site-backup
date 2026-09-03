@@ -56,6 +56,10 @@ function loadExhibition() {
     ,'getBulkManualNumberConflicts'
     ,'getBulkTitleConflicts'
     ,'getMissingRequiredWorkFields'
+    ,'getInventoryBackupStorageKey'
+    ,'getInventoryListCounts'
+    ,'normalizeInventoryBackupSnapshot'
+    ,'isLargeUnexpectedInventoryDrop'
   ], {
     globals: {
       atob(value) { return Buffer.from(value, 'base64').toString('binary'); },
@@ -619,4 +623,45 @@ test('exhibition inventory renderer builds saved, editable, and goods rows', () 
   });
   assert.match(goods.html, /<td>5<\/td>\s*<td>2<\/td>\s*<td>3<\/td>/);
   assert.doesNotMatch(goods.html, /openDeleteWorkModal/);
+});
+
+test('exhibition inventory backup characterizes precedence, stripping, and drop guards', () => {
+  const exhibition = loadExhibition();
+  const source = {
+    id: 12,
+    works: [{ id: 'legacy', unknownField: 'keep-legacy' }],
+    artWorks: [{ id: 'art', photoDataUrl: 'large', nested: { previewDataUrl: 'nested-large', keep: 1 } }],
+    goods: [{ id: 'goods', imageDataUrl: 'large', unknownField: 'keep-goods' }],
+    soldWorks: [{ id: 'legacy-sale' }],
+    artSoldWorks: [{ id: 'art-sale', fileDataUrl: 'large' }],
+    soldGoods: [{ id: 'goods-sale', previewDataUrl: 'large' }]
+  };
+  assert.equal(exhibition.getInventoryBackupStorageKey(12), 'exhibition-inventory-backup:12');
+  assert.equal(exhibition.getInventoryBackupStorageKey('invalid'), '');
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(exhibition.getInventoryListCounts(source))),
+    { art: 1, goods: 1, total: 2 }
+  );
+
+  const snapshot = JSON.parse(JSON.stringify(exhibition.normalizeInventoryBackupSnapshot(source)));
+  assert.deepEqual(snapshot.artWorks.map((item) => item.id), ['art']);
+  assert.deepEqual(snapshot.artSoldWorks.map((item) => item.id), ['art-sale']);
+  assert.equal(snapshot.artWorks[0].photoDataUrl, '');
+  assert.equal(snapshot.artWorks[0].nested.previewDataUrl, '');
+  assert.equal(snapshot.artWorks[0].nested.keep, 1);
+  assert.equal(snapshot.goods[0].unknownField, 'keep-goods');
+  assert.equal(source.artWorks[0].photoDataUrl, 'large');
+
+  assert.equal(exhibition.isLargeUnexpectedInventoryDrop(
+    { artWorks: Array.from({ length: 20 }, (_, id) => ({ id })) },
+    { artWorks: [] }
+  ), true);
+  assert.equal(exhibition.isLargeUnexpectedInventoryDrop(
+    { artWorks: Array.from({ length: 19 }, (_, id) => ({ id })) },
+    { artWorks: [] }
+  ), false);
+  assert.equal(exhibition.isLargeUnexpectedInventoryDrop(
+    { artWorks: Array.from({ length: 20 }, (_, id) => ({ id })) },
+    { artWorks: Array.from({ length: 6 }, (_, id) => ({ id })) }
+  ), false);
 });
