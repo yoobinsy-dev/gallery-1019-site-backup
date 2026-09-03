@@ -7,6 +7,7 @@ const model = require('../../material-orders/model');
 const rowProjection = require('../../material-orders/row-projection');
 const tableView = require('../../material-orders/table-view');
 const gridNavigation = require('../../material-orders/grid-navigation');
+const mergeController = require('../../material-orders/merge-controller');
 const { createStorageAdapter } = require('../../storage/storage-adapter');
 const materialOrdersRepository = require('../../storage/material-orders-repository');
 
@@ -21,6 +22,7 @@ function loadOrders(globals = {}) {
     PotteryMaterialOrdersRowProjection: rowProjection,
     PotteryMaterialOrdersTableView: tableView,
     PotteryMaterialOrdersGridNavigation: gridNavigation,
+    PotteryMaterialOrdersMergeController: mergeController,
     MaterialOrdersRepository: {
       repository: materialOrdersRepository.createMaterialOrdersRepository(
         createStorageAdapter({
