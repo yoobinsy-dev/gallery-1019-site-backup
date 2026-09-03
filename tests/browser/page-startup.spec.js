@@ -324,6 +324,50 @@ test('works renderer preserves controlling body, roles, modes, and works compati
   await expect(page.locator('tr[data-work-id="900301"]')).toContainText('CHARACTERIZATION_TEST_ARTWORKS_FALLBACK');
 });
 
+test('exhibition snapshot client preserves requests, defaults, and refresh order', async ({ page }) => {
+  const requests = [];
+  await page.route('**/api/exhibition-snapshots*', async (route) => {
+    const request = route.request();
+    requests.push({
+      method: request.method(),
+      url: request.url(),
+      body: request.postDataJSON?.() || null
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        snapshots: [{ id: 77, snapshot_type: 'manual', created_at: '2026-08-15T12:00:00.000Z' }],
+        canUndo: true
+      })
+    });
+  });
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+
+  await page.evaluate(() => window.fetchExhibitionBackupSnapshots());
+  expect(requests[0]).toMatchObject({ method: 'GET', body: null });
+  expect(new URL(requests[0].url).searchParams.get('exhibitionId')).toBe(String(EXHIBITION_ID));
+  expect(new URL(requests[0].url).searchParams.get('limit')).toBe('100');
+  await page.evaluate(() => window.switchTab('exhibition-backup'));
+  await expect(page.locator('#tab-content')).toContainText('#77');
+  await expect(page.locator('#tab-content')).toContainText('0');
+  await expect(page.locator('#tab-content')).toContainText('-');
+
+  await page.evaluate(() => window.createManualExhibitionSnapshot());
+  await page.evaluate(() => window.restoreExhibitionSnapshot(77));
+  await page.evaluate(() => window.undoExhibitionSnapshotRestore());
+
+  const posts = requests.filter((request) => request.method === 'POST').map((request) => request.body);
+  expect(posts).toEqual([
+    { action: 'capture-now', exhibitionId: EXHIBITION_ID, note: 'manual backup by CHARACTERIZATION_TEST_ADMIN' },
+    { action: 'restore', exhibitionId: EXHIBITION_ID, snapshotId: 77 },
+    { action: 'undo-restore', exhibitionId: EXHIBITION_ID }
+  ]);
+  expect(requests.filter((request) => request.method === 'GET')).toHaveLength(4);
+});
+
 test('exhibition exports preserve filenames and key payload cells', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
   const captureExport = async (action) => {
