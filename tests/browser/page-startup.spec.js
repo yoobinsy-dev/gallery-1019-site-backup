@@ -67,7 +67,7 @@ const exhibitions = [{
     createdByUserId: currentUser.id
   }],
   soldWorks: [
-    { id: 1, itemType: '작품', price: 250001 },
+    { id: 1, itemType: '작품', price: 250001, buyerName: 'Buyer A' },
     { id: 2, itemType: '굿즈', price: 5000, soldQuantity: 2 }
   ],
   artSoldWorks: [],
@@ -322,6 +322,43 @@ test('works renderer preserves controlling body, roles, modes, and works compati
   }, EXHIBITION_ID);
   await page.getByRole('button', { name: '작품 목록', exact: true }).click();
   await expect(page.locator('tr[data-work-id="900301"]')).toContainText('CHARACTERIZATION_TEST_ARTWORKS_FALLBACK');
+});
+
+test('exhibition exports preserve filenames and key payload cells', async ({ page }) => {
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  const captureExport = async (action) => {
+    const result = await page.evaluate(async (actionName) => {
+      const originalCreateObjectURL = URL.createObjectURL;
+      const originalClick = HTMLAnchorElement.prototype.click;
+      let blob;
+      let filename;
+      URL.createObjectURL = (value) => { blob = value; return 'blob:characterization'; };
+      HTMLAnchorElement.prototype.click = function click() { filename = this.download; };
+      try {
+        window[actionName]();
+        return { filename, text: await blob.text() };
+      } finally {
+        URL.createObjectURL = originalCreateObjectURL;
+        HTMLAnchorElement.prototype.click = originalClick;
+      }
+    }, action);
+    return result;
+  };
+
+  const worksExport = await captureExport('exportWorksToExcel');
+  expect(worksExport.filename).toBe('CHARACTERIZATION_TEST_EXHIBITION-works.xls');
+  expect(worksExport.text).toContain('CHARACTERIZATION_TEST_WORKS_PRECEDENCE');
+
+  await page.locator('.tab-button[data-tab="inventory-sales"]').click();
+  const salesExport = await captureExport('exportSalesToExcel');
+  expect(salesExport.filename).toBe('CHARACTERIZATION_TEST_EXHIBITION-sales.xls');
+  expect(salesExport.text).toContain('Buyer A');
+
+  await page.locator('.tab-button[data-tab="exhibition-accounting"]').click();
+  const accountingExport = await captureExport('exportAccountingToExcel');
+  expect(accountingExport.filename).toBe('CHARACTERIZATION_TEST_EXHIBITION-accounting.xls');
+  expect(accountingExport.text).toContain('작품 판매');
+  expect(accountingExport.text).toContain('총이익');
 });
 
 test('master calendar preserves recurrence across week and month navigation', async ({ page }) => {
