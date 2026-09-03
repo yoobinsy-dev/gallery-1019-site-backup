@@ -782,6 +782,45 @@ test('master calendar base edit preserves population, reset, save, and delete be
   })).toBe(false);
 });
 
+test('master calendar base editor preserves drag add, ghost cleanup, and undo behavior', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
+  await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+  await page.locator('#open-base-editor-btn').click();
+  await page.locator('#base-add-block-btn').click();
+  await page.locator('#base-type').selectOption('개인작업 시간');
+
+  const startCell = page.locator('.base-cell[data-day="1"][data-slot="20"]');
+  const endCell = page.locator('.base-cell[data-day="1"][data-slot="21"]');
+  await startCell.dispatchEvent('mousedown', { button: 0 });
+  await expect(page.locator('.base-add-ghost')).toHaveCount(1);
+  await endCell.dispatchEvent('mouseenter');
+  await endCell.dispatchEvent('mouseup', { button: 0 });
+  await expect(page.locator('.base-add-ghost')).toHaveCount(0);
+  await expect(page.locator('body')).not.toHaveClass(/is-dragging-base/);
+
+  const createdRules = await page.evaluate(() => {
+    const documentState = JSON.parse(localStorage.getItem('studio-calendar-state-v1') || '{}');
+    return (documentState.baseRules || []).filter((rule) => rule.type === '개인작업 시간');
+  });
+  expect(createdRules).toHaveLength(1);
+  expect(createdRules[0]).toMatchObject({
+    day: 1,
+    startSlot: 20,
+    endSlot: 22,
+    type: '개인작업 시간',
+    className: '',
+    instructor: ''
+  });
+  await expect(page.locator(`.base-cell[data-rule-id="${createdRules[0].id}"]`)).toHaveCount(2);
+
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator(`.base-cell[data-rule-id="${createdRules[0].id}"]`)).toHaveCount(0);
+  expect(await page.evaluate((ruleId) => {
+    const documentState = JSON.parse(localStorage.getItem('studio-calendar-state-v1') || '{}');
+    return (documentState.baseRules || []).some((rule) => rule.id === ruleId);
+  }, createdRules[0].id)).toBe(false);
+});
+
 test('material orders preserve grouping, editing, merge overlap, undo, keyboard focus, and export', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2025-04-15T12:00:00'));
   await page.goto('/pottery-material-orders.html', { waitUntil: 'networkidle' });
