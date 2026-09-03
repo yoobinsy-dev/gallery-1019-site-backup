@@ -5536,7 +5536,7 @@ function removeStaffMember(role, userId) {
   switchTab('staff');
 }
 
-function renderWorksManagement(container) {
+function renderLegacyWorksManagement(container) {
   const wrapper = document.createElement('div');
   wrapper.className = 'works-wrapper';
   const exhibition = getCurrentExhibition();
