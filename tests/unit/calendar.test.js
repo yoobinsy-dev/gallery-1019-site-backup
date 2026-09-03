@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const { exposeIifeFunctions } = require('../helpers/load-source');
 const dateTime = require('../../master-calendar/date-time');
 const occurrences = require('../../master-calendar/occurrences');
+const { createStorageAdapter } = require('../../storage/storage-adapter');
+const masterCalendarRepository = require('../../storage/master-calendar-repository');
 
 function loadCalendar(globals = {}) {
   return exposeIifeFunctions('pottery-master-calendar.js', [
@@ -14,6 +16,17 @@ function loadCalendar(globals = {}) {
   ], { globals: {
     MasterCalendarDateTime: dateTime,
     MasterCalendarOccurrences: occurrences,
+    MasterCalendarRepository: {
+      repository: masterCalendarRepository.createMasterCalendarRepository(
+        createStorageAdapter({
+          storage: globals.localStorage || {
+            getItem() { return null; },
+            setItem() {},
+            removeItem() {}
+          }
+        })
+      )
+    },
     ...globals
   } }).exposed;
 }
@@ -52,6 +65,29 @@ test('calendar persistence characterizes dependencies, fixed state schema, and e
   values.set('pottery-students-v1', '{malformed');
   calendar.loadStudioUsers();
   assert.deepEqual(JSON.parse(JSON.stringify(calendar.state.studioUsers)), []);
+});
+
+test('master calendar repository preserves raw fields, exact writes, and malformed errors', () => {
+  const values = new Map([
+    ['studio-calendar-state-v1', '{"events":[],"unknownRoot":"keep"}'],
+    ['pottery-students-v1', '[{"unknown":"student"}]'],
+    ['pottery-personal-work-v1', '[{"unknown":"personal"}]'],
+    ['users', '[{"unknown":"user"}]']
+  ]);
+  const writes = [];
+  const repository = masterCalendarRepository.createMasterCalendarRepository({
+    read(key) { return values.get(key) ?? null; },
+    write(key, value) { writes.push([key, value]); return undefined; }
+  });
+  assert.equal(repository.loadCalendarState().unknownRoot, 'keep');
+  assert.equal(repository.loadStudents()[0].unknown, 'student');
+  assert.equal(repository.loadPersonalWorkEntries()[0].unknown, 'personal');
+  assert.equal(repository.loadUsers()[0].unknown, 'user');
+  const stateDocument = { events: [], legacyRoot: 'keep' };
+  assert.equal(repository.saveCalendarState(stateDocument), undefined);
+  assert.deepEqual(writes, [['studio-calendar-state-v1', JSON.stringify(stateDocument)]]);
+  values.set('pottery-students-v1', '{malformed');
+  assert.throws(() => repository.loadStudents(), SyntaxError);
 });
 
 test('calendar characterizes slot conversion and clamping', () => {

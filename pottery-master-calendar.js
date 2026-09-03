@@ -2894,15 +2894,15 @@
 
   function loadStudioUsers() {
     try {
-      const rawStudents = JSON.parse(localStorage.getItem(STUDENT_STORAGE_KEY) || '[]');
-      const studentNames = (Array.isArray(rawStudents) ? rawStudents : [])
+      const rawStudents = globalThis.MasterCalendarRepository.repository.loadStudents();
+      const studentNames = rawStudents
         .map((student) => String(student?.name || '').trim())
         .filter(Boolean);
 
       let personalNames = [];
       try {
-        const rawPersonal = JSON.parse(localStorage.getItem(PERSONAL_WORK_STORAGE_KEY) || '[]');
-        personalNames = (Array.isArray(rawPersonal) ? rawPersonal : [])
+        const rawPersonal = globalThis.MasterCalendarRepository.repository.loadPersonalWorkEntries();
+        personalNames = rawPersonal
           .filter((entry) => !entry?.isDormant)
           .map((entry) => String(entry?.userName || '').trim())
           .filter(Boolean);
@@ -2919,9 +2919,9 @@
 
   function getStudentUsersForEvents() {
     try {
-      const rawStudents = JSON.parse(localStorage.getItem(STUDENT_STORAGE_KEY) || '[]');
+      const rawStudents = globalThis.MasterCalendarRepository.repository.loadStudents();
       return Array.from(new Set(
-        (Array.isArray(rawStudents) ? rawStudents : [])
+        rawStudents
           .map((student) => String(student?.name || '').trim())
           .filter(Boolean)
       )).sort((a, b) => a.localeCompare(b, 'ko'));
@@ -2932,9 +2932,9 @@
 
   function getPersonalUsersForEvents() {
     try {
-      const rawPersonal = JSON.parse(localStorage.getItem(PERSONAL_WORK_STORAGE_KEY) || '[]');
+      const rawPersonal = globalThis.MasterCalendarRepository.repository.loadPersonalWorkEntries();
       return Array.from(new Set(
-        (Array.isArray(rawPersonal) ? rawPersonal : [])
+        rawPersonal
           .filter((entry) => !entry?.isDormant)
           .map((entry) => String(entry?.userName || '').trim())
           .filter(Boolean)
@@ -2946,8 +2946,8 @@
 
   function getActivePersonalWorkEntries() {
     try {
-      const rawPersonal = JSON.parse(localStorage.getItem(PERSONAL_WORK_STORAGE_KEY) || '[]');
-      return (Array.isArray(rawPersonal) ? rawPersonal : [])
+      const rawPersonal = globalThis.MasterCalendarRepository.repository.loadPersonalWorkEntries();
+      return rawPersonal
         .filter((entry) => !entry?.isDormant)
         .map((entry) => {
           const userName = String(entry?.userName || '').trim();
@@ -3162,8 +3162,8 @@
   function loadStudioInstructors() {
     let fromUsers = [];
     try {
-      const parsedUsers = JSON.parse(localStorage.getItem('users') || '[]');
-      fromUsers = (Array.isArray(parsedUsers) ? parsedUsers : [])
+      const parsedUsers = globalThis.MasterCalendarRepository.repository.loadUsers();
+      fromUsers = parsedUsers
         .filter((user) => {
           if (!user || user.approved === false) return false;
           const access = getEffectiveSiteAccess(user);
@@ -5431,7 +5431,7 @@
   function saveState() {
     loadStudioInstructors();
     rebuildClassTeachingLog();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    globalThis.MasterCalendarRepository.repository.saveCalendarState({
       events: state.events,
       baseRules: state.baseRules,
       baseRuleTimeline: state.baseRuleTimeline,
@@ -5439,12 +5439,12 @@
       studioUsers: state.studioUsers,
       instructors: state.instructors,
       classTeachingLog: state.classTeachingLog
-    }));
+    });
   }
 
   function loadState() {
     try {
-      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      const parsed = globalThis.MasterCalendarRepository.repository.loadCalendarState();
       state.events = Array.isArray(parsed.events)
         ? parsed.events.map((event) => {
             const kind = String(event?.kind || '').trim();
