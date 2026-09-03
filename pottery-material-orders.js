@@ -40,6 +40,22 @@
     formatWonInput,
     getLineTotal
   });
+  const mainGridNavigation = globalThis.PotteryMaterialOrdersGridNavigation.create({
+    tbodyId: 'material-orders-tbody',
+    cellClass: 'orders-keyboard-grid-cell',
+    rowIdKey: 'itemId',
+    isNavigableRow: (row) => !row.querySelector('.orders-empty-row') && !row.classList.contains('orders-total-row'),
+    getAnchor: () => state.gridNavAnchor,
+    setAnchor: (anchor) => { state.gridNavAnchor = anchor; }
+  });
+  const orderLinesGridNavigation = globalThis.PotteryMaterialOrdersGridNavigation.create({
+    tbodyId: 'material-order-lines',
+    cellClass: 'orders-lines-keyboard-grid-cell',
+    rowIdKey: 'lineId',
+    isNavigableRow: (row) => !row.classList.contains('orders-total-row'),
+    getAnchor: () => state.lineGridNavAnchor,
+    setAnchor: (anchor) => { state.lineGridNavAnchor = anchor; }
+  });
 
   document.addEventListener('DOMContentLoaded', () => {
     loadOrders();
@@ -1837,38 +1853,23 @@
   }
 
   function refreshGridKeyboardNavigation() {
-    const tbody = document.getElementById('material-orders-tbody');
-    if (!tbody) return;
-
-    tbody.querySelectorAll('td').forEach((cell) => {
-      cell.classList.add('orders-keyboard-grid-cell');
-      if (!(cell instanceof HTMLTableCellElement)) return;
-      cell.tabIndex = -1;
-    });
-
+    mainGridNavigation.refresh();
     applyPendingGridFocus();
   }
 
   function refreshOrderLinesKeyboardNavigation() {
-    const tbody = document.getElementById('material-order-lines');
-    if (!tbody) return;
-
-    tbody.querySelectorAll('td').forEach((cell) => {
-      cell.classList.add('orders-lines-keyboard-grid-cell');
-      if (!(cell instanceof HTMLTableCellElement)) return;
-      cell.tabIndex = -1;
-    });
+    orderLinesGridNavigation.refresh();
   }
 
   function applyPendingGridFocus() {
     const pending = state.pendingGridFocus;
     if (!pending) return;
 
-    const cell = findGridCellByAnchor(pending);
+    const cell = mainGridNavigation.findCellByAnchor(pending);
     if (!cell) return;
 
     state.pendingGridFocus = null;
-    focusGridCell(cell, true);
+    mainGridNavigation.focusCell(cell, true);
   }
 
   function setPendingGridFocus(rowId, colIndex) {
@@ -1879,126 +1880,27 @@
   }
 
   function getGridCellFromElement(targetElement) {
-    const element = normalizeEventTarget(targetElement);
-    if (!element || typeof element.closest !== 'function') return null;
-    const cell = element.closest('td');
-    if (!(cell instanceof HTMLTableCellElement)) return null;
-    const tbody = cell.closest('tbody');
-    if (!tbody || tbody.id !== 'material-orders-tbody') return null;
-    return cell;
+    return mainGridNavigation.getCellFromElement(targetElement);
   }
 
   function updateGridNavAnchorFromCell(cell) {
-    if (!cell) return;
-    const row = cell.closest('tr');
-    if (!row) return;
-    const cells = Array.from(row.querySelectorAll('td'));
-    const colIndex = cells.indexOf(cell);
-    if (colIndex < 0) return;
-
-    state.gridNavAnchor = {
-      rowId: String(row.dataset.itemId || ''),
-      colIndex
-    };
-  }
-
-  function findGridCellByAnchor(anchor) {
-    if (!anchor) return null;
-    const tbody = document.getElementById('material-orders-tbody');
-    if (!tbody) return null;
-
-    const rows = Array.from(tbody.querySelectorAll('tr'));
-    const row = rows.find((entry) => String(entry.dataset.itemId || '') === String(anchor.rowId || ''));
-    if (!row) return null;
-
-    const cells = Array.from(row.querySelectorAll('td'));
-    if (cells.length === 0) return null;
-
-    const boundedCol = Math.max(0, Math.min(Number(anchor.colIndex) || 0, cells.length - 1));
-    return cells[boundedCol] || null;
+    mainGridNavigation.updateAnchorFromCell(cell);
   }
 
   function getCurrentGridCell(targetElement) {
-    const directCell = getGridCellFromElement(targetElement);
-    if (directCell) return directCell;
-    return findGridCellByAnchor(state.gridNavAnchor);
-  }
-
-  function getGridRowsFromCell(cell) {
-    const tbody = cell?.closest('tbody');
-    if (!tbody) return [];
-    return Array.from(tbody.querySelectorAll('tr')).filter((row) => row.querySelectorAll('td').length > 0 && !row.querySelector('.orders-empty-row') && !row.classList.contains('orders-total-row'));
+    return mainGridNavigation.getCurrentCell(targetElement);
   }
 
   function getAdjacentGridCell(cell, key) {
-    const row = cell?.closest('tr');
-    if (!row) return null;
-
-    const rows = getGridRowsFromCell(cell);
-    const rowIndex = rows.indexOf(row);
-    if (rowIndex === -1) return null;
-
-    const cells = Array.from(row.querySelectorAll('td'));
-    const colIndex = cells.indexOf(cell);
-    if (colIndex === -1) return null;
-
-    if (key === 'ArrowLeft' || key === 'ArrowRight') {
-      const nextCol = key === 'ArrowLeft' ? colIndex - 1 : colIndex + 1;
-      if (nextCol < 0 || nextCol >= cells.length) return null;
-      return cells[nextCol] || null;
-    }
-
-    const nextRowIndex = key === 'ArrowUp' ? rowIndex - 1 : rowIndex + 1;
-    if (nextRowIndex < 0 || nextRowIndex >= rows.length) return null;
-
-    const nextRowCells = Array.from(rows[nextRowIndex].querySelectorAll('td'));
-    if (nextRowCells.length === 0) return null;
-    return nextRowCells[Math.min(colIndex, nextRowCells.length - 1)] || null;
+    return mainGridNavigation.getAdjacentCell(cell, key);
   }
 
   function focusGridCell(cell, focusEntryControl) {
-    if (!cell) return;
-
-    const tbody = cell.closest('tbody');
-    if (tbody) {
-      tbody.querySelectorAll('td.orders-keyboard-grid-cell').forEach((entry) => {
-        if (entry instanceof HTMLTableCellElement) {
-          entry.tabIndex = -1;
-        }
-      });
-    }
-
-    cell.tabIndex = 0;
-    updateGridNavAnchorFromCell(cell);
-
-    if (focusEntryControl) {
-      const control = cell.querySelector('input, select, textarea, button');
-      if (control && typeof control.focus === 'function') {
-        control.focus();
-        return;
-      }
-    }
-
-    cell.focus();
+    mainGridNavigation.focusCell(cell, focusEntryControl);
   }
 
   function selectEditableTextInCell(cell) {
-    if (!cell) return;
-    const control = cell.querySelector('input:not([type="checkbox"]), textarea');
-    if (!control) return;
-
-    try {
-      control.focus();
-      if (control instanceof HTMLTextAreaElement) {
-        control.select();
-        return;
-      }
-      if (control instanceof HTMLInputElement) {
-        control.select();
-      }
-    } catch (error) {
-      // Some input types (for example date) may not support select().
-    }
+    mainGridNavigation.selectEditableText(cell);
   }
 
   function startCellEditFromEnter(cell) {
@@ -2034,107 +1936,23 @@
   }
 
   function getOrderLinesGridCellFromElement(targetElement) {
-    const element = normalizeEventTarget(targetElement);
-    if (!element || typeof element.closest !== 'function') return null;
-    const cell = element.closest('td');
-    if (!(cell instanceof HTMLTableCellElement)) return null;
-    const tbody = cell.closest('tbody');
-    if (!tbody || tbody.id !== 'material-order-lines') return null;
-    return cell;
+    return orderLinesGridNavigation.getCellFromElement(targetElement);
   }
 
   function updateOrderLinesGridNavAnchorFromCell(cell) {
-    if (!cell) return;
-    const row = cell.closest('tr');
-    if (!row) return;
-
-    const cells = Array.from(row.querySelectorAll('td'));
-    const colIndex = cells.indexOf(cell);
-    if (colIndex < 0) return;
-
-    state.lineGridNavAnchor = {
-      rowId: String(row.dataset.lineId || ''),
-      colIndex
-    };
-  }
-
-  function findOrderLinesGridCellByAnchor(anchor) {
-    if (!anchor) return null;
-    const tbody = document.getElementById('material-order-lines');
-    if (!tbody) return null;
-
-    const rows = Array.from(tbody.querySelectorAll('tr'));
-    const row = rows.find((entry) => String(entry.dataset.lineId || '') === String(anchor.rowId || ''));
-    if (!row) return null;
-
-    const cells = Array.from(row.querySelectorAll('td'));
-    if (cells.length === 0) return null;
-    const boundedCol = Math.max(0, Math.min(Number(anchor.colIndex) || 0, cells.length - 1));
-    return cells[boundedCol] || null;
+    orderLinesGridNavigation.updateAnchorFromCell(cell);
   }
 
   function getCurrentOrderLinesGridCell(targetElement) {
-    const directCell = getOrderLinesGridCellFromElement(targetElement);
-    if (directCell) return directCell;
-    return findOrderLinesGridCellByAnchor(state.lineGridNavAnchor);
-  }
-
-  function getOrderLinesGridRowsFromCell(cell) {
-    const tbody = cell?.closest('tbody');
-    if (!tbody) return [];
-    return Array.from(tbody.querySelectorAll('tr')).filter((row) => row.querySelectorAll('td').length > 0 && !row.classList.contains('orders-total-row'));
+    return orderLinesGridNavigation.getCurrentCell(targetElement);
   }
 
   function getAdjacentOrderLinesGridCell(cell, key) {
-    const row = cell?.closest('tr');
-    if (!row) return null;
-
-    const rows = getOrderLinesGridRowsFromCell(cell);
-    const rowIndex = rows.indexOf(row);
-    if (rowIndex === -1) return null;
-
-    const cells = Array.from(row.querySelectorAll('td'));
-    const colIndex = cells.indexOf(cell);
-    if (colIndex === -1) return null;
-
-    if (key === 'ArrowLeft' || key === 'ArrowRight') {
-      const nextCol = key === 'ArrowLeft' ? colIndex - 1 : colIndex + 1;
-      if (nextCol < 0 || nextCol >= cells.length) return null;
-      return cells[nextCol] || null;
-    }
-
-    const nextRowIndex = key === 'ArrowUp' ? rowIndex - 1 : rowIndex + 1;
-    if (nextRowIndex < 0 || nextRowIndex >= rows.length) return null;
-
-    const nextRowCells = Array.from(rows[nextRowIndex].querySelectorAll('td'));
-    if (nextRowCells.length === 0) return null;
-    return nextRowCells[Math.min(colIndex, nextRowCells.length - 1)] || null;
+    return orderLinesGridNavigation.getAdjacentCell(cell, key);
   }
 
   function focusOrderLinesGridCell(cell, focusEntryControl) {
-    if (!cell) return;
-
-    const tbody = cell.closest('tbody');
-    if (tbody) {
-      tbody.querySelectorAll('td.orders-lines-keyboard-grid-cell').forEach((entry) => {
-        if (entry instanceof HTMLTableCellElement) {
-          entry.tabIndex = -1;
-        }
-      });
-    }
-
-    cell.tabIndex = 0;
-    updateOrderLinesGridNavAnchorFromCell(cell);
-
-    if (focusEntryControl) {
-      const control = cell.querySelector('input, select, textarea, button');
-      if (control && typeof control.focus === 'function') {
-        control.focus();
-        return;
-      }
-    }
-
-    cell.focus();
+    orderLinesGridNavigation.focusCell(cell, focusEntryControl);
   }
 
   function handleOrderLinesGridKeyboardNavigation(event) {
