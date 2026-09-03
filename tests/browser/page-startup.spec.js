@@ -530,6 +530,38 @@ test('material orders preserve grouping, editing, merge overlap, undo, keyboard 
   expect(csv).toContain('"2","2025-04-01","기타","중앙도재","Tool C"');
 });
 
+test('material orders modal preserves lifecycle and single listener behavior', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2025-04-15T12:00:00'));
+  await page.goto('/pottery-material-orders.html', { waitUntil: 'networkidle' });
+
+  const modal = page.locator('#material-order-modal');
+  const lines = page.locator('#material-order-lines .order-line-row');
+  const openButton = page.locator('#order-add-btn');
+
+  await openButton.click();
+  await expect(modal).toHaveClass(/is-open/);
+  await expect(page.locator('#material-order-date')).toHaveValue('2025-04-15');
+  await expect(lines).toHaveCount(1);
+  await page.locator('#add-order-line-btn').click();
+  await expect(lines).toHaveCount(2);
+  await page.locator('#close-order-modal-btn').click();
+  await expect(modal).not.toHaveClass(/is-open/);
+
+  await openButton.click();
+  await expect(lines).toHaveCount(1);
+  await page.locator('#add-order-line-btn').click();
+  await expect(lines).toHaveCount(2);
+
+  await lines.nth(0).locator('.js-new-product').fill('CHARACTERIZATION_TEST_NEW_CLAY');
+  await lines.nth(1).locator('.js-new-product').fill('CHARACTERIZATION_TEST_NEW_GLAZE');
+  await page.locator('#material-order-form').evaluate((form) => form.requestSubmit());
+
+  await expect(modal).not.toHaveClass(/is-open/);
+  await expect(page.locator('tr[data-item-id]')).toHaveCount(5);
+  await expect(page.getByText('CHARACTERIZATION_TEST_NEW_CLAY', { exact: true })).toHaveCount(1);
+  await expect(page.getByText('CHARACTERIZATION_TEST_NEW_GLAZE', { exact: true })).toHaveCount(1);
+});
+
 test('certificate generation resolves synthetic Blob-backed art and produces a valid XLSX archive', async ({ page }) => {
   const blobUrl = 'https://characterization-test.public.blob.vercel-storage.com/exhibition-images/900001/full/test.png';
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nVQAAAAASUVORK5CYII=', 'base64');
