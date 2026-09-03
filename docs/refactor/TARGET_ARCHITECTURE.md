@@ -118,6 +118,24 @@ tests/
 
 The first implementation stages may use root-level classic scripts such as `shared/date-time.js` if introducing `src/` would require a bundler or route change. Architecture is defined by dependency direction and contract, not directory aesthetics. Move entry files only when HTML-loading tests and deployment path checks exist.
 
+### Actual post-Batch-5 layout
+
+The implementation retained root-level HTML/page orchestrators and added ordered classic-script modules under these directories:
+
+```text
+accounting/          pure auto-entry, finance, and export models
+exhibitions/         sales, accounting, export, snapshot, image, certificate, and inventory modules
+master-calendar/     date/occurrence, occupancy, and command modules
+personal-work/       cycle and row projections
+students/            payment-credit and detail projections
+storage/             storage adapter and page/domain repositories
+sync/                protocol, push model, and reconciliation policy
+api/_lib/            state services, reporting, repositories, HTTP, snapshot, and image adapters
+tests/               unit, API, browser, E2E, fixtures, and helpers
+```
+
+This is the approved transitional realization of the dependency rule. A physical move under `src/`, ES-module conversion, or bundler introduction remains deferred because it would change script loading, cache paths, and deployment composition without improving the already explicit responsibility boundaries.
+
 The tree above is provisional. A filename such as `sync-events.js`, `html-escape.js`, or a tiny policy module should exist separately only when it has a meaningful reusable or independently testable contract. Otherwise, colocate that behavior with its cohesive owner. Combining responsibilities into one module is acceptable when they change together and share one contract; creating one file per helper is not a goal.
 
 ## Module contracts

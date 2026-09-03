@@ -10,6 +10,17 @@ Every record states: rank, symbol, file/span, environment, size, responsibility,
 
 Every implemented candidate requires a before/after extraction record. The before record lists its current responsibilities, globals, state, side effects, callers, and observable outputs. The after record names the extracted functions and destination, explicit inputs/outputs, remaining effects, and the responsibilities left in the page or handler. Acceptance requires fewer hidden dependencies and parity evidence; moving the same large function behind a forwarding wrapper does not qualify.
 
+## Post-Batch-5 status
+
+The ranked records below preserve the original planning baseline, so their line spans and proposed boundaries are not a current source inventory. Implemented outcomes include:
+
+- `/api/state` is now an 868-line dispatch/orchestration entrypoint backed by `state-read-service.js`, `state-write-service.js`, `state-delete-service.js`, and `state-decision-reporter.js`.
+- `cloud-sync.js` is now a 662-line effectful orchestrator. Protocol activation, push modeling, and pull reconciliation are in the three pure modules under `sync/`; transport, storage interception, metadata, conflict recovery, readiness, and events intentionally remain together.
+- Calendar date/occurrence, occupancy, and command planning are in `master-calendar/` and are consumed by the calendar and downstream accounting/student/personal-work projections.
+- Student payment credit and detail projections, personal-work cycles/rows, accounting projections/exports, exhibition sales/accounting/export/snapshot/image/certificate/inventory behavior, and page storage repositories have been extracted into the corresponding root-level domain directories.
+
+Current file paths, script load order, and test evidence supersede the approximate baseline spans below. The compatibility warnings, especially duplicate/legacy representations and side-effect boundaries, remain applicable.
+
 ## Ranked candidates
 
 ### 1. `/api/state` handler

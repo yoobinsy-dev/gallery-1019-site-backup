@@ -15,6 +15,7 @@ sequenceDiagram
   participant Page
   participant Local as localStorage
   participant Sync as cloud-sync.js
+  participant Reconcile as sync/cloud-sync-reconciliation.js
   participant API as /api/state
   participant DB as Postgres
   Page->>Sync: wait for readiness
@@ -22,7 +23,8 @@ sequenceDiagram
   API->>DB: read values and updated_at
   DB-->>API: rows
   API-->>Sync: 200 transfer-safe data/meta/ETag or 304
-  Sync->>Sync: compare metadata and apply per-key merge policy
+  Sync->>Reconcile: evaluate pure per-key merge policy
+  Reconcile-->>Sync: merged value and preference decisions
   Sync->>Local: native setItem while remote-apply guard is active
   Sync-->>Page: cloud-sync:state-applied(keys)
   Page->>Local: load/normalize
@@ -37,13 +39,16 @@ sequenceDiagram
   participant Page
   participant Local as localStorage
   participant Sync as cloud-sync.js
+  participant Model as sync/cloud-sync-model.js
   participant API as /api/state
   participant DB as Postgres
   User->>Page: edit/save action
   Page->>Page: mutate page state and compatibility fields
   Page->>Local: setItem(key, serialized value)
   Local->>Sync: intercepted mutation
-  Sync->>Sync: build delta/full payload and debounce
+  Sync->>Model: build signature, delta, and transfer-safe payload
+  Model-->>Sync: modeled push command data
+  Sync->>Sync: debounce and attach protocol metadata
   Sync->>API: PUT key/value/baseUpdatedAt/syncMode
   API->>API: validate, merge, enforce safeguards
   API->>DB: write state + audit decision/alert
@@ -53,6 +58,8 @@ sequenceDiagram
 ```
 
 There is no browser transaction spanning page memory, local storage, network, and Postgres. Existing undo/backups/snapshots are feature-specific compensating mechanisms.
+
+In these diagrams, `Sync` is the effectful `cloud-sync.js` orchestrator, `Model` is `sync/cloud-sync-model.js`, and `Reconcile` is `sync/cloud-sync-reconciliation.js`. The seven-key and pathname activation contract is owned by `sync/cloud-sync-protocol.js`. The ordered classic-script boundary is part of runtime composition.
 
 ## Authentication and users
 
@@ -138,7 +145,7 @@ Parallel payment fields are compatibility and audit history. Their precedence an
 - **Authority:** `pottery-material-orders-v1`; product options include local-only cache behavior.
 - **Edit path:** row/grid events update edit buffers, line items, group discounts/shipping, manual merge metadata, and undo snapshots before saving orders.
 - **Render path:** order/item hierarchy becomes rows with computed rowspans/colspans; manual cell merges alter DOM after render.
-- **Sync path:** cloud sync has a material-order-specific identity/timestamp/item merge before local application.
+- **Sync path:** the pure reconciliation module applies the material-order-specific identity/timestamp/item merge; the cloud-sync orchestrator owns local application and any repair push.
 - **Output:** table projection and spreadsheet/CSV download.
 
 Visual cell merging is not the same as business item grouping. Keep DOM merge extraction separate from order calculations.

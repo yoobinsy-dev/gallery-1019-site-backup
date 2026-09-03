@@ -2,9 +2,19 @@
 
 ## Current state
 
-The repository has no conventional automated test files, test directories, test script, test framework, browser automation dependency, or coverage tooling. Existing `tmp/` scripts and reports are operational migration/recovery/verification evidence. They should inform fixtures and runbooks but must not be relabeled as a maintained suite.
+Stage 0 and Batches 1-5 established a maintained automated suite under `tests/unit/`, `tests/api/`, `tests/browser/`, and `tests/e2e/`, with shared fixtures/helpers and fail-closed mutable-target guards. The final Batch 5 baseline is 122/122 Node unit/API tests and 24/24 Chromium tests.
 
-No structural refactor should begin until Stage 0 tests run locally against fixtures with no production credentials. Tests must default to in-memory/fake adapters or an isolated disposable development database.
+Current commands are:
+
+```text
+npm test              Node unit and API suites
+npm run test:unit     Node unit suite
+npm run test:api      Node API suite
+npm run test:browser  Playwright browser suite
+npm run test:all      Node/API followed by browser
+```
+
+The `test:dev:*` commands and additional scripts under `tests/e2e/` target only the isolated DEV project and use synthetic reversible fixtures. Operational files under `tmp/` remain supporting evidence rather than the maintained regression suite. Production identities and write-enabled archive configurations are rejected before mutable setup.
 
 ## Recommended harness
 
@@ -14,18 +24,19 @@ No structural refactor should begin until Stage 0 tests run locally against fixt
 - **Visual checks:** Playwright screenshots at representative desktop/mobile viewports for high-change pages.
 - **Coverage:** use Node coverage after seams exist; do not use a percentage alone as a gate.
 
-Suggested scripts:
+Implemented scripts:
 
 ```json
 {
-  "test": "node --test tests/unit tests/api",
-  "test:browser": "node --test tests/browser",
-  "test:e2e": "playwright test",
-  "test:all": "npm test && npm run test:browser && npm run test:e2e"
+  "test": "node --test tests/unit/*.test.js tests/api/*.test.js",
+  "test:unit": "node --test tests/unit/*.test.js",
+  "test:api": "node --test tests/api/*.test.js",
+  "test:browser": "playwright test",
+  "test:all": "npm test && npm run test:browser"
 }
 ```
 
-Exact scripts are an implementation decision for Stage 0. The test process must fail if production URLs or owner/migration database credentials are present.
+DEV E2E commands remain explicit because they require linked-project environment injection and cleanup verification. The test process fails closed when production URLs/resources, undocumented development identities, or owner/migration credentials are detected.
 
 ## Stage 0 acceptance gate
 
