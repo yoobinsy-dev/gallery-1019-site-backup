@@ -7,9 +7,13 @@ const personalWorkCycles = require('../../personal-work/cycles');
 const legacyCycles = require('../fixtures/personal-work-cycles-legacy');
 const calendarOccurrences = require('../../master-calendar/occurrences');
 
-function loadPersonalWork() {
+function loadPersonalWork(globals = {}) {
   return exposeIifeFunctions('pottery-personal-work.js', [
     'state',
+    'loadUsers',
+    'loadCalendarEvents',
+    'loadEntries',
+    'saveEntries',
     'collectPersonalWorkUsageRows',
     'getCycleUsageHours',
     'getCurrentCycleRange',
@@ -20,9 +24,46 @@ function loadPersonalWork() {
     'roundHour'
   ], { globals: {
     MasterCalendarOccurrences: calendarOccurrences,
-    PersonalWorkCycles: personalWorkCycles
+    PersonalWorkCycles: personalWorkCycles,
+    ...globals
   } }).exposed;
 }
+
+test('personal work persistence characterizes dependencies, defaults, and exact writes', () => {
+  const values = new Map([
+    ['users', JSON.stringify([
+      { name: 'Artist', accountType: '작가', siteAccess: 'pottery' },
+      { name: 'Student', accountType: '수강생', siteAccess: 'pottery' }
+    ])],
+    ['studio-calendar-state-v1', JSON.stringify({ events: [{ id: 1, unknown: 'event' }], unknownRoot: true })],
+    ['pottery-personal-work-v1', JSON.stringify([{
+      id: 'pw-1', userName: 'Artist', startDate: '2026-08-01', maxHours: 3,
+      monthlyFee: 100000, paymentHistory: ['2026-08-01'], unknownEntry: 'drop'
+    }])]
+  ]);
+  const writes = [];
+  const personal = loadPersonalWork({
+    localStorage: {
+      getItem(key) { return values.get(key) ?? null; },
+      setItem(key, value) { writes.push([key, value]); return undefined; }
+    }
+  });
+  personal.loadUsers();
+  personal.loadCalendarEvents();
+  personal.loadEntries();
+  assert.deepEqual(JSON.parse(JSON.stringify(personal.state.users)), ['Artist']);
+  assert.equal(personal.state.calendarEvents[0].unknown, 'event');
+  assert.equal(personal.state.entries[0].unknownEntry, undefined);
+  assert.equal(personal.saveEntries(), undefined);
+  assert.deepEqual(writes, [['pottery-personal-work-v1', JSON.stringify(personal.state.entries)]]);
+
+  values.set('pottery-personal-work-v1', '{malformed');
+  values.set('studio-calendar-state-v1', '{malformed');
+  personal.loadEntries();
+  personal.loadCalendarEvents();
+  assert.deepEqual(JSON.parse(JSON.stringify(personal.state.entries)), []);
+  assert.deepEqual(JSON.parse(JSON.stringify(personal.state.calendarEvents)), []);
+});
 
 test('personal work characterizes month-end cycles, invalid legacy anchors, and payment history', () => {
   const personal = loadPersonalWork();
