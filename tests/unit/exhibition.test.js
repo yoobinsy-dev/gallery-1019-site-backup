@@ -7,6 +7,7 @@ const accountingProjection = require('../../exhibitions/accounting-projection');
 const exportModel = require('../../exhibitions/export-model');
 const snapshotClient = require('../../exhibitions/snapshot-client');
 const imageLifecycle = require('../../exhibitions/image-lifecycle');
+const certificateModel = require('../../exhibitions/certificate-model');
 
 function loadExhibition() {
   return exposeClassicScriptFunctions('exhibition-detail.js', [
@@ -52,7 +53,8 @@ function loadExhibition() {
       ExhibitionAccountingProjection: accountingProjection,
       ExhibitionExportModel: exportModel,
       ExhibitionSnapshotClient: snapshotClient,
-      ExhibitionImageLifecycle: imageLifecycle
+      ExhibitionImageLifecycle: imageLifecycle,
+      ExhibitionCertificateModel: certificateModel
     }
   }).exposed;
 }
@@ -233,6 +235,33 @@ test('certificate model characterizes artwork source, Instagram, batch filename,
     toRow: 59,
     toRowOff: 47625
   });
+});
+
+test('certificate model projects workbook fields and worksheet dimensions', () => {
+  assert.deepEqual(certificateModel.buildCertificateFields(
+    { author: 'Sold Artist', title: 'Sold Title', soldAtKst: '2026-08-15 12:00:00', photoName: 'sold.png' },
+    { author: 'Work Artist', title: 'Work Title', materials: 'Clay', size: '10 x 20', year: 2026, photoName: 'work.png' },
+    ' @artist '
+  ), {
+    artist: 'Work Artist',
+    title: 'Work Title',
+    materials: 'Clay',
+    size: '10 x 20',
+    year: '2026',
+    edition: '',
+    soldDate: '2026.08.15',
+    photoText: 'work.png',
+    artistInstagram: '@artist'
+  });
+  const metrics = certificateModel.parseWorksheetMetrics(
+    '<worksheet><sheetFormatPr defaultColWidth="8" defaultRowHeight="15"/>'
+      + '<cols><col min="3" max="3" width="10"/></cols>'
+      + '<sheetData><row r="5" ht="30"></row></sheetData></worksheet>'
+  );
+  assert.equal(metrics.getColumnWidthPx(2), 70);
+  assert.equal(metrics.getColumnWidthPx(3), 56);
+  assert.equal(metrics.getRowHeightPx(4), 40);
+  assert.equal(metrics.getRowHeightPx(5), 20);
 });
 
 test('exhibition sales characterize source compatibility, quantity, filtering, sorting, and summaries', () => {

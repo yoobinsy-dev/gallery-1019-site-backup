@@ -3728,25 +3728,19 @@ function getCertificateTemplateArrayBuffer() {
 }
 
 function getSourceArtworkForSold(sold) {
-  const exhibition = getCurrentExhibition();
-  const artWorks = Array.isArray(exhibition.artWorks) ? exhibition.artWorks : (Array.isArray(exhibition.works) ? exhibition.works : []);
-  return artWorks.find((work) => work.id === sold.workId) || null;
+  return globalThis.ExhibitionCertificateModel.getSourceArtwork(getCurrentExhibition(), sold);
 }
 
 function hasGeneratedCertificate(sold) {
-  return !!(sold && sold.certificateReady === true && sold.certificateVersion === 2);
+  return globalThis.ExhibitionCertificateModel.hasGeneratedCertificate(sold);
 }
 
 function normalizeCertificateDateText(soldAtKst) {
-  const text = (soldAtKst || '').toString().trim();
-  const m = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return text;
-  return `${m[1]}.${m[2]}.${m[3]}`;
+  return globalThis.ExhibitionCertificateModel.normalizeCertificateDateText(soldAtKst);
 }
 
 function safeCertificateFileName(baseTitle) {
-  const clean = String(baseTitle || '작품').replace(/[\\/:*?"<>|]/g, '_').trim() || '작품';
-  return `${clean}-보증서.xlsx`;
+  return globalThis.ExhibitionCertificateModel.safeCertificateFileName(baseTitle);
 }
 
 function getPhotoPreviewDataUrl(item) {
@@ -3873,92 +3867,8 @@ async function buildCertificatePngBytesFromDataUrl(imageDataUrl) {
   };
 }
 
-const EMU_PER_PIXEL = 9525;
-
-function excelColumnWidthToPixels(width) {
-  const w = Number(width);
-  if (!Number.isFinite(w) || w <= 0) return 64;
-  return Math.floor(((256 * w + Math.floor(128 / 7)) / 256) * 7);
-}
-
-function excelRowHeightToPixels(heightPt) {
-  const h = Number(heightPt);
-  if (!Number.isFinite(h) || h <= 0) return 20;
-  return Math.floor(h * 96 / 72);
-}
-
 function parseWorksheetMetrics(sheetXml) {
-  const defaultColWidthMatch = sheetXml.match(/defaultColWidth="([\d.]+)"/);
-  const defaultRowHeightMatch = sheetXml.match(/defaultRowHeight="([\d.]+)"/);
-  const defaultColWidth = Number(defaultColWidthMatch?.[1] || 8.43);
-  const defaultRowHeight = Number(defaultRowHeightMatch?.[1] || 15);
-
-  const colRanges = [];
-  const colTagMatches = sheetXml.match(/<col\b[^>]*\/>/g) || [];
-  colTagMatches.forEach((tag) => {
-    const min = Number((tag.match(/\bmin="(\d+)"/) || [])[1] || 0);
-    const max = Number((tag.match(/\bmax="(\d+)"/) || [])[1] || 0);
-    const width = Number((tag.match(/\bwidth="([\d.]+)"/) || [])[1] || defaultColWidth);
-    if (!min || !max) return;
-    colRanges.push({ min, max, width });
-  });
-
-  const rowHeightByIndex = new Map();
-  const rowTagRegex = /<row\b([^>]*)>/g;
-  let rowMatch;
-  while ((rowMatch = rowTagRegex.exec(sheetXml))) {
-    const attrs = rowMatch[1] || '';
-    const rowNumber = Number((attrs.match(/\br="(\d+)"/) || [])[1] || 0);
-    const rowHeight = Number((attrs.match(/\bht="([\d.]+)"/) || [])[1] || 0);
-    if (!rowNumber || !Number.isFinite(rowHeight) || rowHeight <= 0) continue;
-    rowHeightByIndex.set(rowNumber - 1, rowHeight);
-  }
-
-  function getColumnWidthPx(colIndexZeroBased) {
-    const colIndex1Based = colIndexZeroBased + 1;
-    const matched = colRanges.find((range) => colIndex1Based >= range.min && colIndex1Based <= range.max);
-    const width = matched ? matched.width : defaultColWidth;
-    return excelColumnWidthToPixels(width);
-  }
-
-  function getRowHeightPx(rowIndexZeroBased) {
-    const height = rowHeightByIndex.get(rowIndexZeroBased) || defaultRowHeight;
-    return excelRowHeightToPixels(height);
-  }
-
-  return {
-    getColumnWidthPx,
-    getRowHeightPx
-  };
-}
-
-function sumAxisPixels(startIndex, endExclusive, sizeFn) {
-  let sum = 0;
-  for (let i = startIndex; i < endExclusive; i += 1) {
-    sum += sizeFn(i);
-  }
-  return sum;
-}
-
-function positionPxToCellOffset(startIndex, endExclusive, positionPx, sizeFn) {
-  const totalPx = sumAxisPixels(startIndex, endExclusive, sizeFn);
-  if (positionPx <= 0) {
-    return { index: startIndex, offsetPx: 0 };
-  }
-  if (positionPx >= totalPx) {
-    return { index: endExclusive, offsetPx: 0 };
-  }
-
-  let remaining = positionPx;
-  for (let i = startIndex; i < endExclusive; i += 1) {
-    const segment = sizeFn(i);
-    if (remaining < segment) {
-      return { index: i, offsetPx: remaining };
-    }
-    remaining -= segment;
-  }
-
-  return { index: endExclusive, offsetPx: 0 };
+  return globalThis.ExhibitionCertificateModel.parseWorksheetMetrics(sheetXml);
 }
 
 const CERTIFICATE_BLOCK_START_ROW = 2;
@@ -3966,52 +3876,12 @@ const CERTIFICATE_BLOCK_END_ROW = 45;
 const CERTIFICATE_BLOCK_HEIGHT = CERTIFICATE_BLOCK_END_ROW - CERTIFICATE_BLOCK_START_ROW + 1;
 
 function computeContainedImageAnchor(metrics, imageWidthPx, imageHeightPx, rowOffset = 0) {
-  const bounds = {
-    fromCol: 2,
-    toCol: 7,
-    fromRow: 4 + rowOffset,
-    toRow: 22 + rowOffset
-  };
-
-  const boxWidthPx = sumAxisPixels(bounds.fromCol, bounds.toCol, metrics.getColumnWidthPx);
-  const boxHeightPx = sumAxisPixels(bounds.fromRow, bounds.toRow, metrics.getRowHeightPx);
-
-  const safeImageWidth = Math.max(1, Number(imageWidthPx) || 1);
-  const safeImageHeight = Math.max(1, Number(imageHeightPx) || 1);
-
-  const imageRatio = safeImageWidth / safeImageHeight;
-  const boxRatio = boxWidthPx / boxHeightPx;
-
-  let fittedWidthPx;
-  let fittedHeightPx;
-  if (imageRatio > boxRatio) {
-    fittedWidthPx = boxWidthPx;
-    fittedHeightPx = boxWidthPx / imageRatio;
-  } else {
-    fittedHeightPx = boxHeightPx;
-    fittedWidthPx = boxHeightPx * imageRatio;
-  }
-
-  const startXPx = (boxWidthPx - fittedWidthPx) / 2;
-  const startYPx = (boxHeightPx - fittedHeightPx) / 2;
-  const endXPx = startXPx + fittedWidthPx;
-  const endYPx = startYPx + fittedHeightPx;
-
-  const fromX = positionPxToCellOffset(bounds.fromCol, bounds.toCol, startXPx, metrics.getColumnWidthPx);
-  const toX = positionPxToCellOffset(bounds.fromCol, bounds.toCol, endXPx, metrics.getColumnWidthPx);
-  const fromY = positionPxToCellOffset(bounds.fromRow, bounds.toRow, startYPx, metrics.getRowHeightPx);
-  const toY = positionPxToCellOffset(bounds.fromRow, bounds.toRow, endYPx, metrics.getRowHeightPx);
-
-  return {
-    fromCol: fromX.index,
-    fromColOff: Math.round(fromX.offsetPx * EMU_PER_PIXEL),
-    toCol: toX.index,
-    toColOff: Math.round(toX.offsetPx * EMU_PER_PIXEL),
-    fromRow: fromY.index,
-    fromRowOff: Math.round(fromY.offsetPx * EMU_PER_PIXEL),
-    toRow: toY.index,
-    toRowOff: Math.round(toY.offsetPx * EMU_PER_PIXEL)
-  };
+  return globalThis.ExhibitionCertificateModel.computeContainedImageAnchor(
+    metrics,
+    imageWidthPx,
+    imageHeightPx,
+    rowOffset
+  );
 }
 
 function removeXmlAttribute(tag, attrName) {
@@ -4390,22 +4260,13 @@ function downloadBlobFile(blob, fileName) {
   URL.revokeObjectURL(url);
 }
 
-function normalizeArtistNameKey(value) {
-  return (value || '').toString().trim().toLowerCase();
-}
-
 function getArtistInstagramForCertificate(sold, work) {
   const exhibition = ensureExhibitionInfoData();
-  const map = exhibition.artistInstagramMap || {};
-  const author = (work?.author || sold?.author || '').toString().trim();
-  if (!author) return '';
-
-  const direct = (map[author] || '').toString().trim();
-  if (direct) return direct;
-
-  const normalizedAuthor = normalizeArtistNameKey(author);
-  const fallbackKey = Object.keys(map).find((name) => normalizeArtistNameKey(name) === normalizedAuthor);
-  return fallbackKey ? (map[fallbackKey] || '').toString().trim() : '';
+  return globalThis.ExhibitionCertificateModel.getArtistInstagram(
+    exhibition.artistInstagramMap,
+    sold,
+    work
+  );
 }
 
 function escapeXmlText(value) {
@@ -4526,33 +4387,29 @@ async function buildCertificateWorkbookBlob(sold, work) {
   const workbook = await XlsxPopulate.fromDataAsync(templateBuffer);
   const sheet = workbook.sheet(0);
 
-  const artist = (work?.author || sold.author || '').toString();
-  const title = (work?.title || sold.title || '').toString();
-  const materials = (work?.materials || '').toString();
-  const size = (work?.size || '').toString();
-  const year = (work?.year || '').toString();
-  const edition = '';
-  const soldDate = normalizeCertificateDateText(sold.soldAtKst || '');
-  const photoText = (work?.photoName || sold.photoName || '').toString();
-  const artistInstagram = getArtistInstagramForCertificate(sold, work);
+  const fields = globalThis.ExhibitionCertificateModel.buildCertificateFields(
+    sold,
+    work,
+    getArtistInstagramForCertificate(sold, work)
+  );
 
   // Template fixed data cells (validated from workbook structure).
-  sheet.cell('F24').value(artist);
-  sheet.cell('F26').value(title);
-  sheet.cell('F28').value(materials);
-  sheet.cell('F30').value(size);
-  sheet.cell('F32').value(year);
-  sheet.cell('F34').value(edition);
+  sheet.cell('F24').value(fields.artist);
+  sheet.cell('F26').value(fields.title);
+  sheet.cell('F28').value(fields.materials);
+  sheet.cell('F30').value(fields.size);
+  sheet.cell('F32').value(fields.year);
+  sheet.cell('F34').value(fields.edition);
 
-  if (soldDate) {
-    sheet.cell('B3').value(`Date ${soldDate}`);
+  if (fields.soldDate) {
+    sheet.cell('B3').value(`Date ${fields.soldDate}`);
   }
-  if (photoText) {
+  if (fields.photoText) {
     sheet.cell('C22').value('');
   }
 
   let workbookBlob = await workbook.outputAsync();
-  workbookBlob = await applyCertificateInstagramPlaceholderToWorkbookBlob(workbookBlob, artistInstagram);
+  workbookBlob = await applyCertificateInstagramPlaceholderToWorkbookBlob(workbookBlob, fields.artistInstagram);
   const imageDataUrl = getCertificateImageDataUrl(sold, work);
   if (!imageDataUrl) {
     throw new Error('Artwork image not found for certificate.');
@@ -4561,10 +4418,7 @@ async function buildCertificateWorkbookBlob(sold, work) {
 }
 
 function buildAllCertificatesDownloadFileName() {
-  const exhibition = getCurrentExhibition() || {};
-  const exhibitionName = (exhibition.title || exhibition.name || '전시').toString().trim() || '전시';
-  const safeName = exhibitionName.replace(/[\\/:*?"<>|]/g, '_');
-  return `${safeName}-모든보증서.xlsx`;
+  return globalThis.ExhibitionCertificateModel.buildAllCertificatesFileName(getCurrentExhibition());
 }
 
 async function buildAllCertificatesWorkbookBlob(entries) {
@@ -4686,28 +4540,24 @@ async function buildAllCertificatesWorkbookBlob(entries) {
     const sold = entry.sold || {};
     const work = entry.work || {};
     const rowOffset = pageIndex * CERTIFICATE_BLOCK_HEIGHT;
-    const soldDate = normalizeCertificateDateText(sold.soldAtKst || '');
-    const artistInstagram = getArtistInstagramForCertificate(sold, work);
+    const fields = globalThis.ExhibitionCertificateModel.buildCertificateFields(
+      sold,
+      work,
+      getArtistInstagramForCertificate(sold, work)
+    );
 
-    const artist = (work.author || sold.author || '').toString();
-    const title = (work.title || sold.title || '').toString();
-    const materials = (work.materials || '').toString();
-    const size = (work.size || '').toString();
-    const year = (work.year || '').toString();
-    const edition = '';
+    setInlineCellValueByRef(cellMap, `F${24 + rowOffset}`, fields.artist, sheetDoc);
+    setInlineCellValueByRef(cellMap, `F${26 + rowOffset}`, fields.title, sheetDoc);
+    setInlineCellValueByRef(cellMap, `F${28 + rowOffset}`, fields.materials, sheetDoc);
+    setInlineCellValueByRef(cellMap, `F${30 + rowOffset}`, fields.size, sheetDoc);
+    setInlineCellValueByRef(cellMap, `F${32 + rowOffset}`, fields.year, sheetDoc);
+    setInlineCellValueByRef(cellMap, `F${34 + rowOffset}`, fields.edition, sheetDoc);
+    setInlineCellValueByRef(cellMap, `B${3 + rowOffset}`, fields.soldDate ? `Date ${fields.soldDate}` : '', sheetDoc);
 
-    setInlineCellValueByRef(cellMap, `F${24 + rowOffset}`, artist, sheetDoc);
-    setInlineCellValueByRef(cellMap, `F${26 + rowOffset}`, title, sheetDoc);
-    setInlineCellValueByRef(cellMap, `F${28 + rowOffset}`, materials, sheetDoc);
-    setInlineCellValueByRef(cellMap, `F${30 + rowOffset}`, size, sheetDoc);
-    setInlineCellValueByRef(cellMap, `F${32 + rowOffset}`, year, sheetDoc);
-    setInlineCellValueByRef(cellMap, `F${34 + rowOffset}`, edition, sheetDoc);
-    setInlineCellValueByRef(cellMap, `B${3 + rowOffset}`, soldDate ? `Date ${soldDate}` : '', sheetDoc);
-
-    const instagramText = artistInstagram
+    const instagramText = fields.artistInstagram
       ? (instagramPattern.includes('instagram_handle_name')
-        ? instagramPattern.split('instagram_handle_name').join(artistInstagram)
-        : artistInstagram)
+        ? instagramPattern.split('instagram_handle_name').join(fields.artistInstagram)
+        : fields.artistInstagram)
       : '';
     setInlineCellValueByRef(cellMap, `A${45 + rowOffset}`, instagramText, sheetDoc);
   });
