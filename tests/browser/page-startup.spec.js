@@ -505,6 +505,59 @@ test('certificate builder preserves template cells, date, image, and source reco
   expect(result.sourceUnchanged).toBe(true);
 });
 
+test('certificate batch builder preserves page blocks, print area, images, and source records', async ({ page }) => {
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  const result = await page.evaluate(async () => {
+    const [exhibition] = JSON.parse(localStorage.getItem('exhibitions') || '[]');
+    const sourceWork = exhibition.works.find((item) => item.id === 900101);
+    const imageDataUrl = sourceWork.photoPreviewDataUrl || sourceWork.photoDataUrl || sourceWork.photoUrl;
+    const entries = [
+      {
+        sold: { author: 'CHARACTERIZATION_TEST_BATCH_ARTIST_1', title: 'CHARACTERIZATION_TEST_BATCH_WORK_1', soldAtKst: '2026-08-15 12:00:00' },
+        work: { ...sourceWork, author: 'CHARACTERIZATION_TEST_BATCH_ARTIST_1', title: 'CHARACTERIZATION_TEST_BATCH_WORK_1' },
+        imageDataUrl
+      },
+      {
+        sold: { author: 'CHARACTERIZATION_TEST_BATCH_ARTIST_2', title: 'CHARACTERIZATION_TEST_BATCH_WORK_2', soldAtKst: '2026-08-16 12:00:00' },
+        work: { ...sourceWork, author: 'CHARACTERIZATION_TEST_BATCH_ARTIST_2', title: 'CHARACTERIZATION_TEST_BATCH_WORK_2' },
+        imageDataUrl
+      }
+    ];
+    const before = JSON.stringify(entries);
+    const blob = await window.buildAllCertificatesWorkbookBlob(entries);
+    const workbook = await XlsxPopulate.fromDataAsync(await blob.arrayBuffer());
+    const sheet = workbook.sheet(0);
+    const zip = await JSZip.loadAsync(blob);
+    const sheetXml = await zip.file('xl/worksheets/sheet1.xml').async('text');
+    const workbookXml = await zip.file('xl/workbook.xml').async('text');
+    const mediaFiles = Object.keys(zip.files).filter((name) => /^xl\/media\/certificate-artwork-\d+\.png$/.test(name));
+    return {
+      firstArtist: sheet.cell('F24').value(),
+      firstTitle: sheet.cell('F26').value(),
+      secondArtist: sheet.cell('F68').value(),
+      secondTitle: sheet.cell('F70').value(),
+      mediaFiles,
+      hasPageBreak: /<rowBreaks[^>]*count="1"[^>]*>[\s\S]*<brk id="45"/.test(sheetXml),
+      hasPrintArea: workbookXml.includes('$A$2:$I$89'),
+      sourceUnchanged: before === JSON.stringify(entries)
+    };
+  });
+
+  expect(result).toMatchObject({
+    firstArtist: 'CHARACTERIZATION_TEST_BATCH_ARTIST_1',
+    firstTitle: 'CHARACTERIZATION_TEST_BATCH_WORK_1',
+    secondArtist: 'CHARACTERIZATION_TEST_BATCH_ARTIST_2',
+    secondTitle: 'CHARACTERIZATION_TEST_BATCH_WORK_2',
+    hasPageBreak: true,
+    hasPrintArea: true,
+    sourceUnchanged: true
+  });
+  expect(result.mediaFiles).toEqual([
+    'xl/media/certificate-artwork-1.png',
+    'xl/media/certificate-artwork-2.png'
+  ]);
+});
+
 test('exhibition exports preserve filenames and key payload cells', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
   const captureExport = async (action) => {
