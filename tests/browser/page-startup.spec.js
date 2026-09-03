@@ -715,6 +715,73 @@ test('master calendar quick edit preserves population, reset, and single save be
   });
 });
 
+test('master calendar base edit preserves population, reset, save, and delete behavior', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
+  await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+  await page.evaluate(() => {
+    const documentState = JSON.parse(localStorage.getItem('studio-calendar-state-v1') || '{}');
+    documentState.baseRules = [{
+      id: 'CHARACTERIZATION_TEST_BASE_RULE',
+      day: 0,
+      startSlot: 20,
+      endSlot: 22,
+      type: '개인작업 시간',
+      className: '',
+      instructor: ''
+    }];
+    documentState.baseRuleTimeline = [];
+    documentState.baseWeekOverrides = {};
+    localStorage.setItem('studio-calendar-state-v1', JSON.stringify(documentState));
+    window.dispatchEvent(new CustomEvent('cloud-sync:state-applied', {
+      detail: { keys: ['studio-calendar-state-v1'] }
+    }));
+  });
+
+  await page.locator('#open-base-editor-btn').click();
+  const ruleCell = page.locator('.base-cell[data-rule-id="CHARACTERIZATION_TEST_BASE_RULE"].base-block-start');
+  const editModal = page.locator('#base-edit-modal');
+  await ruleCell.click();
+  await expect(editModal).toHaveClass(/open/);
+  await expect(page.locator('#edit-base-type')).toHaveValue('개인작업 시간');
+  await expect(page.locator('#edit-base-class-row')).toBeHidden();
+  await expect(page.locator('#edit-base-day')).toHaveValue('0');
+  await expect(page.locator('#edit-base-start')).toHaveValue('10:00');
+  await expect(page.locator('#edit-base-end')).toHaveValue('11:00');
+
+  await page.locator('#edit-base-start').fill('09:00');
+  await page.locator('[data-close-modal="base-edit-modal"]').click();
+  await ruleCell.click();
+  await expect(page.locator('#edit-base-start')).toHaveValue('10:00');
+
+  await page.locator('#edit-base-type').selectOption('이용 불가');
+  await page.locator('#edit-base-start').fill('10:30');
+  await page.locator('#edit-base-end').fill('11:30');
+  await page.locator('#save-base-edit-btn').click();
+  await expect(editModal).not.toHaveClass(/open/);
+  const savedRules = await page.evaluate(() => {
+    const documentState = JSON.parse(localStorage.getItem('studio-calendar-state-v1') || '{}');
+    return (documentState.baseRules || []).filter((rule) => rule.id === 'CHARACTERIZATION_TEST_BASE_RULE');
+  });
+  expect(savedRules).toEqual([{
+    id: 'CHARACTERIZATION_TEST_BASE_RULE',
+    day: 0,
+    startSlot: 21,
+    endSlot: 23,
+    type: '이용 불가',
+    className: '',
+    instructor: ''
+  }]);
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.locator('.base-cell[data-rule-id="CHARACTERIZATION_TEST_BASE_RULE"].base-block-start').click();
+  await page.locator('#delete-base-edit-btn').click();
+  await expect(editModal).not.toHaveClass(/open/);
+  expect(await page.evaluate(() => {
+    const documentState = JSON.parse(localStorage.getItem('studio-calendar-state-v1') || '{}');
+    return (documentState.baseRules || []).some((rule) => rule.id === 'CHARACTERIZATION_TEST_BASE_RULE');
+  })).toBe(false);
+});
+
 test('material orders preserve grouping, editing, merge overlap, undo, keyboard focus, and export', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2025-04-15T12:00:00'));
   await page.goto('/pottery-material-orders.html', { waitUntil: 'networkidle' });
