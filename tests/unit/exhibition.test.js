@@ -11,8 +11,17 @@ const certificateModel = require('../../exhibitions/certificate-model');
 const inventoryModel = require('../../exhibitions/inventory-model');
 const inventoryRenderer = require('../../exhibitions/inventory-renderer');
 const inventoryBackupModel = require('../../exhibitions/inventory-backup-model');
+const { createStorageAdapter } = require('../../storage/storage-adapter');
+const exhibitionsRepository = require('../../storage/exhibitions-repository');
+const exhibitionDetailRepository = require('../../storage/exhibition-detail-repository');
 
 function loadExhibition(overrides = {}) {
+  const storage = overrides.localStorage || {
+    getItem() { return null; },
+    setItem() {},
+    removeItem() {}
+  };
+  const adapter = createStorageAdapter({ storage, safeWrite: overrides.safeSetLocalStorageItem });
   return exposeClassicScriptFunctions('exhibition-detail.js', [
     'exhibitionDetailState',
     'getPhotoPreviewDataUrl',
@@ -82,6 +91,8 @@ function loadExhibition(overrides = {}) {
       ExhibitionInventoryModel: inventoryModel,
       ExhibitionInventoryRenderer: inventoryRenderer,
       ExhibitionInventoryBackupModel: inventoryBackupModel,
+      ExhibitionsRepository: { repository: exhibitionsRepository.createExhibitionsRepository(adapter) },
+      ExhibitionDetailRepository: { repository: exhibitionDetailRepository.createExhibitionDetailRepository(adapter) },
       ...overrides
     }
   }).exposed;
@@ -128,6 +139,31 @@ test('exhibition detail persistence skips backup after failed main safe write', 
   exhibition.exhibitionDetailState.exhibition = { id: 2, works: [], soldWorks: [] };
   assert.equal(exhibition.saveExhibition(), false);
   assert.equal(exhibition.loadInventoryBackup(2), null);
+});
+
+test('exhibition detail repository preserves backup, preference, and user contracts', () => {
+  const values = new Map([
+    ['users', '[{"unknown":"user"}]'],
+    ['backup:1', '{"snapshot":{"unknown":"backup"}}'],
+    ['preference', 'works']
+  ]);
+  const safeWrites = [];
+  const writes = [];
+  const repository = exhibitionDetailRepository.createExhibitionDetailRepository({
+    read(key) { return values.get(key) ?? null; },
+    write(key, value) { writes.push([key, value]); },
+    writeSafely(key, value) { safeWrites.push([key, value]); return true; }
+  });
+  assert.equal(repository.loadUsers()[0].unknown, 'user');
+  assert.equal(repository.loadInventoryBackup('backup:1').snapshot.unknown, 'backup');
+  assert.equal(repository.loadPreference('preference'), 'works');
+  assert.equal(repository.saveInventoryBackupSafely('backup:2', { snapshot: {} }), true);
+  repository.savePreference('preference', 'inventory-list');
+  assert.deepEqual(safeWrites, [['backup:2', '{"snapshot":{}}']]);
+  assert.deepEqual(writes, [['preference', 'inventory-list']]);
+
+  values.set('backup:1', '{malformed');
+  assert.equal(repository.loadInventoryBackup('backup:1'), null);
 });
 
 test('exhibition images characterize pending, URL, and legacy preview precedence', () => {

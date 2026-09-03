@@ -289,17 +289,7 @@ function normalizeInventoryBackupSnapshot(exhibition) {
 function loadInventoryBackup(exhibitionId) {
   const key = getInventoryBackupStorageKey(exhibitionId);
   if (!key) return null;
-
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return null;
-    if (!parsed.snapshot || typeof parsed.snapshot !== 'object') return null;
-    return parsed;
-  } catch (error) {
-    return null;
-  }
+  return globalThis.ExhibitionDetailRepository.repository.loadInventoryBackup(key);
 }
 
 function persistInventoryBackup(exhibition) {
@@ -309,22 +299,12 @@ function persistInventoryBackup(exhibition) {
   const snapshot = normalizeInventoryBackupSnapshot(exhibition);
   if (!snapshot) return false;
 
-  const payload = JSON.stringify({
+  const backup = {
     updatedAt: new Date().toISOString(),
     counts: getInventoryListCounts(snapshot),
     snapshot
-  });
-
-  if (typeof safeSetLocalStorageItem === 'function') {
-    return safeSetLocalStorageItem(key, payload);
-  }
-
-  try {
-    localStorage.setItem(key, payload);
-    return true;
-  } catch (error) {
-    return false;
-  }
+  };
+  return globalThis.ExhibitionDetailRepository.repository.saveInventoryBackupSafely(key, backup);
 }
 
 function updateInventoryResetMarker(exhibition) {
@@ -379,18 +359,7 @@ function restoreInventoryFromBackupIfNeeded(exhibitions, exhibitionIndex) {
 
   exhibitions[exhibitionIndex] = exhibition;
 
-  const serialized = JSON.stringify(exhibitions);
-  let restoredSaved = false;
-  if (typeof safeSetLocalStorageItem === 'function') {
-    restoredSaved = safeSetLocalStorageItem('exhibitions', serialized);
-  } else {
-    try {
-      localStorage.setItem('exhibitions', serialized);
-      restoredSaved = true;
-    } catch (error) {
-      return false;
-    }
-  }
+  const restoredSaved = globalThis.ExhibitionsRepository.repository.saveExhibitionsSafely(exhibitions);
 
   if (!restoredSaved) return false;
 
@@ -416,12 +385,8 @@ function getExhibitionLastTabStorageKey() {
 function loadLastViewedExhibitionTab() {
   const key = getExhibitionLastTabStorageKey();
   if (!key) return '';
-  try {
-    const value = localStorage.getItem(key) || '';
-    return value ? normalizeTabForAccess(value) : '';
-  } catch (error) {
-    return '';
-  }
+  const value = globalThis.ExhibitionDetailRepository.repository.loadPreference(key);
+  return value ? normalizeTabForAccess(value) : '';
 }
 
 function saveLastViewedExhibitionTab(tabName) {
@@ -429,11 +394,7 @@ function saveLastViewedExhibitionTab(tabName) {
   if (!key) return;
   const normalized = normalizeTabForAccess(tabName);
   if (!normalized) return;
-  try {
-    localStorage.setItem(key, normalized);
-  } catch (error) {
-    // Ignore storage failures (private mode/quota) and continue.
-  }
+  globalThis.ExhibitionDetailRepository.repository.savePreference(key, normalized);
 }
 
 function goBack() {
@@ -457,7 +418,7 @@ async function initDetailPage() {
 
   await waitForCloudSyncReady();
 
-  const exhibitions = JSON.parse(localStorage.getItem('exhibitions')) || [];
+  const exhibitions = globalThis.ExhibitionsRepository.repository.loadExhibitions();
   const exhibitionIndex = exhibitions.findIndex(e => e.id === exhibitionDetailState.exhibitionId);
   exhibitionDetailState.exhibition = exhibitionIndex !== -1 ? exhibitions[exhibitionIndex] : null;
 
@@ -882,12 +843,7 @@ async function refreshExhibitionStateFromServer(exhibitionId) {
     const result = await globalThis.ExhibitionSnapshotClient.fetchExhibitions({ fetchImpl: fetch });
     if (!result.ok) return false;
     const remoteExhibitions = result.exhibitions;
-    const serialized = JSON.stringify(remoteExhibitions);
-    if (typeof safeSetLocalStorageItem === 'function') {
-      safeSetLocalStorageItem('exhibitions', serialized);
-    } else {
-      localStorage.setItem('exhibitions', serialized);
-    }
+    globalThis.ExhibitionsRepository.repository.saveExhibitionsSafely(remoteExhibitions);
 
     const index = remoteExhibitions.findIndex((item) => Number(item?.id) === targetId);
     if (index !== -1) {
@@ -996,7 +952,7 @@ function getExhibitionArtistNamesForInstagram(exhibition) {
   const assignedArtistIds = Array.isArray(exhibition.staff?.artists) ? exhibition.staff.artists : [];
   if (assignedArtistIds.length > 0) {
     try {
-      const users = JSON.parse(localStorage.getItem('users')) || [];
+      const users = globalThis.ExhibitionDetailRepository.repository.loadUsers();
       const byId = new Map(users.map((user) => [Number(user.id), (user.name || '').toString().trim()]));
       assignedArtistIds.forEach((id) => {
         const name = byId.get(Number(id));
@@ -5033,7 +4989,7 @@ function renderStaffManagement(container) {
   const artists = exhibition.staff?.artists || [];
   const staffs = exhibition.staff?.staffs || [];
 
-  const users = JSON.parse(localStorage.getItem('users')) || [];
+  const users = globalThis.ExhibitionDetailRepository.repository.loadUsers();
   const candidates = users.filter(user => user.approved && normalizeAccountType(getEffectiveGalleryRole(user)) === '기획자/작가');
 
   const roleSection = (role, label, assignedIds) => {
@@ -5103,7 +5059,7 @@ function openInviteModal(role) {
 
   exhibitionDetailState.inviteRole = role;
   const exhibition = getCurrentExhibition();
-  const users = JSON.parse(localStorage.getItem('users')) || [];
+  const users = globalThis.ExhibitionDetailRepository.repository.loadUsers();
 
   document.getElementById('invite-modal-title').textContent = `${getInviteRoleLabel(role)} 초대`;
   document.getElementById('invite-modal-description').textContent = '모든 사용자 중에서 전시에 참여자를 선택하세요.';
@@ -5127,7 +5083,7 @@ function closeInviteModal() {
 
 function filterInviteUsers() {
   exhibitionDetailState.inviteSearch = document.getElementById('invite-search').value.trim().toLowerCase();
-  const users = JSON.parse(localStorage.getItem('users')) || [];
+  const users = globalThis.ExhibitionDetailRepository.repository.loadUsers();
   const exhibition = getCurrentExhibition();
   const assignedIds = new Set(exhibition.staff?.[exhibitionDetailState.inviteRole] || []);
   renderInviteUserList(users, assignedIds);
@@ -5622,7 +5578,7 @@ function renderStaffManagement(container) {
   const artists = exhibition.staff?.artists || [];
   const staffs = exhibition.staff?.staffs || [];
 
-  const users = JSON.parse(localStorage.getItem('users')) || [];
+  const users = globalThis.ExhibitionDetailRepository.repository.loadUsers();
   const candidates = users.filter(user => user.approved && normalizeAccountType(getEffectiveGalleryRole(user)) === '기획자/작가');
 
   const roleSection = (role, label, assignedIds) => {
@@ -5685,7 +5641,7 @@ function openInviteModal(role) {
 
   exhibitionDetailState.inviteRole = role;
   const exhibition = getCurrentExhibition();
-  const users = JSON.parse(localStorage.getItem('users')) || [];
+  const users = globalThis.ExhibitionDetailRepository.repository.loadUsers();
 
   document.getElementById('invite-modal-title').textContent = `${getInviteRoleLabel(role)} 초대`;
   document.getElementById('invite-modal-description').textContent = '모든 사용자 중에서 전시에 참여자를 선택하세요.';
@@ -5709,7 +5665,7 @@ function closeInviteModal() {
 
 function filterInviteUsers() {
   exhibitionDetailState.inviteSearch = document.getElementById('invite-search').value.trim().toLowerCase();
-  const users = JSON.parse(localStorage.getItem('users')) || [];
+  const users = globalThis.ExhibitionDetailRepository.repository.loadUsers();
   const exhibition = getCurrentExhibition();
   const assignedIds = new Set(exhibition.staff?.[exhibitionDetailState.inviteRole] || []);
   renderInviteUserList(users, assignedIds);
@@ -7548,7 +7504,7 @@ function stripTransientPhotoUploadFieldsFromExhibition(exhibition) {
 }
 
 function saveExhibition() {
-  const exhibitions = JSON.parse(localStorage.getItem('exhibitions')) || [];
+  const exhibitions = globalThis.ExhibitionsRepository.repository.loadExhibitions();
   const exhibition = exhibitionDetailState.exhibition || getCurrentExhibition();
   const targetId = Number.isFinite(exhibitionDetailState.exhibitionId) && exhibitionDetailState.exhibitionId > 0
     ? exhibitionDetailState.exhibitionId
@@ -7599,27 +7555,14 @@ function saveExhibition() {
     exhibitions.push(storageCopy);
   }
 
-  const payload = JSON.stringify(exhibitions);
-  if (typeof safeSetLocalStorageItem === 'function') {
-    const saved = safeSetLocalStorageItem('exhibitions', payload);
-    if (!saved) {
-      console.error('Failed to save exhibition data: storage write failed.');
-      notifyExhibitionSaveFailure();
-    } else {
-      persistInventoryBackup(storageCopy);
-    }
-    return saved;
-  }
-
-  try {
-    localStorage.setItem('exhibitions', payload);
+  const saved = globalThis.ExhibitionsRepository.repository.saveExhibitionsSafely(exhibitions);
+  if (saved) {
     persistInventoryBackup(storageCopy);
     return true;
-  } catch (error) {
-    console.error('Failed to save exhibition data:', error);
-    notifyExhibitionSaveFailure();
-    return false;
   }
+  console.error('Failed to save exhibition data: storage write failed.');
+  notifyExhibitionSaveFailure();
+  return false;
 }
 
 function notifyExhibitionSaveFailure() {
