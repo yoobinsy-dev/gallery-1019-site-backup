@@ -10,6 +10,7 @@ const imageLifecycle = require('../../exhibitions/image-lifecycle');
 const certificateModel = require('../../exhibitions/certificate-model');
 const inventoryModel = require('../../exhibitions/inventory-model');
 const inventoryRenderer = require('../../exhibitions/inventory-renderer');
+const inventoryBackupModel = require('../../exhibitions/inventory-backup-model');
 
 function loadExhibition() {
   return exposeClassicScriptFunctions('exhibition-detail.js', [
@@ -74,7 +75,8 @@ function loadExhibition() {
       ExhibitionImageLifecycle: imageLifecycle,
       ExhibitionCertificateModel: certificateModel,
       ExhibitionInventoryModel: inventoryModel,
-      ExhibitionInventoryRenderer: inventoryRenderer
+      ExhibitionInventoryRenderer: inventoryRenderer,
+      ExhibitionInventoryBackupModel: inventoryBackupModel
     }
   }).exposed;
 }

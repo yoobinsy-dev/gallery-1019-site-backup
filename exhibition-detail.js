@@ -267,75 +267,23 @@ function waitForCloudSyncReady(timeoutMs = 5000) {
 }
 
 function cloneJson(value, fallback) {
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch (error) {
-    return fallback;
-  }
+  return globalThis.ExhibitionInventoryBackupModel.cloneJson(value, fallback);
 }
 
 function stripLargePayloadFields(value) {
-  if (!value || typeof value !== 'object') return;
-
-  const heavyFields = ['photoDataUrl', 'imageDataUrl', 'photoPreviewDataUrl', 'fileDataUrl', 'previewDataUrl'];
-  heavyFields.forEach((field) => {
-    if (typeof value[field] === 'string' && value[field].length > 0) {
-      value[field] = '';
-    }
-  });
-
-  Object.keys(value).forEach((key) => {
-    const child = value[key];
-    if (Array.isArray(child)) {
-      child.forEach((item) => stripLargePayloadFields(item));
-      return;
-    }
-    if (child && typeof child === 'object') {
-      stripLargePayloadFields(child);
-    }
-  });
+  return globalThis.ExhibitionInventoryBackupModel.stripLargePayloadFields(value);
 }
 
 function getInventoryBackupStorageKey(exhibitionId) {
-  const id = Number(exhibitionId);
-  if (!Number.isFinite(id) || id <= 0) return '';
-  return `${INVENTORY_BACKUP_KEY_PREFIX}${id}`;
+  return globalThis.ExhibitionInventoryBackupModel.getInventoryBackupStorageKey(exhibitionId);
 }
 
 function getInventoryListCounts(exhibition) {
-  if (!exhibition || typeof exhibition !== 'object') {
-    return { art: 0, goods: 0, total: 0 };
-  }
-
-  const art = Array.isArray(exhibition.artWorks)
-    ? exhibition.artWorks.length
-    : (Array.isArray(exhibition.works) ? exhibition.works.length : 0);
-  const goods = Array.isArray(exhibition.goods) ? exhibition.goods.length : 0;
-
-  return {
-    art,
-    goods,
-    total: art + goods
-  };
+  return globalThis.ExhibitionInventoryBackupModel.getInventoryListCounts(exhibition);
 }
 
 function normalizeInventoryBackupSnapshot(exhibition) {
-  const snapshot = {
-    id: exhibition?.id,
-    artWorks: Array.isArray(exhibition?.artWorks)
-      ? exhibition.artWorks
-      : (Array.isArray(exhibition?.works) ? exhibition.works : []),
-    goods: Array.isArray(exhibition?.goods) ? exhibition.goods : [],
-    artSoldWorks: Array.isArray(exhibition?.artSoldWorks)
-      ? exhibition.artSoldWorks
-      : (Array.isArray(exhibition?.soldWorks) ? exhibition.soldWorks : []),
-    soldGoods: Array.isArray(exhibition?.soldGoods) ? exhibition.soldGoods : []
-  };
-
-  const cloned = cloneJson(snapshot, null);
-  if (!cloned) return null;
-  stripLargePayloadFields(cloned);
-  return cloned;
+  return globalThis.ExhibitionInventoryBackupModel.normalizeInventoryBackupSnapshot(exhibition);
 }
 
 function loadInventoryBackup(exhibitionId) {
@@ -451,18 +399,10 @@ function restoreInventoryFromBackupIfNeeded(exhibitions, exhibitionIndex) {
 }
 
 function isLargeUnexpectedInventoryDrop(previousExhibition, nextExhibition) {
-  const previous = getInventoryListCounts(previousExhibition);
-  const next = getInventoryListCounts(nextExhibition);
-
-  if (previous.total < LARGE_DROP_MIN_PREVIOUS_TOTAL) return false;
-
-  const dropped = previous.total - next.total;
-  if (dropped < LARGE_DROP_MIN_ABSOLUTE) return false;
-  if (dropped / previous.total < LARGE_DROP_RATIO) return false;
-
-  const artWipe = previous.art >= 10 && next.art === 0;
-  const goodsWipe = previous.goods >= 10 && next.goods === 0;
-  return artWipe || goodsWipe || next.total <= Math.floor(previous.total * 0.3);
+  return globalThis.ExhibitionInventoryBackupModel.isLargeUnexpectedInventoryDrop(
+    previousExhibition,
+    nextExhibition
+  );
 }
 
 function getExhibitionLastTabStorageKey() {
