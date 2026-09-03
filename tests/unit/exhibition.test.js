@@ -24,6 +24,10 @@ function loadExhibition() {
     'getArtistSalesSummary',
     'getSoldStatsForWorksTicker',
     'getSoldStatsForSalesTicker'
+    ,'parseAccountingAmount'
+    ,'formatAccountingAmount'
+    ,'getExhibitionRevenueItems'
+    ,'getExpenseEffectiveAmount'
   ], {
     globals: {
       atob(value) { return Buffer.from(value, 'base64').toString('binary'); },
@@ -168,4 +172,28 @@ test('exhibition sales characterize source compatibility, quantity, filtering, s
     basisLabel: '선택된 판매 1개 기준 판매 통계', soldCount: 1, totalAmount: 5000
   });
   assert.equal(soldRecords[0].unknownField, 'preserved');
+});
+
+test('exhibition accounting characterizes revenue, commission, ordering, and totals', () => {
+  const exhibition = loadExhibition();
+  exhibition.exhibitionDetailState.exhibition = {
+    soldWorks: [{ itemType: '작품', price: '₩100,001', soldQuantity: 7 },
+      { itemType: '굿즈', price: '2,500원', soldQuantity: '3.9' },
+      { itemType: '굿즈', price: 'invalid', soldQuantity: 2 }],
+    manualRevenueItems: [{ id: 'manual-1', division: '후원', amount: '₩ 4,000', unknownField: 'keep' }]
+  };
+  assert.equal(exhibition.parseAccountingAmount('₩ -1,234.5'), -1234.5);
+  assert.equal(exhibition.parseAccountingAmount('invalid'), 0);
+  assert.equal(exhibition.formatAccountingAmount('₩ 4,000'), '₩ 4,000');
+  const revenues = JSON.parse(JSON.stringify(exhibition.getExhibitionRevenueItems()));
+  assert.deepEqual(revenues, [
+    { id: 'art', division: '작품 판매', amount: 100001, source: 'auto' },
+    { id: 'goods', division: '굿즈 판매', amount: 7500, source: 'auto' },
+    { id: 'manual-1', division: '후원', amount: '₩ 4,000', source: 'manual' }
+  ]);
+  const revenueTotals = { art: revenues[0].amount, goods: revenues[1].amount };
+  assert.equal(exhibition.getExpenseEffectiveAmount({ code: 'commission-art', amount: 1 }, revenueTotals), 60000.6);
+  assert.equal(exhibition.getExpenseEffectiveAmount({ code: 'commission-goods', amount: 1 }, revenueTotals), 6000);
+  assert.equal(exhibition.getExpenseEffectiveAmount({ code: 'custom', amount: '₩ 1,250' }, revenueTotals), 1250);
+  assert.equal(exhibition.exhibitionDetailState.exhibition.manualRevenueItems[0].unknownField, 'keep');
 });
