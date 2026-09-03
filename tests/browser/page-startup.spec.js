@@ -374,6 +374,39 @@ test('exhibition detail shell preserves tab state, aliases, and single render be
   await expect(page.locator('#tab-content .works-sales-title')).toHaveText('전시 정보');
 });
 
+test('exhibition sales add modal preserves search, buffer, buyer, and reset behavior', async ({ page }) => {
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.switchTab('inventory-sales'));
+  await page.evaluate(() => window.openSalesAddModal());
+
+  const modal = page.locator('#sales-add-modal');
+  const searchInput = page.locator('#sales-add-search-input');
+  await expect(modal).toHaveCSS('display', 'flex');
+  await expect(searchInput).toBeFocused();
+  await expect(page.locator('#sales-add-selected-count')).toHaveText('0개 선택됨');
+
+  await searchInput.fill('W-ARTIST');
+  await expect(page.locator('#sales-add-search-results')).toContainText('CHARACTERIZATION_TEST_ARTIST_OWNED');
+  await searchInput.press('Enter');
+  await expect(page.locator('#sales-add-selected-list .sales-selected-row')).toHaveCount(1);
+  await expect(page.locator('#sales-add-selected-ticker')).toHaveText('선택 1건 · 합계 ₩200,000');
+
+  await page.locator('#sales-add-apply-common-buyer').check();
+  await expect(page.locator('#sales-add-common-buyer-fields')).toBeVisible();
+  await page.locator('#sales-add-common-buyer-name').fill('Character Buyer');
+  await page.locator('#sales-add-common-buyer-phone').fill('01012345678');
+  await expect(page.locator('#sales-add-common-buyer-phone')).toHaveValue('010-1234-5678');
+
+  await modal.click({ position: { x: 5, y: 5 } });
+  await expect(modal).toBeHidden();
+  await page.evaluate(() => window.openSalesAddModal());
+  await expect(modal).toHaveCSS('display', 'flex');
+  await expect(searchInput).toHaveValue('');
+  await expect(page.locator('#sales-add-selected-count')).toHaveText('0개 선택됨');
+  await expect(page.locator('#sales-add-apply-common-buyer')).not.toBeChecked();
+  await expect(page.locator('#sales-add-common-buyer-fields')).toBeHidden();
+});
+
 test('exhibition snapshot client preserves requests, defaults, and refresh order', async ({ page }) => {
   const requests = [];
   await page.route('**/api/exhibition-snapshots*', async (route) => {
