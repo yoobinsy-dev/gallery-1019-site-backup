@@ -198,9 +198,9 @@ function getFirstAllowedTab() {
 }
 
 function applyTabVisibilityByPermission() {
-  document.querySelectorAll('.tab-button').forEach((btn) => {
-    const tab = btn.getAttribute('data-tab') || '';
-    btn.style.display = canAccessTab(tab) ? '' : 'none';
+  globalThis.ExhibitionDetailTabsController.applyTabVisibilityByPermission({
+    document,
+    canAccessTab
   });
 }
 
@@ -616,67 +616,25 @@ function syncInventoryMode(mode) {
 }
 
 function switchTab(tabName) {
-  if (!canAccessTab(tabName)) {
-    applyTabVisibilityByPermission();
-    const fallbackTab = getFirstAllowedTab();
-    if (!fallbackTab) {
-      alert('이 전시에 접근할 권한이 없습니다.');
-      window.location.href = 'exhibitions.html';
-      return;
-    }
-    tabName = fallbackTab;
-  }
-
-  if (tabName === 'works') {
-    exhibitionDetailState.currentTab = 'inventory-list';
-    exhibitionDetailState.inventoryListView = 'art';
-    syncInventoryMode('art');
-  } else if (tabName === 'goods') {
-    exhibitionDetailState.currentTab = 'inventory-list';
-    exhibitionDetailState.inventoryListView = 'goods';
-    syncInventoryMode('goods');
-  } else if (tabName === 'sales' || tabName === 'inventory-sales') {
-    exhibitionDetailState.currentTab = 'inventory-sales';
-    syncInventoryMode('art');
-  } else if (tabName === 'inventory-list') {
-    exhibitionDetailState.currentTab = 'inventory-list';
-    if (!['art', 'goods'].includes(exhibitionDetailState.inventoryListView)) {
-      exhibitionDetailState.inventoryListView = 'art';
-    }
-    syncInventoryMode(exhibitionDetailState.inventoryListView);
-  } else {
-    exhibitionDetailState.currentTab = tabName;
-  }
-
-  if (exhibitionDetailState.currentTab === 'inventory-list') {
-    saveLastViewedExhibitionTab(getCurrentInventoryListTabName());
-  } else {
-    saveLastViewedExhibitionTab(exhibitionDetailState.currentTab);
-  }
-
-  document.querySelectorAll('.tab-button').forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('data-tab') === exhibitionDetailState.currentTab);
+  return globalThis.ExhibitionDetailTabsController.switchTab(tabName, {
+    state: exhibitionDetailState,
+    document,
+    canAccessTab,
+    getFirstAllowedTab,
+    applyTabVisibilityByPermission,
+    alertNoAccess: () => alert('이 전시에 접근할 권한이 없습니다.'),
+    redirectToExhibitions: () => { window.location.href = 'exhibitions.html'; },
+    syncInventoryMode,
+    saveLastViewedExhibitionTab,
+    getCurrentInventoryListTabName,
+    renderStaffManagement,
+    renderExhibitionInfo,
+    renderInventoryListManagement,
+    renderInventorySalesManagement,
+    renderExhibitionFiles,
+    renderExhibitionAccounting,
+    renderExhibitionBackup
   });
-
-  const content = document.getElementById('tab-content');
-  if (!content) return;
-  content.innerHTML = '';
-
-  if (tabName === 'staff') {
-    renderStaffManagement(content);
-  } else if (tabName === 'exhibition-info') {
-    renderExhibitionInfo(content);
-  } else if (tabName === 'works' || tabName === 'goods' || tabName === 'inventory-list') {
-    renderInventoryListManagement(content);
-  } else if (tabName === 'sales' || tabName === 'inventory-sales') {
-    renderInventorySalesManagement(content);
-  } else if (tabName === 'exhibition-files') {
-    renderExhibitionFiles(content);
-  } else if (tabName === 'exhibition-accounting') {
-    renderExhibitionAccounting(content);
-  } else if (tabName === 'exhibition-backup') {
-    renderExhibitionBackup(content);
-  }
 }
 
 function getBackupExhibitionId() {
