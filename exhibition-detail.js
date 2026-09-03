@@ -803,17 +803,13 @@ async function fetchExhibitionBackupSnapshots() {
   switchTab('exhibition-backup');
 
   try {
-    const response = await fetch(`/api/exhibition-snapshots?exhibitionId=${encodeURIComponent(exhibitionId)}&limit=100`);
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok) {
-      exhibitionDetailState.backupError = payload?.error || '스냅샷 목록을 불러오지 못했습니다.';
-      exhibitionDetailState.backupSnapshots = [];
-      exhibitionDetailState.backupCanUndo = false;
-      return;
-    }
-
-    exhibitionDetailState.backupSnapshots = Array.isArray(payload.snapshots) ? payload.snapshots : [];
-    exhibitionDetailState.backupCanUndo = Boolean(payload.canUndo);
+    const result = await globalThis.ExhibitionSnapshotClient.listSnapshots({
+      fetchImpl: fetch,
+      exhibitionId
+    });
+    exhibitionDetailState.backupError = result.error;
+    exhibitionDetailState.backupSnapshots = result.snapshots;
+    exhibitionDetailState.backupCanUndo = result.canUndo;
   } catch (error) {
     exhibitionDetailState.backupError = '네트워크 오류로 스냅샷 목록을 불러오지 못했습니다.';
     exhibitionDetailState.backupSnapshots = [];
@@ -921,19 +917,13 @@ async function createManualExhibitionSnapshot() {
   const note = `manual backup by ${actorName}`;
 
   try {
-    const response = await fetch('/api/exhibition-snapshots', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'capture-now',
-        exhibitionId,
-        note
-      })
+    const result = await globalThis.ExhibitionSnapshotClient.captureSnapshot({
+      fetchImpl: fetch,
+      exhibitionId,
+      note
     });
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok) {
-      alert(payload?.error || '스냅샷 생성에 실패했습니다.');
+    if (!result.ok) {
+      alert(result.error);
       return;
     }
 
@@ -949,11 +939,9 @@ async function refreshExhibitionStateFromServer(exhibitionId) {
   if (!Number.isFinite(targetId) || targetId <= 0) return false;
 
   try {
-    const response = await fetch('/api/state?keys=exhibitions');
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok || !payload?.data) return false;
-
-    const remoteExhibitions = Array.isArray(payload.data.exhibitions) ? payload.data.exhibitions : [];
+    const result = await globalThis.ExhibitionSnapshotClient.fetchExhibitions({ fetchImpl: fetch });
+    if (!result.ok) return false;
+    const remoteExhibitions = result.exhibitions;
     const serialized = JSON.stringify(remoteExhibitions);
     if (typeof safeSetLocalStorageItem === 'function') {
       safeSetLocalStorageItem('exhibitions', serialized);
@@ -989,19 +977,13 @@ async function restoreExhibitionSnapshot(snapshotId) {
   }
 
   try {
-    const response = await fetch('/api/exhibition-snapshots', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'restore',
-        exhibitionId,
-        snapshotId
-      })
+    const result = await globalThis.ExhibitionSnapshotClient.restoreSnapshot({
+      fetchImpl: fetch,
+      exhibitionId,
+      snapshotId
     });
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok) {
-      alert(payload?.error || '복원에 실패했습니다.');
+    if (!result.ok) {
+      alert(result.error);
       return;
     }
 
@@ -1031,18 +1013,12 @@ async function undoExhibitionSnapshotRestore() {
   }
 
   try {
-    const response = await fetch('/api/exhibition-snapshots', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'undo-restore',
-        exhibitionId
-      })
+    const result = await globalThis.ExhibitionSnapshotClient.undoRestore({
+      fetchImpl: fetch,
+      exhibitionId
     });
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok) {
-      alert(payload?.error || '되돌리기에 실패했습니다.');
+    if (!result.ok) {
+      alert(result.error);
       return;
     }
 

@@ -5,6 +5,7 @@ const { exposeClassicScriptFunctions } = require('../helpers/load-source');
 const salesModel = require('../../exhibitions/sales-model');
 const accountingProjection = require('../../exhibitions/accounting-projection');
 const exportModel = require('../../exhibitions/export-model');
+const snapshotClient = require('../../exhibitions/snapshot-client');
 
 function loadExhibition() {
   return exposeClassicScriptFunctions('exhibition-detail.js', [
@@ -39,7 +40,8 @@ function loadExhibition() {
       DOMParser: class DOMParser {},
       ExhibitionSalesModel: salesModel,
       ExhibitionAccountingProjection: accountingProjection,
-      ExhibitionExportModel: exportModel
+      ExhibitionExportModel: exportModel,
+      ExhibitionSnapshotClient: snapshotClient
     }
   }).exposed;
 }
@@ -252,4 +254,61 @@ test('exhibition exports preserve rows, formatting, escaping, totals, and filena
   assert.match(accounting.content, /₩ 55,000/);
   assert.ok(accounting.content.indexOf('작품 판매') < accounting.content.indexOf('후원'));
   assert.equal(soldWorks[0].unknownField, 'keep');
+});
+
+test('exhibition snapshot client preserves request and response contracts', async () => {
+  const calls = [];
+  const responses = [
+    { responseOk: true, payload: { ok: true, snapshots: null, canUndo: 1 } },
+    { responseOk: false, payload: { error: 'server list error' } },
+    { responseOk: true, payload: { ok: true } },
+    { responseOk: true, payload: { ok: false, error: 'restore error' } },
+    { responseOk: true, payload: { ok: true } },
+    { responseOk: true, payload: { ok: true, data: { exhibitions: null } } }
+  ];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    const next = responses.shift();
+    return {
+      ok: next.responseOk,
+      json: async () => next.payload
+    };
+  };
+
+  assert.deepEqual(await snapshotClient.listSnapshots({ fetchImpl, exhibitionId: 'A B' }), {
+    ok: true, error: '', snapshots: [], canUndo: true
+  });
+  assert.equal(calls[0].url, '/api/exhibition-snapshots?exhibitionId=A%20B&limit=100');
+  assert.deepEqual(await snapshotClient.listSnapshots({ fetchImpl, exhibitionId: 7, limit: 25 }), {
+    ok: false, error: 'server list error', snapshots: [], canUndo: false
+  });
+
+  assert.deepEqual(await snapshotClient.captureSnapshot({
+    fetchImpl, exhibitionId: 7, note: 'manual backup by Admin'
+  }), { ok: true, error: '스냅샷 생성에 실패했습니다.' });
+  assert.deepEqual(JSON.parse(calls[2].options.body), {
+    action: 'capture-now', exhibitionId: 7, note: 'manual backup by Admin'
+  });
+  assert.deepEqual(await snapshotClient.restoreSnapshot({
+    fetchImpl, exhibitionId: 7, snapshotId: 8
+  }), { ok: false, error: 'restore error' });
+  assert.deepEqual(JSON.parse(calls[3].options.body), {
+    action: 'restore', exhibitionId: 7, snapshotId: 8
+  });
+  assert.deepEqual(await snapshotClient.undoRestore({ fetchImpl, exhibitionId: 7 }), {
+    ok: true, error: '되돌리기에 실패했습니다.'
+  });
+  assert.deepEqual(JSON.parse(calls[4].options.body), {
+    action: 'undo-restore', exhibitionId: 7
+  });
+  assert.deepEqual(await snapshotClient.fetchExhibitions({ fetchImpl }), {
+    ok: true, exhibitions: []
+  });
+  await assert.rejects(
+    snapshotClient.listSnapshots({
+      exhibitionId: 7,
+      fetchImpl: async () => { throw new Error('network'); }
+    }),
+    /network/
+  );
 });
