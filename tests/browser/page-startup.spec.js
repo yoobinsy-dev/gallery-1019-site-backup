@@ -12,6 +12,16 @@ const currentUser = {
   galleryRole: '어드민',
   siteAccess: 'both'
 };
+const artistUser = {
+  id: 900002,
+  username: 'CHARACTERIZATION_TEST_ARTIST',
+  name: 'CHARACTERIZATION_TEST_ARTIST',
+  password: 'not-a-real-credential',
+  accountType: '기획자/작가',
+  galleryRole: '기획자/작가',
+  siteAccess: 'gallery'
+};
+const users = [currentUser, artistUser];
 const exhibitions = [{
   id: EXHIBITION_ID,
   title: 'CHARACTERIZATION_TEST_EXHIBITION',
@@ -19,11 +29,47 @@ const exhibitions = [{
   startDate: '2026-08-01',
   endDate: '2026-08-31',
   managers: [currentUser.name],
-  works: [],
-  artWorks: [],
-  goods: [],
+  staff: { planners: [], artists: [artistUser.id], staffs: [] },
+  works: [{
+    id: 900101,
+    manualNumber: 'W-LEGACY',
+    title: 'CHARACTERIZATION_TEST_WORKS_PRECEDENCE',
+    author: currentUser.name,
+    price: '100000',
+    photoName: 'characterization.png',
+    photoDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nVQAAAAASUVORK5CYII=',
+    saved: true,
+    createdByUserId: currentUser.id,
+    legacyOnlyField: 'preserve-works'
+  }, {
+    id: 900102,
+    manualNumber: 'W-ARTIST',
+    title: 'CHARACTERIZATION_TEST_ARTIST_OWNED',
+    author: artistUser.name,
+    price: '200000',
+    saved: true,
+    createdByUserId: artistUser.id
+  }],
+  artWorks: [{
+    id: 900103,
+    manualNumber: 'A-CURRENT',
+    title: 'CHARACTERIZATION_TEST_ARTWORKS_ONLY',
+    author: currentUser.name,
+    price: '300000',
+    saved: true,
+    createdByUserId: currentUser.id
+  }],
+  goods: [{
+    id: 900201,
+    manualNumber: 'G-1',
+    title: 'CHARACTERIZATION_TEST_GOODS',
+    price: '5000',
+    quantity: 5,
+    saved: true,
+    createdByUserId: currentUser.id
+  }],
   soldWorks: [
-    { id: 1, itemType: '작품', price: 250001 },
+    { id: 1, workId: 900101, itemType: '작품', price: 250001, buyerName: 'Buyer A', soldAtKst: '2026-08-15 12:00:00', saved: true },
     { id: 2, itemType: '굿즈', price: 5000, soldQuantity: 2 }
   ],
   artSoldWorks: [],
@@ -164,7 +210,7 @@ test.beforeEach(async ({ page, baseURL }) => {
       const payload = {
         ok: true,
         data: {
-          users: [currentUser],
+          users,
           exhibitions,
           'pottery-students-v1': studentFixtures,
           'pottery-personal-work-v1': personalWorkFixtures,
@@ -183,9 +229,9 @@ test.beforeEach(async ({ page, baseURL }) => {
     }
     await route.continue();
   });
-  await page.addInitScript(({ user, fixtureExhibitions, fixtureStudents, fixturePersonalWork, fixtureCalendar, fixtureMaterialOrders }) => {
+  await page.addInitScript(({ user, fixtureUsers, fixtureExhibitions, fixtureStudents, fixturePersonalWork, fixtureCalendar, fixtureMaterialOrders }) => {
     localStorage.setItem('currentUser', JSON.stringify(user));
-    localStorage.setItem('users', JSON.stringify([user]));
+    localStorage.setItem('users', JSON.stringify(fixtureUsers));
     localStorage.setItem('exhibitions', JSON.stringify(fixtureExhibitions));
     localStorage.setItem('pottery-students-v1', JSON.stringify(fixtureStudents));
     localStorage.setItem('pottery-personal-work-v1', JSON.stringify(fixturePersonalWork));
@@ -194,6 +240,7 @@ test.beforeEach(async ({ page, baseURL }) => {
     localStorage.setItem('studio-calendar-state-v1', JSON.stringify(fixtureCalendar));
   }, {
     user: currentUser,
+    fixtureUsers: users,
     fixtureExhibitions: exhibitions,
     fixtureStudents: studentFixtures,
     fixturePersonalWork: personalWorkFixtures,
@@ -233,6 +280,174 @@ for (const [name, path] of pages) {
     await expect(page.locator('body')).toBeVisible();
   });
 }
+
+test('works renderer preserves controlling body, roles, modes, and works compatibility', async ({ page }) => {
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.locator('.tab-button[data-tab="inventory-list"]').click();
+
+  await expect(page.locator('tr[data-work-id="900101"]')).toContainText('CHARACTERIZATION_TEST_WORKS_PRECEDENCE');
+  await expect(page.locator('tr[data-work-id="900102"]')).toContainText('CHARACTERIZATION_TEST_ARTIST_OWNED');
+  await expect(page.getByText('CHARACTERIZATION_TEST_ARTWORKS_ONLY', { exact: true })).toHaveCount(0);
+  await expect(page.locator('#work-select-all-btn-bottom')).toHaveCount(1);
+  const savedArtRow = page.locator('tr[data-work-id="900101"]');
+  await expect(savedArtRow.locator('img.saved-photo-image')).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await expect(savedArtRow.getByRole('button', { name: 'SOLD', exact: true })).toHaveCount(1);
+  await savedArtRow.getByRole('button', { name: '수정', exact: true }).click();
+  await expect(savedArtRow.locator('input[data-field="manualNumber"]')).toHaveValue('W-LEGACY');
+  await expect(savedArtRow.locator('input[data-field="title"]')).toHaveValue('CHARACTERIZATION_TEST_WORKS_PRECEDENCE');
+  await expect(savedArtRow.locator('input[data-field="price"]')).toHaveValue('100000');
+  await expect(savedArtRow.locator('input[data-field="author"]')).toHaveValue(currentUser.name);
+
+  await page.getByRole('button', { name: '굿즈 목록', exact: true }).click();
+  const goodsRow = page.locator('tr[data-work-id="900201"]');
+  await expect(goodsRow).toContainText('CHARACTERIZATION_TEST_GOODS');
+  await expect(goodsRow.locator('td').nth(5)).toHaveText('5');
+  await expect(goodsRow.locator('td').nth(6)).toHaveText('0');
+  await expect(goodsRow.locator('td').nth(7)).toHaveText('5');
+  await expect(page.locator('.works-table thead')).toContainText('판매된 수량');
+  await expect(page.locator('#work-select-all-btn-bottom')).toHaveCount(1);
+
+  await page.evaluate((artist) => {
+    localStorage.setItem('currentUser', JSON.stringify(artist));
+    window.switchTab('works');
+  }, artistUser);
+  const adminOwnedRow = page.locator('tr[data-work-id="900101"]');
+  const artistOwnedRow = page.locator('tr[data-work-id="900102"]');
+  const deleteAllButtons = page.locator('button.works-action-btn-danger').filter({ hasText: /^전체 삭제$/ });
+  await expect(deleteAllButtons).toHaveCount(2);
+  await expect(deleteAllButtons.first()).toBeHidden();
+  await expect(deleteAllButtons.last()).toBeHidden();
+  await expect(adminOwnedRow.getByRole('button', { name: '수정', exact: true })).toHaveCount(0);
+  await expect(adminOwnedRow.getByRole('button', { name: '삭제', exact: true })).toHaveCount(0);
+  await expect(artistOwnedRow.getByRole('button', { name: '수정', exact: true })).toHaveCount(1);
+  await expect(artistOwnedRow.getByRole('button', { name: '삭제', exact: true })).toHaveCount(1);
+
+  await page.evaluate(async (exhibitionId) => {
+    const [exhibition] = JSON.parse(localStorage.getItem('exhibitions') || '[]');
+    delete exhibition.works;
+    exhibition.artWorks = [{
+      id: 900301,
+      title: 'CHARACTERIZATION_TEST_ARTWORKS_FALLBACK',
+      saved: true,
+      createdByUserId: 900002
+    }];
+    localStorage.setItem('exhibitions', JSON.stringify([{ ...exhibition, id: exhibitionId }]));
+    await window.initDetailPage();
+  }, EXHIBITION_ID);
+  await page.getByRole('button', { name: '작품 목록', exact: true }).click();
+  await expect(page.locator('tr[data-work-id="900301"]')).toContainText('CHARACTERIZATION_TEST_ARTWORKS_FALLBACK');
+});
+
+test('exhibition snapshot client preserves requests, defaults, and refresh order', async ({ page }) => {
+  const requests = [];
+  await page.route('**/api/exhibition-snapshots*', async (route) => {
+    const request = route.request();
+    requests.push({
+      method: request.method(),
+      url: request.url(),
+      body: request.postDataJSON?.() || null
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        snapshots: [{ id: 77, snapshot_type: 'manual', created_at: '2026-08-15T12:00:00.000Z' }],
+        canUndo: true
+      })
+    });
+  });
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+
+  await page.evaluate(() => window.fetchExhibitionBackupSnapshots());
+  expect(requests[0]).toMatchObject({ method: 'GET', body: null });
+  expect(new URL(requests[0].url).searchParams.get('exhibitionId')).toBe(String(EXHIBITION_ID));
+  expect(new URL(requests[0].url).searchParams.get('limit')).toBe('100');
+  await page.evaluate(() => window.switchTab('exhibition-backup'));
+  await expect(page.locator('#tab-content')).toContainText('#77');
+  await expect(page.locator('#tab-content')).toContainText('0');
+  await expect(page.locator('#tab-content')).toContainText('-');
+
+  await page.evaluate(() => window.createManualExhibitionSnapshot());
+  await page.evaluate(() => window.restoreExhibitionSnapshot(77));
+  await page.evaluate(() => window.undoExhibitionSnapshotRestore());
+
+  const posts = requests.filter((request) => request.method === 'POST').map((request) => request.body);
+  expect(posts).toEqual([
+    { action: 'capture-now', exhibitionId: EXHIBITION_ID, note: 'manual backup by CHARACTERIZATION_TEST_ADMIN' },
+    { action: 'restore', exhibitionId: EXHIBITION_ID, snapshotId: 77 },
+    { action: 'undo-restore', exhibitionId: EXHIBITION_ID }
+  ]);
+  expect(requests.filter((request) => request.method === 'GET')).toHaveLength(4);
+});
+
+test('certificate builder preserves template cells, date, image, and source records', async ({ page }) => {
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  const result = await page.evaluate(async () => {
+    const [exhibition] = JSON.parse(localStorage.getItem('exhibitions') || '[]');
+    const sold = exhibition.soldWorks.find((item) => item.id === 1);
+    const work = exhibition.works.find((item) => item.id === 900101);
+    const before = JSON.stringify({ sold, work });
+    const blob = await window.buildCertificateWorkbookBlob(sold, work);
+    const workbook = await XlsxPopulate.fromDataAsync(await blob.arrayBuffer());
+    const sheet = workbook.sheet(0);
+    const zip = await JSZip.loadAsync(blob);
+    const mediaFiles = Object.keys(zip.files).filter((name) => name.startsWith('xl/media/') && !zip.files[name].dir);
+    return {
+      artist: sheet.cell('F24').value(),
+      title: sheet.cell('F26').value(),
+      date: sheet.cell('B3').value(),
+      mediaCount: mediaFiles.length,
+      size: blob.size,
+      sourceUnchanged: before === JSON.stringify({ sold, work })
+    };
+  });
+
+  expect(result.artist).toBe(currentUser.name);
+  expect(result.title).toBe('CHARACTERIZATION_TEST_WORKS_PRECEDENCE');
+  expect(result.date).toBe('Date 2026.08.15');
+  expect(result.mediaCount).toBeGreaterThan(0);
+  expect(result.size).toBeGreaterThan(1000);
+  expect(result.sourceUnchanged).toBe(true);
+});
+
+test('exhibition exports preserve filenames and key payload cells', async ({ page }) => {
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  const captureExport = async (action) => {
+    const result = await page.evaluate(async (actionName) => {
+      const originalCreateObjectURL = URL.createObjectURL;
+      const originalClick = HTMLAnchorElement.prototype.click;
+      let blob;
+      let filename;
+      URL.createObjectURL = (value) => { blob = value; return 'blob:characterization'; };
+      HTMLAnchorElement.prototype.click = function click() { filename = this.download; };
+      try {
+        window[actionName]();
+        return { filename, text: await blob.text() };
+      } finally {
+        URL.createObjectURL = originalCreateObjectURL;
+        HTMLAnchorElement.prototype.click = originalClick;
+      }
+    }, action);
+    return result;
+  };
+
+  const worksExport = await captureExport('exportWorksToExcel');
+  expect(worksExport.filename).toBe('CHARACTERIZATION_TEST_EXHIBITION-works.xls');
+  expect(worksExport.text).toContain('CHARACTERIZATION_TEST_WORKS_PRECEDENCE');
+
+  await page.locator('.tab-button[data-tab="inventory-sales"]').click();
+  const salesExport = await captureExport('exportSalesToExcel');
+  expect(salesExport.filename).toBe('CHARACTERIZATION_TEST_EXHIBITION-sales.xls');
+  expect(salesExport.text).toContain('Buyer A');
+
+  await page.locator('.tab-button[data-tab="exhibition-accounting"]').click();
+  const accountingExport = await captureExport('exportAccountingToExcel');
+  expect(accountingExport.filename).toBe('CHARACTERIZATION_TEST_EXHIBITION-accounting.xls');
+  expect(accountingExport.text).toContain('작품 판매');
+  expect(accountingExport.text).toContain('총이익');
+});
 
 test('master calendar preserves recurrence across week and month navigation', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));

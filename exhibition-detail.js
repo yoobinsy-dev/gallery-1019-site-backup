@@ -267,75 +267,23 @@ function waitForCloudSyncReady(timeoutMs = 5000) {
 }
 
 function cloneJson(value, fallback) {
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch (error) {
-    return fallback;
-  }
+  return globalThis.ExhibitionInventoryBackupModel.cloneJson(value, fallback);
 }
 
 function stripLargePayloadFields(value) {
-  if (!value || typeof value !== 'object') return;
-
-  const heavyFields = ['photoDataUrl', 'imageDataUrl', 'photoPreviewDataUrl', 'fileDataUrl', 'previewDataUrl'];
-  heavyFields.forEach((field) => {
-    if (typeof value[field] === 'string' && value[field].length > 0) {
-      value[field] = '';
-    }
-  });
-
-  Object.keys(value).forEach((key) => {
-    const child = value[key];
-    if (Array.isArray(child)) {
-      child.forEach((item) => stripLargePayloadFields(item));
-      return;
-    }
-    if (child && typeof child === 'object') {
-      stripLargePayloadFields(child);
-    }
-  });
+  return globalThis.ExhibitionInventoryBackupModel.stripLargePayloadFields(value);
 }
 
 function getInventoryBackupStorageKey(exhibitionId) {
-  const id = Number(exhibitionId);
-  if (!Number.isFinite(id) || id <= 0) return '';
-  return `${INVENTORY_BACKUP_KEY_PREFIX}${id}`;
+  return globalThis.ExhibitionInventoryBackupModel.getInventoryBackupStorageKey(exhibitionId);
 }
 
 function getInventoryListCounts(exhibition) {
-  if (!exhibition || typeof exhibition !== 'object') {
-    return { art: 0, goods: 0, total: 0 };
-  }
-
-  const art = Array.isArray(exhibition.artWorks)
-    ? exhibition.artWorks.length
-    : (Array.isArray(exhibition.works) ? exhibition.works.length : 0);
-  const goods = Array.isArray(exhibition.goods) ? exhibition.goods.length : 0;
-
-  return {
-    art,
-    goods,
-    total: art + goods
-  };
+  return globalThis.ExhibitionInventoryBackupModel.getInventoryListCounts(exhibition);
 }
 
 function normalizeInventoryBackupSnapshot(exhibition) {
-  const snapshot = {
-    id: exhibition?.id,
-    artWorks: Array.isArray(exhibition?.artWorks)
-      ? exhibition.artWorks
-      : (Array.isArray(exhibition?.works) ? exhibition.works : []),
-    goods: Array.isArray(exhibition?.goods) ? exhibition.goods : [],
-    artSoldWorks: Array.isArray(exhibition?.artSoldWorks)
-      ? exhibition.artSoldWorks
-      : (Array.isArray(exhibition?.soldWorks) ? exhibition.soldWorks : []),
-    soldGoods: Array.isArray(exhibition?.soldGoods) ? exhibition.soldGoods : []
-  };
-
-  const cloned = cloneJson(snapshot, null);
-  if (!cloned) return null;
-  stripLargePayloadFields(cloned);
-  return cloned;
+  return globalThis.ExhibitionInventoryBackupModel.normalizeInventoryBackupSnapshot(exhibition);
 }
 
 function loadInventoryBackup(exhibitionId) {
@@ -451,18 +399,10 @@ function restoreInventoryFromBackupIfNeeded(exhibitions, exhibitionIndex) {
 }
 
 function isLargeUnexpectedInventoryDrop(previousExhibition, nextExhibition) {
-  const previous = getInventoryListCounts(previousExhibition);
-  const next = getInventoryListCounts(nextExhibition);
-
-  if (previous.total < LARGE_DROP_MIN_PREVIOUS_TOTAL) return false;
-
-  const dropped = previous.total - next.total;
-  if (dropped < LARGE_DROP_MIN_ABSOLUTE) return false;
-  if (dropped / previous.total < LARGE_DROP_RATIO) return false;
-
-  const artWipe = previous.art >= 10 && next.art === 0;
-  const goodsWipe = previous.goods >= 10 && next.goods === 0;
-  return artWipe || goodsWipe || next.total <= Math.floor(previous.total * 0.3);
+  return globalThis.ExhibitionInventoryBackupModel.isLargeUnexpectedInventoryDrop(
+    previousExhibition,
+    nextExhibition
+  );
 }
 
 function getExhibitionLastTabStorageKey() {
@@ -803,17 +743,13 @@ async function fetchExhibitionBackupSnapshots() {
   switchTab('exhibition-backup');
 
   try {
-    const response = await fetch(`/api/exhibition-snapshots?exhibitionId=${encodeURIComponent(exhibitionId)}&limit=100`);
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok) {
-      exhibitionDetailState.backupError = payload?.error || '스냅샷 목록을 불러오지 못했습니다.';
-      exhibitionDetailState.backupSnapshots = [];
-      exhibitionDetailState.backupCanUndo = false;
-      return;
-    }
-
-    exhibitionDetailState.backupSnapshots = Array.isArray(payload.snapshots) ? payload.snapshots : [];
-    exhibitionDetailState.backupCanUndo = Boolean(payload.canUndo);
+    const result = await globalThis.ExhibitionSnapshotClient.listSnapshots({
+      fetchImpl: fetch,
+      exhibitionId
+    });
+    exhibitionDetailState.backupError = result.error;
+    exhibitionDetailState.backupSnapshots = result.snapshots;
+    exhibitionDetailState.backupCanUndo = result.canUndo;
   } catch (error) {
     exhibitionDetailState.backupError = '네트워크 오류로 스냅샷 목록을 불러오지 못했습니다.';
     exhibitionDetailState.backupSnapshots = [];
@@ -921,19 +857,13 @@ async function createManualExhibitionSnapshot() {
   const note = `manual backup by ${actorName}`;
 
   try {
-    const response = await fetch('/api/exhibition-snapshots', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'capture-now',
-        exhibitionId,
-        note
-      })
+    const result = await globalThis.ExhibitionSnapshotClient.captureSnapshot({
+      fetchImpl: fetch,
+      exhibitionId,
+      note
     });
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok) {
-      alert(payload?.error || '스냅샷 생성에 실패했습니다.');
+    if (!result.ok) {
+      alert(result.error);
       return;
     }
 
@@ -949,11 +879,9 @@ async function refreshExhibitionStateFromServer(exhibitionId) {
   if (!Number.isFinite(targetId) || targetId <= 0) return false;
 
   try {
-    const response = await fetch('/api/state?keys=exhibitions');
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok || !payload?.data) return false;
-
-    const remoteExhibitions = Array.isArray(payload.data.exhibitions) ? payload.data.exhibitions : [];
+    const result = await globalThis.ExhibitionSnapshotClient.fetchExhibitions({ fetchImpl: fetch });
+    if (!result.ok) return false;
+    const remoteExhibitions = result.exhibitions;
     const serialized = JSON.stringify(remoteExhibitions);
     if (typeof safeSetLocalStorageItem === 'function') {
       safeSetLocalStorageItem('exhibitions', serialized);
@@ -989,19 +917,13 @@ async function restoreExhibitionSnapshot(snapshotId) {
   }
 
   try {
-    const response = await fetch('/api/exhibition-snapshots', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'restore',
-        exhibitionId,
-        snapshotId
-      })
+    const result = await globalThis.ExhibitionSnapshotClient.restoreSnapshot({
+      fetchImpl: fetch,
+      exhibitionId,
+      snapshotId
     });
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok) {
-      alert(payload?.error || '복원에 실패했습니다.');
+    if (!result.ok) {
+      alert(result.error);
       return;
     }
 
@@ -1031,18 +953,12 @@ async function undoExhibitionSnapshotRestore() {
   }
 
   try {
-    const response = await fetch('/api/exhibition-snapshots', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'undo-restore',
-        exhibitionId
-      })
+    const result = await globalThis.ExhibitionSnapshotClient.undoRestore({
+      fetchImpl: fetch,
+      exhibitionId
     });
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok) {
-      alert(payload?.error || '되돌리기에 실패했습니다.');
+    if (!result.ok) {
+      alert(result.error);
       return;
     }
 
@@ -1685,14 +1601,11 @@ async function confirmFileUploadModal() {
 }
 
 function parseAccountingAmount(value) {
-  const n = Number(String(value ?? '').replace(/[^\d.-]/g, ''));
-  if (!Number.isFinite(n)) return 0;
-  return n;
+  return globalThis.ExhibitionAccountingProjection.parseAmount(value);
 }
 
 function formatAccountingAmount(value) {
-  const amount = parseAccountingAmount(value);
-  return `₩ ${amount.toLocaleString('ko-KR')}`;
+  return globalThis.ExhibitionAccountingProjection.formatAmount(value);
 }
 
 function escapeAccountingHtml(value) {
@@ -1732,36 +1645,12 @@ function getExhibitionExpenseItems() {
 }
 
 function getExhibitionRevenueItems() {
-  const soldWorks = ensureSoldWorksArray();
-  let artTotal = 0;
-  let goodsTotal = 0;
-
-  soldWorks.forEach((sold) => {
-    const itemType = normalizeSoldItemType(sold);
-    const unitAmount = parseAccountingAmount(sold.price);
-    const quantity = getSoldQuantityForItemType(itemType, sold.soldQuantity);
-    const rowAmount = unitAmount * quantity;
-
-    if (itemType === '굿즈') {
-      goodsTotal += rowAmount;
-    } else {
-      artTotal += rowAmount;
-    }
+  return globalThis.ExhibitionAccountingProjection.buildRevenueItems({
+    soldWorks: ensureSoldWorksArray(),
+    manualRevenueItems: getExhibitionManualRevenueItems(),
+    normalizeItemType: normalizeSoldItemType,
+    getQuantity: getSoldQuantityForItemType
   });
-
-  const manualRevenueItems = getExhibitionManualRevenueItems();
-  const manualRows = manualRevenueItems.map((item) => ({
-    id: item.id,
-    division: item.division,
-    amount: item.amount,
-    source: 'manual'
-  }));
-
-  return [
-    { id: 'art', division: '작품 판매', amount: artTotal, source: 'auto' },
-    { id: 'goods', division: '굿즈 판매', amount: goodsTotal, source: 'auto' },
-    ...manualRows
-  ];
 }
 
 function getExhibitionManualRevenueItems() {
@@ -1773,14 +1662,7 @@ function getExhibitionManualRevenueItems() {
 }
 
 function getExpenseEffectiveAmount(item, revenueTotals) {
-  if (!item) return 0;
-  if (item.code === 'commission-art') {
-    return (revenueTotals.art || 0) * 0.6;
-  }
-  if (item.code === 'commission-goods') {
-    return (revenueTotals.goods || 0) * 0.8;
-  }
-  return parseAccountingAmount(item.amount);
+  return globalThis.ExhibitionAccountingProjection.getExpenseEffectiveAmount(item, revenueTotals);
 }
 
 function buildAccountingTableRows(items, options = {}) {
@@ -1881,10 +1763,8 @@ function renderExhibitionAccounting(container) {
   const exhibition = getCurrentExhibition();
   const expenseItems = getExhibitionExpenseItems();
   const revenueItems = getExhibitionRevenueItems();
-  const revenueTotals = {
-    art: revenueItems.find((item) => item.id === 'art')?.amount || 0,
-    goods: revenueItems.find((item) => item.id === 'goods')?.amount || 0
-  };
+  const { revenueTotals, expenseTotal, revenueTotal, profitTotal } =
+    globalThis.ExhibitionAccountingProjection.buildFinanceProjection({ expenseItems, revenueItems });
 
   exhibitionDetailState.selectedExpenseIds = exhibitionDetailState.selectedExpenseIds
     .filter((id) => expenseItems.some((item) => item.id === id));
@@ -1894,10 +1774,6 @@ function renderExhibitionAccounting(container) {
     .filter((id) => revenueItems.some((item) => item.id === id));
   exhibitionDetailState.editingRevenueIds = exhibitionDetailState.editingRevenueIds
     .filter((id) => revenueItems.some((item) => item.id === id));
-
-  const expenseTotal = expenseItems.reduce((sum, item) => sum + getExpenseEffectiveAmount(item, revenueTotals), 0);
-  const revenueTotal = revenueItems.reduce((sum, item) => sum + parseAccountingAmount(item.amount), 0);
-  const profitTotal = revenueTotal - expenseTotal;
 
   container.innerHTML = `
     <div class="accounting-wrapper">
@@ -2521,27 +2397,19 @@ function getSalesMasterRecords() {
 }
 
 function normalizeSoldItemType(sold) {
-  if (!sold) return '작품';
-  return sold.itemType === '굿즈' ? '굿즈' : '작품';
+  return globalThis.ExhibitionSalesModel.normalizeSoldItemType(sold);
 }
 
 function parseSoldQuantity(value) {
-  const n = Number(String(value ?? '').replace(/[^\d.-]/g, ''));
-  if (!Number.isFinite(n) || n <= 0) return 1;
-  return Math.floor(n);
+  return globalThis.ExhibitionSalesModel.parseSoldQuantity(value);
 }
 
 function parseStockQuantity(value) {
-  const n = Number(String(value ?? '').replace(/[^\d.-]/g, ''));
-  if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.floor(n);
+  return globalThis.ExhibitionSalesModel.parseStockQuantity(value);
 }
 
 function getGoodsSoldQuantity(goodsId) {
-  const records = getSalesMasterRecords();
-  return records
-    .filter((sold) => normalizeSoldItemType(sold) === '굿즈' && sold.workId === goodsId)
-    .reduce((sum, sold) => sum + parseSoldQuantity(sold.soldQuantity), 0);
+  return globalThis.ExhibitionSalesModel.getGoodsSoldQuantity(getSalesMasterRecords(), goodsId);
 }
 
 function renderInventoryListManagement(container) {
@@ -2871,10 +2739,7 @@ function isArtistSalesSummaryEnabled() {
 }
 
 function parsePriceToNumber(value) {
-  if (isWorkNotForSale(value)) return 0;
-  const numeric = Number(String(value || '').replace(/[^\d.-]/g, ''));
-  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
-  return numeric;
+  return globalThis.ExhibitionSalesModel.parseSoldPriceAmount(value, isWorkNotForSale);
 }
 
 function formatCurrencyKrw(value) {
@@ -2883,25 +2748,7 @@ function formatCurrencyKrw(value) {
 }
 
 function getArtistSalesSummary() {
-  const soldWorks = ensureSoldWorksArray();
-  const summaryMap = new Map();
-
-  soldWorks.forEach((sold) => {
-    const author = (sold.author || '').toString().trim() || '작가 미지정';
-    const qty = getSoldQuantityForItemType(normalizeSoldItemType(sold), sold.soldQuantity);
-    const revenue = parsePriceToNumber(sold.price) * qty;
-    const existing = summaryMap.get(author) || { author, soldCount: 0, totalRevenue: 0 };
-    existing.soldCount += qty;
-    existing.totalRevenue += revenue;
-    summaryMap.set(author, existing);
-  });
-
-  return Array.from(summaryMap.values())
-    .sort((a, b) => {
-      if (b.totalRevenue !== a.totalRevenue) return b.totalRevenue - a.totalRevenue;
-      if (b.soldCount !== a.soldCount) return b.soldCount - a.soldCount;
-      return a.author.localeCompare(b.author, 'ko');
-    });
+  return globalThis.ExhibitionSalesModel.getArtistSalesSummary(ensureSoldWorksArray(), isWorkNotForSale);
 }
 
 function openArtistSalesSummaryModal() {
@@ -3194,28 +3041,17 @@ function renderSoldWorkRows() {
 }
 
 function getSoldQuantityForItemType(itemType, value) {
-  return itemType === '굿즈' ? parseSoldQuantity(value) : 1;
+  return globalThis.ExhibitionSalesModel.getSoldQuantityForItemType(itemType, value);
 }
 
 function getSalesSearchResults(query) {
   const exhibition = getCurrentExhibition();
-  const artWorks = Array.isArray(exhibition.artWorks) ? exhibition.artWorks : (exhibition.works || []);
-  const goods = Array.isArray(exhibition.goods) ? exhibition.goods : [];
-  const works = [
-    ...artWorks.map((work) => ({ ...work, itemType: '작품' })),
-    ...goods.map((work) => ({ ...work, itemType: '굿즈' }))
-  ];
-  const q = (query || '').trim().toLowerCase();
-  if (query === '__all__') return works;
-  if (!q) return [];
-
-  return works
-    .filter(work => {
-      const number = (work.manualNumber || '').toString().toLowerCase();
-      const title = (work.title || '').toString().toLowerCase();
-      return number.includes(q) || title.includes(q);
-    })
-    .slice(0, 20);
+  return globalThis.ExhibitionSalesModel.getSalesSearchResults({
+    artWorks: exhibition.artWorks,
+    works: exhibition.works,
+    goods: exhibition.goods,
+    query
+  });
 }
 
 function resetSalesAddCommonBuyerState() {
@@ -3832,50 +3668,27 @@ function getCertificateTemplateArrayBuffer() {
 }
 
 function getSourceArtworkForSold(sold) {
-  const exhibition = getCurrentExhibition();
-  const artWorks = Array.isArray(exhibition.artWorks) ? exhibition.artWorks : (Array.isArray(exhibition.works) ? exhibition.works : []);
-  return artWorks.find((work) => work.id === sold.workId) || null;
+  return globalThis.ExhibitionCertificateModel.getSourceArtwork(getCurrentExhibition(), sold);
 }
 
 function hasGeneratedCertificate(sold) {
-  return !!(sold && sold.certificateReady === true && sold.certificateVersion === 2);
+  return globalThis.ExhibitionCertificateModel.hasGeneratedCertificate(sold);
 }
 
 function normalizeCertificateDateText(soldAtKst) {
-  const text = (soldAtKst || '').toString().trim();
-  const m = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return text;
-  return `${m[1]}.${m[2]}.${m[3]}`;
+  return globalThis.ExhibitionCertificateModel.normalizeCertificateDateText(soldAtKst);
 }
 
 function safeCertificateFileName(baseTitle) {
-  const clean = String(baseTitle || '작품').replace(/[\\/:*?"<>|]/g, '_').trim() || '작품';
-  return `${clean}-보증서.xlsx`;
+  return globalThis.ExhibitionCertificateModel.safeCertificateFileName(baseTitle);
 }
 
 function getPhotoPreviewDataUrl(item) {
-  const pendingPreview = (item?.pendingPhotoPreviewDataUrl || '').toString().trim();
-  if (pendingPreview) return pendingPreview;
-
-  const pendingFull = (item?.pendingPhotoDataUrl || '').toString().trim();
-  if (pendingFull) return pendingFull;
-
-  const previewUrl = (item?.photoPreviewUrl || '').toString().trim();
-  if (previewUrl) return previewUrl;
-
-  const fullUrl = (item?.photoUrl || '').toString().trim();
-  if (fullUrl) return fullUrl;
-
-  return (item?.photoPreviewDataUrl || item?.photoDataUrl || '').toString().trim();
+  return globalThis.ExhibitionImageLifecycle.getPhotoPreviewSource(item);
 }
 
 function getPhotoDataUrl(item) {
-  const pendingFull = (item?.pendingPhotoDataUrl || '').toString().trim();
-  if (pendingFull) return pendingFull;
-
-  const fullUrl = (item?.photoUrl || '').toString().trim();
-  if (fullUrl) return fullUrl;
-  return (item?.photoDataUrl || '').toString().trim();
+  return globalThis.ExhibitionImageLifecycle.getPhotoSource(item);
 }
 
 function getCertificateImageDataUrl(sold, work) {
@@ -3994,92 +3807,8 @@ async function buildCertificatePngBytesFromDataUrl(imageDataUrl) {
   };
 }
 
-const EMU_PER_PIXEL = 9525;
-
-function excelColumnWidthToPixels(width) {
-  const w = Number(width);
-  if (!Number.isFinite(w) || w <= 0) return 64;
-  return Math.floor(((256 * w + Math.floor(128 / 7)) / 256) * 7);
-}
-
-function excelRowHeightToPixels(heightPt) {
-  const h = Number(heightPt);
-  if (!Number.isFinite(h) || h <= 0) return 20;
-  return Math.floor(h * 96 / 72);
-}
-
 function parseWorksheetMetrics(sheetXml) {
-  const defaultColWidthMatch = sheetXml.match(/defaultColWidth="([\d.]+)"/);
-  const defaultRowHeightMatch = sheetXml.match(/defaultRowHeight="([\d.]+)"/);
-  const defaultColWidth = Number(defaultColWidthMatch?.[1] || 8.43);
-  const defaultRowHeight = Number(defaultRowHeightMatch?.[1] || 15);
-
-  const colRanges = [];
-  const colTagMatches = sheetXml.match(/<col\b[^>]*\/>/g) || [];
-  colTagMatches.forEach((tag) => {
-    const min = Number((tag.match(/\bmin="(\d+)"/) || [])[1] || 0);
-    const max = Number((tag.match(/\bmax="(\d+)"/) || [])[1] || 0);
-    const width = Number((tag.match(/\bwidth="([\d.]+)"/) || [])[1] || defaultColWidth);
-    if (!min || !max) return;
-    colRanges.push({ min, max, width });
-  });
-
-  const rowHeightByIndex = new Map();
-  const rowTagRegex = /<row\b([^>]*)>/g;
-  let rowMatch;
-  while ((rowMatch = rowTagRegex.exec(sheetXml))) {
-    const attrs = rowMatch[1] || '';
-    const rowNumber = Number((attrs.match(/\br="(\d+)"/) || [])[1] || 0);
-    const rowHeight = Number((attrs.match(/\bht="([\d.]+)"/) || [])[1] || 0);
-    if (!rowNumber || !Number.isFinite(rowHeight) || rowHeight <= 0) continue;
-    rowHeightByIndex.set(rowNumber - 1, rowHeight);
-  }
-
-  function getColumnWidthPx(colIndexZeroBased) {
-    const colIndex1Based = colIndexZeroBased + 1;
-    const matched = colRanges.find((range) => colIndex1Based >= range.min && colIndex1Based <= range.max);
-    const width = matched ? matched.width : defaultColWidth;
-    return excelColumnWidthToPixels(width);
-  }
-
-  function getRowHeightPx(rowIndexZeroBased) {
-    const height = rowHeightByIndex.get(rowIndexZeroBased) || defaultRowHeight;
-    return excelRowHeightToPixels(height);
-  }
-
-  return {
-    getColumnWidthPx,
-    getRowHeightPx
-  };
-}
-
-function sumAxisPixels(startIndex, endExclusive, sizeFn) {
-  let sum = 0;
-  for (let i = startIndex; i < endExclusive; i += 1) {
-    sum += sizeFn(i);
-  }
-  return sum;
-}
-
-function positionPxToCellOffset(startIndex, endExclusive, positionPx, sizeFn) {
-  const totalPx = sumAxisPixels(startIndex, endExclusive, sizeFn);
-  if (positionPx <= 0) {
-    return { index: startIndex, offsetPx: 0 };
-  }
-  if (positionPx >= totalPx) {
-    return { index: endExclusive, offsetPx: 0 };
-  }
-
-  let remaining = positionPx;
-  for (let i = startIndex; i < endExclusive; i += 1) {
-    const segment = sizeFn(i);
-    if (remaining < segment) {
-      return { index: i, offsetPx: remaining };
-    }
-    remaining -= segment;
-  }
-
-  return { index: endExclusive, offsetPx: 0 };
+  return globalThis.ExhibitionCertificateModel.parseWorksheetMetrics(sheetXml);
 }
 
 const CERTIFICATE_BLOCK_START_ROW = 2;
@@ -4087,52 +3816,12 @@ const CERTIFICATE_BLOCK_END_ROW = 45;
 const CERTIFICATE_BLOCK_HEIGHT = CERTIFICATE_BLOCK_END_ROW - CERTIFICATE_BLOCK_START_ROW + 1;
 
 function computeContainedImageAnchor(metrics, imageWidthPx, imageHeightPx, rowOffset = 0) {
-  const bounds = {
-    fromCol: 2,
-    toCol: 7,
-    fromRow: 4 + rowOffset,
-    toRow: 22 + rowOffset
-  };
-
-  const boxWidthPx = sumAxisPixels(bounds.fromCol, bounds.toCol, metrics.getColumnWidthPx);
-  const boxHeightPx = sumAxisPixels(bounds.fromRow, bounds.toRow, metrics.getRowHeightPx);
-
-  const safeImageWidth = Math.max(1, Number(imageWidthPx) || 1);
-  const safeImageHeight = Math.max(1, Number(imageHeightPx) || 1);
-
-  const imageRatio = safeImageWidth / safeImageHeight;
-  const boxRatio = boxWidthPx / boxHeightPx;
-
-  let fittedWidthPx;
-  let fittedHeightPx;
-  if (imageRatio > boxRatio) {
-    fittedWidthPx = boxWidthPx;
-    fittedHeightPx = boxWidthPx / imageRatio;
-  } else {
-    fittedHeightPx = boxHeightPx;
-    fittedWidthPx = boxHeightPx * imageRatio;
-  }
-
-  const startXPx = (boxWidthPx - fittedWidthPx) / 2;
-  const startYPx = (boxHeightPx - fittedHeightPx) / 2;
-  const endXPx = startXPx + fittedWidthPx;
-  const endYPx = startYPx + fittedHeightPx;
-
-  const fromX = positionPxToCellOffset(bounds.fromCol, bounds.toCol, startXPx, metrics.getColumnWidthPx);
-  const toX = positionPxToCellOffset(bounds.fromCol, bounds.toCol, endXPx, metrics.getColumnWidthPx);
-  const fromY = positionPxToCellOffset(bounds.fromRow, bounds.toRow, startYPx, metrics.getRowHeightPx);
-  const toY = positionPxToCellOffset(bounds.fromRow, bounds.toRow, endYPx, metrics.getRowHeightPx);
-
-  return {
-    fromCol: fromX.index,
-    fromColOff: Math.round(fromX.offsetPx * EMU_PER_PIXEL),
-    toCol: toX.index,
-    toColOff: Math.round(toX.offsetPx * EMU_PER_PIXEL),
-    fromRow: fromY.index,
-    fromRowOff: Math.round(fromY.offsetPx * EMU_PER_PIXEL),
-    toRow: toY.index,
-    toRowOff: Math.round(toY.offsetPx * EMU_PER_PIXEL)
-  };
+  return globalThis.ExhibitionCertificateModel.computeContainedImageAnchor(
+    metrics,
+    imageWidthPx,
+    imageHeightPx,
+    rowOffset
+  );
 }
 
 function removeXmlAttribute(tag, attrName) {
@@ -4511,22 +4200,13 @@ function downloadBlobFile(blob, fileName) {
   URL.revokeObjectURL(url);
 }
 
-function normalizeArtistNameKey(value) {
-  return (value || '').toString().trim().toLowerCase();
-}
-
 function getArtistInstagramForCertificate(sold, work) {
   const exhibition = ensureExhibitionInfoData();
-  const map = exhibition.artistInstagramMap || {};
-  const author = (work?.author || sold?.author || '').toString().trim();
-  if (!author) return '';
-
-  const direct = (map[author] || '').toString().trim();
-  if (direct) return direct;
-
-  const normalizedAuthor = normalizeArtistNameKey(author);
-  const fallbackKey = Object.keys(map).find((name) => normalizeArtistNameKey(name) === normalizedAuthor);
-  return fallbackKey ? (map[fallbackKey] || '').toString().trim() : '';
+  return globalThis.ExhibitionCertificateModel.getArtistInstagram(
+    exhibition.artistInstagramMap,
+    sold,
+    work
+  );
 }
 
 function escapeXmlText(value) {
@@ -4647,33 +4327,29 @@ async function buildCertificateWorkbookBlob(sold, work) {
   const workbook = await XlsxPopulate.fromDataAsync(templateBuffer);
   const sheet = workbook.sheet(0);
 
-  const artist = (work?.author || sold.author || '').toString();
-  const title = (work?.title || sold.title || '').toString();
-  const materials = (work?.materials || '').toString();
-  const size = (work?.size || '').toString();
-  const year = (work?.year || '').toString();
-  const edition = '';
-  const soldDate = normalizeCertificateDateText(sold.soldAtKst || '');
-  const photoText = (work?.photoName || sold.photoName || '').toString();
-  const artistInstagram = getArtistInstagramForCertificate(sold, work);
+  const fields = globalThis.ExhibitionCertificateModel.buildCertificateFields(
+    sold,
+    work,
+    getArtistInstagramForCertificate(sold, work)
+  );
 
   // Template fixed data cells (validated from workbook structure).
-  sheet.cell('F24').value(artist);
-  sheet.cell('F26').value(title);
-  sheet.cell('F28').value(materials);
-  sheet.cell('F30').value(size);
-  sheet.cell('F32').value(year);
-  sheet.cell('F34').value(edition);
+  sheet.cell('F24').value(fields.artist);
+  sheet.cell('F26').value(fields.title);
+  sheet.cell('F28').value(fields.materials);
+  sheet.cell('F30').value(fields.size);
+  sheet.cell('F32').value(fields.year);
+  sheet.cell('F34').value(fields.edition);
 
-  if (soldDate) {
-    sheet.cell('B3').value(`Date ${soldDate}`);
+  if (fields.soldDate) {
+    sheet.cell('B3').value(`Date ${fields.soldDate}`);
   }
-  if (photoText) {
+  if (fields.photoText) {
     sheet.cell('C22').value('');
   }
 
   let workbookBlob = await workbook.outputAsync();
-  workbookBlob = await applyCertificateInstagramPlaceholderToWorkbookBlob(workbookBlob, artistInstagram);
+  workbookBlob = await applyCertificateInstagramPlaceholderToWorkbookBlob(workbookBlob, fields.artistInstagram);
   const imageDataUrl = getCertificateImageDataUrl(sold, work);
   if (!imageDataUrl) {
     throw new Error('Artwork image not found for certificate.');
@@ -4682,10 +4358,7 @@ async function buildCertificateWorkbookBlob(sold, work) {
 }
 
 function buildAllCertificatesDownloadFileName() {
-  const exhibition = getCurrentExhibition() || {};
-  const exhibitionName = (exhibition.title || exhibition.name || '전시').toString().trim() || '전시';
-  const safeName = exhibitionName.replace(/[\\/:*?"<>|]/g, '_');
-  return `${safeName}-모든보증서.xlsx`;
+  return globalThis.ExhibitionCertificateModel.buildAllCertificatesFileName(getCurrentExhibition());
 }
 
 async function buildAllCertificatesWorkbookBlob(entries) {
@@ -4807,28 +4480,24 @@ async function buildAllCertificatesWorkbookBlob(entries) {
     const sold = entry.sold || {};
     const work = entry.work || {};
     const rowOffset = pageIndex * CERTIFICATE_BLOCK_HEIGHT;
-    const soldDate = normalizeCertificateDateText(sold.soldAtKst || '');
-    const artistInstagram = getArtistInstagramForCertificate(sold, work);
+    const fields = globalThis.ExhibitionCertificateModel.buildCertificateFields(
+      sold,
+      work,
+      getArtistInstagramForCertificate(sold, work)
+    );
 
-    const artist = (work.author || sold.author || '').toString();
-    const title = (work.title || sold.title || '').toString();
-    const materials = (work.materials || '').toString();
-    const size = (work.size || '').toString();
-    const year = (work.year || '').toString();
-    const edition = '';
+    setInlineCellValueByRef(cellMap, `F${24 + rowOffset}`, fields.artist, sheetDoc);
+    setInlineCellValueByRef(cellMap, `F${26 + rowOffset}`, fields.title, sheetDoc);
+    setInlineCellValueByRef(cellMap, `F${28 + rowOffset}`, fields.materials, sheetDoc);
+    setInlineCellValueByRef(cellMap, `F${30 + rowOffset}`, fields.size, sheetDoc);
+    setInlineCellValueByRef(cellMap, `F${32 + rowOffset}`, fields.year, sheetDoc);
+    setInlineCellValueByRef(cellMap, `F${34 + rowOffset}`, fields.edition, sheetDoc);
+    setInlineCellValueByRef(cellMap, `B${3 + rowOffset}`, fields.soldDate ? `Date ${fields.soldDate}` : '', sheetDoc);
 
-    setInlineCellValueByRef(cellMap, `F${24 + rowOffset}`, artist, sheetDoc);
-    setInlineCellValueByRef(cellMap, `F${26 + rowOffset}`, title, sheetDoc);
-    setInlineCellValueByRef(cellMap, `F${28 + rowOffset}`, materials, sheetDoc);
-    setInlineCellValueByRef(cellMap, `F${30 + rowOffset}`, size, sheetDoc);
-    setInlineCellValueByRef(cellMap, `F${32 + rowOffset}`, year, sheetDoc);
-    setInlineCellValueByRef(cellMap, `F${34 + rowOffset}`, edition, sheetDoc);
-    setInlineCellValueByRef(cellMap, `B${3 + rowOffset}`, soldDate ? `Date ${soldDate}` : '', sheetDoc);
-
-    const instagramText = artistInstagram
+    const instagramText = fields.artistInstagram
       ? (instagramPattern.includes('instagram_handle_name')
-        ? instagramPattern.split('instagram_handle_name').join(artistInstagram)
-        : artistInstagram)
+        ? instagramPattern.split('instagram_handle_name').join(fields.artistInstagram)
+        : fields.artistInstagram)
       : '';
     setInlineCellValueByRef(cellMap, `A${45 + rowOffset}`, instagramText, sheetDoc);
   });
@@ -5536,7 +5205,7 @@ function removeStaffMember(role, userId) {
   switchTab('staff');
 }
 
-function renderWorksManagement(container) {
+function renderLegacyWorksManagement(container) {
   const wrapper = document.createElement('div');
   wrapper.className = 'works-wrapper';
   const exhibition = getCurrentExhibition();
@@ -5747,132 +5416,6 @@ function updateSaveAllButtonVisibility() {
       saveAllBtn.style.display = exhibitionDetailState.unsavedWorkCount >= 2 ? 'inline-block' : 'none';
     }
   });
-}
-
-function renderWorkRows() {
-  const tbody = document.getElementById('works-tbody');
-  const exhibition = getCurrentExhibition();
-  const isGoodsMode = exhibitionDetailState.inventoryMode === 'goods';
-  let works = exhibition.works || [];
-  tbody.innerHTML = '';
-
-  works = getSortedWorks();
-  
-  exhibitionDetailState.unsavedWorkCount = works.filter(w => !w.saved).length;
-  updateSaveAllButtonVisibility();
-  updateWorkSelectionActionButtons(works);
-
-  if (works.length === 0) {
-    const emptyRow = document.createElement('tr');
-    emptyRow.innerHTML = '<td colspan="12" class="no-users">등록된 작품이 없습니다.</td>';
-    tbody.appendChild(emptyRow);
-    refreshGridKeyboardNavigation('works-tbody');
-    renderSoldStatsTicker('works');
-    return;
-  }
-
-  const soldWorkIdSet = new Set(ensureSoldWorksArray().map(item => item.workId));
-
-  const selectAllCheckbox = document.getElementById('select-all-works');
-  if (selectAllCheckbox) {
-    const allVisibleSelected = works.length > 0 && works.every(work => exhibitionDetailState.selectedWorkIds.includes(work.id));
-    selectAllCheckbox.checked = allVisibleSelected;
-  }
-
-  works.forEach((work, index) => {
-    const row = document.createElement('tr');
-    row.setAttribute('data-work-id', String(work.id));
-    const isSelected = exhibitionDetailState.selectedWorkIds.includes(work.id);
-    const canModifyWork = canCurrentUserModifyOwnedRow(work);
-    const actionButton = !canModifyWork
-      ? ''
-      : (work.saved
-        ? `<button class="action-btn edit-btn" onclick="toggleWorkEdit(${work.id})">수정</button>`
-        : `<button class="action-btn approve-btn" onclick="saveWork(${work.id}, this)">저장</button>`);
-    const duplicateButton = canModifyWork
-      ? `<button class="action-btn approve-btn" onclick="duplicateWorkRow(${work.id})">복사</button>`
-      : '';
-
-    const authorText = work.author || '';
-    const authorInput = exhibition.type === '개인전'
-      ? `<input type="text" data-field="author" value="${authorText}" disabled>`
-      : `<input type="text" data-field="author" value="${authorText}" onchange="handleWorkChange(${work.id}, 'author', this.value)">`;
-    const { width, height } = parseSizeParts(work.size);
-
-    const workPreviewDataUrl = getPhotoPreviewDataUrl(work);
-    const savedPhotoCell = workPreviewDataUrl
-      ? `<img src="${workPreviewDataUrl}" alt="${(work.title || '작품').replace(/"/g, '&quot;')}" class="saved-photo-image" onclick="openImagePreviewByWorkId(${work.id}, event)">`
-      : `<span class="saved-photo">${work.photoName || '사진 없음'}</span>`;
-    const isUnsold = isWorkNotForSale(work.price);
-    const savedPriceCell = isUnsold
-      ? `<span class="price-not-for-sale">미판매</span>`
-      : `${work.price || ''}`;
-    const statusCell = soldWorkIdSet.has(work.id)
-      ? `<button type="button" class="work-status-badge sold" onclick="jumpToSoldWork(${work.id})">SOLD</button>`
-      : '';
-
-    if (work.saved) {
-      row.className = 'work-saved-row';
-      row.innerHTML = `
-        <td class="checkbox-col"><input type="checkbox" class="work-checkbox" ${isSelected ? 'checked' : ''} onclick="toggleWorkSelection(${work.id}, this.checked, event, ${index})"></td>
-        <td>${work.manualNumber || ''}</td>
-        <td>${work.category || ''}</td>
-        <td>${savedPhotoCell}</td>
-        <td>${work.title || ''}</td>
-        <td>${authorText || ''}</td>
-        <td>${savedPriceCell}</td>
-        <td>${work.materials || ''}</td>
-        <td>${work.size || ''}</td>
-        <td>${work.year || ''}</td>
-        <td class="work-status-cell">${statusCell}</td>
-        <td>
-          ${actionButton}
-          <button class="action-btn delete-btn" onclick="openDeleteWorkModal(${work.id})">삭제</button>
-        </td>
-      `;
-    } else {
-      const editPhotoPreview = workPreviewDataUrl
-        ? `<img src="${workPreviewDataUrl}" alt="미리보기" class="photo-preview-image" onclick="openImagePreviewByWorkId(${work.id}, event)">`
-        : `${work.photoName || '사진 없음'}`;
-
-      row.innerHTML = `
-        <td class="checkbox-col"><input type="checkbox" class="work-checkbox" ${isSelected ? 'checked' : ''} onclick="toggleWorkSelection(${work.id}, this.checked, event, ${index})"></td>
-        <td><input type="text" data-field="manualNumber" value="${work.manualNumber || ''}" onchange="handleWorkChange(${work.id}, 'manualNumber', this.value)"></td>
-        <td><input type="text" data-field="category" value="${work.category || ''}" onchange="handleWorkChange(${work.id}, 'category', this.value)"></td>
-        <td>
-          <input type="file" accept="image/*" onchange="handleWorkPhotoChange(${work.id}, event)" class="photo-input">
-          <div class="photo-preview">${editPhotoPreview}</div>
-        </td>
-        <td><input type="text" data-field="title" value="${work.title || ''}" onchange="handleWorkChange(${work.id}, 'title', this.value)"></td>
-        <td>${authorInput}</td>
-        <td>
-          <div class="price-input-group">
-            <input type="text" data-field="price" value="${isUnsold ? '미판매' : (work.price || '')}" oninput="handlePriceInput(${work.id}, event)" onchange="handleWorkChange(${work.id}, 'price', this.value)">
-            <button type="button" class="price-cancel-btn" data-tooltip="미판매" title="미판매" aria-label="미판매" onclick="setWorkNotForSale(${work.id}, this)">✕</button>
-          </div>
-        </td>
-        <td><input type="text" data-field="materials" value="${work.materials || ''}" onchange="handleWorkChange(${work.id}, 'materials', this.value)"></td>
-        <td>
-          <div class="size-input-group">
-            <input type="text" data-field="sizeWidth" value="${width}" class="size-dimension-input" placeholder="가로" oninput="handleWorkSizeChange(${work.id}, 'width', this.value)">
-            <span class="size-unit">cm x</span>
-            <input type="text" data-field="sizeHeight" value="${height}" class="size-dimension-input" placeholder="세로" oninput="handleWorkSizeChange(${work.id}, 'height', this.value)">
-            <span class="size-unit">cm</span>
-          </div>
-        </td>
-        <td><input type="text" data-field="year" value="${work.year || ''}" onchange="handleWorkChange(${work.id}, 'year', this.value)"></td>
-        <td class="work-status-cell">${statusCell}</td>
-        <td>
-          ${actionButton}
-          <button class="action-btn delete-btn" onclick="openDeleteWorkModal(${work.id})">삭제</button>
-        </td>
-      `;
-    }
-    tbody.appendChild(row);
-  });
-
-  refreshGridKeyboardNavigation('works-tbody');
-  renderSoldStatsTicker('works');
 }
 
 function toggleSalesCheckbox(soldId, isChecked) {
@@ -6525,12 +6068,10 @@ function renderWorkRows() {
   const tbody = document.getElementById('works-tbody');
   const exhibition = getCurrentExhibition();
   const isGoodsMode = exhibitionDetailState.inventoryMode === 'goods';
-  let works = exhibition.works || [];
+  const works = getSortedWorks();
   tbody.innerHTML = '';
 
-  works = getSortedWorks();
-  
-  exhibitionDetailState.unsavedWorkCount = works.filter(w => !w.saved).length;
+  exhibitionDetailState.unsavedWorkCount = works.filter((work) => !work.saved).length;
   updateSaveAllButtonVisibility();
   updateWorkSelectionActionButtons(works);
 
@@ -6542,160 +6083,38 @@ function renderWorkRows() {
     return;
   }
 
-  const soldWorkIdSet = new Set(ensureSoldWorksArray().filter(item => normalizeSoldItemType(item) === '작품').map(item => item.workId));
-
+  const soldWorkIdSet = new Set(
+    ensureSoldWorksArray()
+      .filter((item) => normalizeSoldItemType(item) === '작품')
+      .map((item) => item.workId)
+  );
   const selectAllCheckbox = document.getElementById('select-all-works');
   if (selectAllCheckbox) {
-    const allVisibleSelected = works.length > 0 && works.every(work => exhibitionDetailState.selectedWorkIds.includes(work.id));
-    selectAllCheckbox.checked = allVisibleSelected;
+    selectAllCheckbox.checked = works.every((work) => exhibitionDetailState.selectedWorkIds.includes(work.id));
   }
 
   works.forEach((work, index) => {
     const row = document.createElement('tr');
+    const soldQuantity = isGoodsMode ? getGoodsSoldQuantity(work.id) : 0;
+    const stockQuantity = isGoodsMode ? parseStockQuantity(work.quantity || 0) : 0;
+    const presentation = globalThis.ExhibitionInventoryRenderer.buildWorkRow({
+      work,
+      index,
+      isGoodsMode,
+      isSelected: exhibitionDetailState.selectedWorkIds.includes(work.id),
+      canModifyWork: canCurrentUserModifyOwnedRow(work),
+      previewDataUrl: getPhotoPreviewDataUrl(work),
+      isUnsold: isWorkNotForSale(work.price),
+      isSold: soldWorkIdSet.has(work.id),
+      soldQuantity,
+      stockQuantity,
+      remainingQuantity: Math.max(0, stockQuantity - soldQuantity),
+      isSoloExhibition: exhibition.type === '개인전',
+      sizeParts: parseSizeParts(work.size)
+    });
     row.setAttribute('data-work-id', String(work.id));
-    const isSelected = exhibitionDetailState.selectedWorkIds.includes(work.id);
-    const canModifyWork = canCurrentUserModifyOwnedRow(work);
-    const actionButton = !canModifyWork
-      ? ''
-      : (work.saved
-        ? `<button class="action-btn edit-btn" onclick="toggleWorkEdit(${work.id})">수정</button>`
-        : `<button class="action-btn approve-btn" onclick="saveWork(${work.id}, this)">저장</button>`);
-    const duplicateButton = canModifyWork
-      ? `<button class="action-btn approve-btn" onclick="duplicateWorkRow(${work.id})">복사</button>`
-      : '';
-
-    const authorText = work.author || '';
-    const authorInput = exhibition.type === '개인전'
-      ? `<input type="text" data-field="author" value="${authorText}" disabled>`
-      : `<input type="text" data-field="author" value="${authorText}" onchange="handleWorkChange(${work.id}, 'author', this.value)">`;
-    const { width, height } = parseSizeParts(work.size);
-
-    const workPreviewDataUrl = getPhotoPreviewDataUrl(work);
-    const savedPhotoCell = workPreviewDataUrl
-      ? `<img src="${workPreviewDataUrl}" alt="${(work.title || '작품').replace(/"/g, '&quot;')}" class="saved-photo-image" onclick="openImagePreviewByWorkId(${work.id}, event)">`
-      : `<span class="saved-photo">${work.photoName || '사진 없음'}</span>`;
-    const isUnsold = isWorkNotForSale(work.price);
-    const savedPriceCell = isUnsold
-      ? `<span class="price-not-for-sale">미판매</span>`
-      : `${work.price || ''}`;
-    const statusCell = soldWorkIdSet.has(work.id)
-      ? `<button type="button" class="work-status-badge sold" onclick="jumpToSoldWork(${work.id})">SOLD</button>`
-      : '';
-
-    if (isGoodsMode) {
-      const soldQty = getGoodsSoldQuantity(work.id);
-      const stockQty = parseStockQuantity(work.quantity || 0);
-      const remainingQty = Math.max(0, stockQty - soldQty);
-
-      if (work.saved || !canModifyWork) {
-        row.className = 'work-saved-row';
-        row.innerHTML = `
-          <td class="checkbox-col"><input type="checkbox" class="work-checkbox" ${isSelected ? 'checked' : ''} onclick="toggleWorkSelection(${work.id}, this.checked, event, ${index})"></td>
-          <td>${work.manualNumber || ''}</td>
-          <td>${savedPhotoCell}</td>
-          <td>${work.title || ''}</td>
-          <td>${savedPriceCell}</td>
-          <td>${stockQty}</td>
-          <td>${soldQty}</td>
-          <td>${remainingQty}</td>
-          <td>
-            ${actionButton}
-            ${duplicateButton}
-            ${canModifyWork ? `<button class="action-btn delete-btn" onclick="openDeleteWorkModal(${work.id})">삭제</button>` : ''}
-          </td>
-        `;
-      } else {
-        const editPhotoPreview = workPreviewDataUrl
-          ? `<img src="${workPreviewDataUrl}" alt="미리보기" class="photo-preview-image" onclick="openImagePreviewByWorkId(${work.id}, event)">`
-          : `${work.photoName || '사진 없음'}`;
-
-        row.innerHTML = `
-          <td class="checkbox-col"><input type="checkbox" class="work-checkbox" ${isSelected ? 'checked' : ''} onclick="toggleWorkSelection(${work.id}, this.checked, event, ${index})"></td>
-          <td><input type="text" data-field="manualNumber" value="${work.manualNumber || ''}" onchange="handleWorkChange(${work.id}, 'manualNumber', this.value)"></td>
-          <td>
-            <input type="file" accept="image/*" onchange="handleWorkPhotoChange(${work.id}, event)" class="photo-input">
-            <div class="photo-preview">${editPhotoPreview}</div>
-          </td>
-          <td><input type="text" data-field="title" value="${work.title || ''}" onchange="handleWorkChange(${work.id}, 'title', this.value)"></td>
-          <td>
-            <div class="price-input-group">
-              <input type="text" data-field="price" value="${isUnsold ? '미판매' : (work.price || '')}" oninput="handlePriceInput(${work.id}, event)" onchange="handleWorkChange(${work.id}, 'price', this.value)">
-              <button type="button" class="price-cancel-btn" data-tooltip="미판매" title="미판매" aria-label="미판매" onclick="setWorkNotForSale(${work.id}, this)">✕</button>
-            </div>
-          </td>
-          <td><input data-field="quantity" type="number" min="0" value="${stockQty}" onchange="handleWorkChange(${work.id}, 'quantity', this.value)"></td>
-          <td>${soldQty}</td>
-          <td>${remainingQty}</td>
-          <td>
-            ${actionButton}
-            ${duplicateButton}
-            <button class="action-btn delete-btn" onclick="openDeleteWorkModal(${work.id})">삭제</button>
-          </td>
-        `;
-      }
-      tbody.appendChild(row);
-      return;
-    }
-
-    if (work.saved || !canModifyWork) {
-      row.className = 'work-saved-row';
-      row.innerHTML = `
-        <td class="checkbox-col"><input type="checkbox" class="work-checkbox" ${isSelected ? 'checked' : ''} onclick="toggleWorkSelection(${work.id}, this.checked, event, ${index})"></td>
-        <td>${work.manualNumber || ''}</td>
-        <td>${work.category || ''}</td>
-        <td>${savedPhotoCell}</td>
-        <td>${work.title || ''}</td>
-        <td>${authorText || ''}</td>
-        <td>${savedPriceCell}</td>
-        <td>${work.materials || ''}</td>
-        <td>${work.size || ''}</td>
-        <td>${work.year || ''}</td>
-        <td class="work-status-cell">${statusCell}</td>
-        <td>
-          ${actionButton}
-          ${duplicateButton}
-          ${canModifyWork ? `<button class="action-btn delete-btn" onclick="openDeleteWorkModal(${work.id})">삭제</button>` : ''}
-        </td>
-      `;
-    } else {
-      const editPhotoPreview = workPreviewDataUrl
-        ? `<img src="${workPreviewDataUrl}" alt="미리보기" class="photo-preview-image" onclick="openImagePreviewByWorkId(${work.id}, event)">`
-        : `${work.photoName || '사진 없음'}`;
-
-      row.innerHTML = `
-        <td class="checkbox-col"><input type="checkbox" class="work-checkbox" ${isSelected ? 'checked' : ''} onclick="toggleWorkSelection(${work.id}, this.checked, event, ${index})"></td>
-        <td><input type="text" data-field="manualNumber" value="${work.manualNumber || ''}" onchange="handleWorkChange(${work.id}, 'manualNumber', this.value)"></td>
-        <td><input type="text" data-field="category" value="${work.category || ''}" onchange="handleWorkChange(${work.id}, 'category', this.value)"></td>
-        <td>
-          <input type="file" accept="image/*" onchange="handleWorkPhotoChange(${work.id}, event)" class="photo-input">
-          <div class="photo-preview">${editPhotoPreview}</div>
-        </td>
-        <td><input type="text" data-field="title" value="${work.title || ''}" onchange="handleWorkChange(${work.id}, 'title', this.value)"></td>
-        <td>${authorInput}</td>
-        <td>
-          <div class="price-input-group">
-            <input type="text" data-field="price" value="${isUnsold ? '미판매' : (work.price || '')}" oninput="handlePriceInput(${work.id}, event)" onchange="handleWorkChange(${work.id}, 'price', this.value)">
-            <button type="button" class="price-cancel-btn" data-tooltip="미판매" title="미판매" aria-label="미판매" onclick="setWorkNotForSale(${work.id}, this)">✕</button>
-          </div>
-        </td>
-        <td><input type="text" data-field="materials" value="${work.materials || ''}" onchange="handleWorkChange(${work.id}, 'materials', this.value)"></td>
-        <td>
-          <div class="size-input-group">
-            <input type="text" data-field="sizeWidth" value="${width}" class="size-dimension-input" placeholder="가로" oninput="handleWorkSizeChange(${work.id}, 'width', this.value)">
-            <span class="size-unit">cm x</span>
-            <input type="text" data-field="sizeHeight" value="${height}" class="size-dimension-input" placeholder="세로" oninput="handleWorkSizeChange(${work.id}, 'height', this.value)">
-            <span class="size-unit">cm</span>
-          </div>
-        </td>
-        <td><input type="text" data-field="year" value="${work.year || ''}" onchange="handleWorkChange(${work.id}, 'year', this.value)"></td>
-        <td class="work-status-cell">${statusCell}</td>
-        <td>
-          ${actionButton}
-          ${duplicateButton}
-          ${canModifyWork ? `<button class="action-btn delete-btn" onclick="openDeleteWorkModal(${work.id})">삭제</button>` : ''}
-        </td>
-      `;
-    }
+    row.className = presentation.className;
+    row.innerHTML = presentation.html;
     tbody.appendChild(row);
   });
 
@@ -6995,31 +6414,19 @@ function syncWorkFromRow(work, row) {
 }
 
 function normalizeManualNumber(value) {
-  return (value || '').toString().trim().toLowerCase();
+  return globalThis.ExhibitionInventoryModel.normalizeManualNumber(value);
 }
 
 function normalizeTitle(value) {
-  return (value || '').toString().trim().toLowerCase();
+  return globalThis.ExhibitionInventoryModel.normalizeTitle(value);
 }
 
 function shouldValidateManualNumberUniqueness(work) {
-  if (!work) return false;
-  const current = normalizeManualNumber(work.manualNumber);
-  if (!current) return false;
-  if (work.wasSaved === undefined) return false;
-  if (!work.wasSaved) return true;
-  const original = normalizeManualNumber(work.editOriginalManualNumber);
-  return current !== original;
+  return globalThis.ExhibitionInventoryModel.shouldValidateManualNumberUniqueness(work);
 }
 
 function shouldValidateTitleUniqueness(work) {
-  if (!work) return false;
-  const current = normalizeTitle(work.title);
-  if (!current) return false;
-  if (work.wasSaved === undefined) return false;
-  if (!work.wasSaved) return true;
-  const original = normalizeTitle(work.editOriginalTitle);
-  return current !== original;
+  return globalThis.ExhibitionInventoryModel.shouldValidateTitleUniqueness(work);
 }
 
 function getAllInventoryWorks(exhibition) {
@@ -7031,121 +6438,23 @@ function getAllInventoryWorks(exhibition) {
 }
 
 function findSavedManualNumberConflict(work, allWorks) {
-  const targetNumber = normalizeManualNumber(work?.manualNumber);
-  if (!targetNumber) return null;
-  return allWorks.find((candidate) => {
-    if (!candidate || candidate.id === work.id) return false;
-    if (!candidate.saved) return false;
-    return normalizeManualNumber(candidate.manualNumber) === targetNumber;
-  }) || null;
+  return globalThis.ExhibitionInventoryModel.findSavedManualNumberConflict(work, allWorks);
 }
 
 function findSavedTitleConflict(work, allWorks) {
-  const targetTitle = normalizeTitle(work?.title);
-  if (!targetTitle) return null;
-  return allWorks.find((candidate) => {
-    if (!candidate || candidate.id === work.id) return false;
-    if (!candidate.saved) return false;
-    return normalizeTitle(candidate.title) === targetTitle;
-  }) || null;
+  return globalThis.ExhibitionInventoryModel.findSavedTitleConflict(work, allWorks);
 }
 
 function getBulkManualNumberConflicts(allWorks, pendingWorks) {
-  const conflictIds = new Set();
-  const pendingIds = new Set(
-    pendingWorks
-      .filter((work) => shouldValidateManualNumberUniqueness(work))
-      .map((work) => work.id)
-  );
-  const savedByNumber = new Map();
-
-  allWorks.forEach((work) => {
-    if (!work || !work.saved || pendingIds.has(work.id)) return;
-    const normalized = normalizeManualNumber(work.manualNumber);
-    if (!normalized) return;
-    if (!savedByNumber.has(normalized)) {
-      savedByNumber.set(normalized, work.id);
-    }
-  });
-
-  const pendingByNumber = new Map();
-  pendingWorks.forEach((work) => {
-    if (!shouldValidateManualNumberUniqueness(work)) return;
-    const normalized = normalizeManualNumber(work.manualNumber);
-    if (!normalized) return;
-
-    if (savedByNumber.has(normalized)) {
-      conflictIds.add(work.id);
-    }
-
-    const ids = pendingByNumber.get(normalized) || [];
-    ids.push(work.id);
-    pendingByNumber.set(normalized, ids);
-  });
-
-  pendingByNumber.forEach((ids) => {
-    if (ids.length > 1) {
-      ids.forEach((id) => conflictIds.add(id));
-    }
-  });
-
-  return conflictIds;
+  return globalThis.ExhibitionInventoryModel.getBulkManualNumberConflicts(allWorks, pendingWorks);
 }
 
 function getBulkTitleConflicts(allWorks, pendingWorks) {
-  const conflictIds = new Set();
-  const pendingIds = new Set(
-    pendingWorks
-      .filter((work) => shouldValidateTitleUniqueness(work))
-      .map((work) => work.id)
-  );
-  const savedByTitle = new Map();
-
-  allWorks.forEach((work) => {
-    if (!work || !work.saved || pendingIds.has(work.id)) return;
-    const normalized = normalizeTitle(work.title);
-    if (!normalized) return;
-    if (!savedByTitle.has(normalized)) {
-      savedByTitle.set(normalized, work.id);
-    }
-  });
-
-  const pendingByTitle = new Map();
-  pendingWorks.forEach((work) => {
-    if (!shouldValidateTitleUniqueness(work)) return;
-    const normalized = normalizeTitle(work.title);
-    if (!normalized) return;
-
-    if (savedByTitle.has(normalized)) {
-      conflictIds.add(work.id);
-    }
-
-    const ids = pendingByTitle.get(normalized) || [];
-    ids.push(work.id);
-    pendingByTitle.set(normalized, ids);
-  });
-
-  pendingByTitle.forEach((ids) => {
-    if (ids.length > 1) {
-      ids.forEach((id) => conflictIds.add(id));
-    }
-  });
-
-  return conflictIds;
+  return globalThis.ExhibitionInventoryModel.getBulkTitleConflicts(allWorks, pendingWorks);
 }
 
 function getMissingRequiredWorkFields(work) {
-  const missing = [];
-  if (!(work.manualNumber || '').toString().trim()) {
-    missing.push('manualNumber');
-  }
-  if (!(work.title || '').toString().trim()) {
-    missing.push('title');
-  }
-  if (!(work.price || '').toString().trim()) {
-    missing.push('price');
-  }
-  return missing;
+  return globalThis.ExhibitionInventoryModel.getMissingRequiredWorkFields(work);
 }
 
 function markMissingRequiredFields(row, missingFields) {
@@ -7223,8 +6532,6 @@ function handleWorkChange(workId, field, value) {
 
 const MAX_PHOTO_PREVIEW_DATA_URL_LENGTH = 360000;
 const PHOTO_PREVIEW_MAX_DIMENSION = 1280;
-const PHOTO_UPLOAD_ENDPOINT = '/api/upload';
-const PHOTO_UPLOAD_MAX_RETRIES = 1;
 const pendingPhotoUploadTokens = new Map();
 const TRANSIENT_WORK_PHOTO_FIELDS = ['pendingPhotoDataUrl', 'pendingPhotoPreviewDataUrl'];
 
@@ -7234,119 +6541,40 @@ function canUseRemoteUploadApi() {
     && !String(window.location.protocol || '').startsWith('file');
 }
 
-function getExtensionFromMimeType(mimeType) {
-  const normalized = (mimeType || '').toString().toLowerCase();
-  if (normalized.includes('jpeg') || normalized.includes('jpg')) return 'jpg';
-  if (normalized.includes('png')) return 'png';
-  if (normalized.includes('webp')) return 'webp';
-  if (normalized.includes('gif')) return 'gif';
-  return 'bin';
-}
-
 function buildPhotoUploadFileName(baseName, suffix, mimeType) {
-  const stem = (baseName || 'work-image')
-    .toString()
-    .trim()
-    .replace(/\.[^.]+$/, '')
-    .replace(/[^a-zA-Z0-9._-]/g, '_');
-  const ext = getExtensionFromMimeType(mimeType);
-  return `${stem || 'work-image'}-${suffix}.${ext}`;
+  return globalThis.ExhibitionImageLifecycle.buildPhotoUploadFileName(baseName, suffix, mimeType);
 }
 
 function parseDataUrlMimeType(dataUrl) {
-  const match = String(dataUrl || '').match(/^data:([^;]+);base64,/i);
-  return match ? match[1] : '';
+  return globalThis.ExhibitionImageLifecycle.parseDataUrlMimeType(dataUrl);
 }
 
 function snapshotWorkPhotoFields(work) {
-  if (!work || typeof work !== 'object') return null;
-
-  return {
-    photoName: work.photoName || '',
-    photoUrl: work.photoUrl || '',
-    photoPreviewUrl: work.photoPreviewUrl || '',
-    photoPath: work.photoPath || '',
-    photoPreviewPath: work.photoPreviewPath || '',
-    photoDataUrl: work.photoDataUrl || '',
-    photoPreviewDataUrl: work.photoPreviewDataUrl || '',
-    photoMimeType: work.photoMimeType || '',
-    photoByteSize: Number.isFinite(work.photoByteSize) ? work.photoByteSize : 0,
-    pendingPhotoDataUrl: work.pendingPhotoDataUrl || '',
-    pendingPhotoPreviewDataUrl: work.pendingPhotoPreviewDataUrl || ''
-  };
+  return globalThis.ExhibitionImageLifecycle.snapshotPhotoFields(work);
 }
 
 function applyWorkPhotoFields(work, snapshot) {
-  if (!work || typeof work !== 'object' || !snapshot) return;
-
-  work.photoName = snapshot.photoName || '';
-  work.photoUrl = snapshot.photoUrl || '';
-  work.photoPreviewUrl = snapshot.photoPreviewUrl || '';
-  work.photoPath = snapshot.photoPath || '';
-  work.photoPreviewPath = snapshot.photoPreviewPath || '';
-  work.photoDataUrl = snapshot.photoDataUrl || '';
-  work.photoPreviewDataUrl = snapshot.photoPreviewDataUrl || '';
-  work.photoMimeType = snapshot.photoMimeType || '';
-  work.photoByteSize = Number.isFinite(snapshot.photoByteSize) ? snapshot.photoByteSize : 0;
-  work.pendingPhotoDataUrl = snapshot.pendingPhotoDataUrl || '';
-  work.pendingPhotoPreviewDataUrl = snapshot.pendingPhotoPreviewDataUrl || '';
+  globalThis.ExhibitionImageLifecycle.applyPhotoFields(work, snapshot);
 }
 
 function clearPendingWorkPhotoFields(work) {
-  if (!work || typeof work !== 'object') return;
-  TRANSIENT_WORK_PHOTO_FIELDS.forEach((field) => {
-    if (field in work) {
-      work[field] = '';
-    }
-  });
+  globalThis.ExhibitionImageLifecycle.clearPendingPhotoFields(work);
 }
 
 async function verifyUploadedImageFile(uploadedFile) {
-  const url = (uploadedFile?.url || '').toString().trim();
-  if (!url) {
-    return { ok: false, status: 0, contentType: '', isImage: false };
-  }
-
-  try {
-    const response = await fetch(url, { method: 'GET' });
-    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-    return {
-      ok: response.ok && contentType.startsWith('image/'),
-      status: response.status,
-      contentType,
-      isImage: contentType.startsWith('image/')
-    };
-  } catch (error) {
-    return { ok: false, status: 0, contentType: '', isImage: false };
-  }
+  return globalThis.ExhibitionImageLifecycle.verifyUploadedImage({
+    fetchImpl: fetch,
+    uploadedFile
+  });
 }
 
-async function uploadImageDataUrl(dataUrl, fileName, retryCount = 0) {
-  const source = (dataUrl || '').toString().trim();
-  if (!source || !canUseRemoteUploadApi()) return null;
-
-  try {
-    const response = await fetch(PHOTO_UPLOAD_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        dataUrl: source,
-        filename: fileName
-      })
-    });
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok || !payload?.file?.url) {
-      throw new Error(payload?.error || 'upload-failed');
-    }
-
-    return payload.file;
-  } catch (error) {
-    if (retryCount < PHOTO_UPLOAD_MAX_RETRIES) {
-      return uploadImageDataUrl(source, fileName, retryCount + 1);
-    }
-    return null;
-  }
+async function uploadImageDataUrl(dataUrl, fileName) {
+  return globalThis.ExhibitionImageLifecycle.uploadImageDataUrl({
+    fetchImpl: fetch,
+    canUpload: canUseRemoteUploadApi(),
+    dataUrl,
+    fileName
+  });
 }
 
 async function persistWorkPhotoUrls(workId, options = {}) {
@@ -7362,41 +6590,33 @@ async function persistWorkPhotoUrls(workId, options = {}) {
     return { ok: false, reason: 'work-not-found' };
   }
 
-  const replaceExisting = options.replaceExisting !== false;
-  const fullDataUrl = (options.fullDataUrl || work.pendingPhotoDataUrl || work.photoDataUrl || '').toString().trim();
-  const previewDataUrl = (options.previewDataUrl || work.pendingPhotoPreviewDataUrl || work.photoPreviewDataUrl || '').toString().trim();
-  if (!fullDataUrl && !previewDataUrl) {
-    return { ok: false, reason: 'missing-data-url' };
-  }
+  const uploadPlan = globalThis.ExhibitionImageLifecycle.buildUploadPlan(work, {
+    ...options,
+    workId
+  });
+  if (!uploadPlan.ok) return uploadPlan;
 
   const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   pendingPhotoUploadTokens.set(workId, token);
 
-  const baseName = work.photoName || options.fileName || `work-${workId}`;
-  const previewMimeType = parseDataUrlMimeType(previewDataUrl) || parseDataUrlMimeType(fullDataUrl) || 'image/webp';
-  const fullMimeType = parseDataUrlMimeType(fullDataUrl) || previewMimeType;
-
-  const shouldUploadPreview = Boolean(previewDataUrl) && (replaceExisting || !work.photoPreviewUrl);
-  const shouldUploadFull = Boolean(fullDataUrl) && (replaceExisting || !work.photoUrl);
-
-  if (!shouldUploadPreview && !shouldUploadFull) {
+  if (uploadPlan.skipped) {
     clearPendingWorkPhotoFields(work);
     return { ok: true, skipped: true };
   }
 
-  const previewUpload = shouldUploadPreview
-    ? await uploadImageDataUrl(previewDataUrl, buildPhotoUploadFileName(baseName, 'preview', previewMimeType))
+  const previewUpload = uploadPlan.shouldUploadPreview
+    ? await uploadImageDataUrl(uploadPlan.previewDataUrl, uploadPlan.previewFileName)
     : null;
 
-  const fullUpload = shouldUploadFull
-    ? await uploadImageDataUrl(fullDataUrl, buildPhotoUploadFileName(baseName, 'full', fullMimeType))
+  const fullUpload = uploadPlan.shouldUploadFull
+    ? await uploadImageDataUrl(uploadPlan.fullDataUrl, uploadPlan.fullFileName)
     : null;
 
-  if (shouldUploadPreview && !previewUpload?.url) {
+  if (uploadPlan.shouldUploadPreview && !previewUpload?.url) {
     return { ok: false, reason: 'preview-upload-failed' };
   }
 
-  if (shouldUploadFull && !fullUpload?.url) {
+  if (uploadPlan.shouldUploadFull && !fullUpload?.url) {
     return { ok: false, reason: 'full-upload-failed' };
   }
 
@@ -7431,25 +6651,10 @@ async function persistWorkPhotoUrls(workId, options = {}) {
     return { ok: false, reason: 'latest-work-not-found' };
   }
 
-  let changed = false;
-  if (previewUpload?.url) {
-    latestWork.photoPreviewUrl = previewUpload.url;
-    latestWork.photoPreviewPath = previewUpload.pathname || '';
-    changed = true;
-  }
-
-  if (fullUpload?.url) {
-    latestWork.photoUrl = fullUpload.url;
-    latestWork.photoPath = fullUpload.pathname || '';
-    changed = true;
-  }
-
-  if (latestWork.photoPreviewDataUrl || latestWork.photoDataUrl || latestWork.pendingPhotoPreviewDataUrl || latestWork.pendingPhotoDataUrl) {
-    latestWork.photoPreviewDataUrl = '';
-    latestWork.photoDataUrl = '';
-    clearPendingWorkPhotoFields(latestWork);
-    changed = true;
-  }
+  const changed = globalThis.ExhibitionImageLifecycle.applyUploadedPhotoFields(latestWork, {
+    previewUpload,
+    fullUpload
+  });
 
   if (!changed) {
     return { ok: true, skipped: true };
@@ -7667,31 +6872,7 @@ async function handleWorkPhotoChange(workId, event) {
 }
 
 function parseSizeParts(sizeText) {
-  const text = (sizeText || '').toString().trim();
-  if (!text) {
-    return { width: '', height: '' };
-  }
-
-  const normalized = text.replace(/\s+/g, ' ').replace(/×/g, 'x');
-  const fullMatch = normalized.match(/([\d.]+)\s*cm?\s*x\s*([\d.]+)\s*cm?/i)
-    || normalized.match(/([\d.]+)\s*x\s*([\d.]+)/i);
-  if (fullMatch) {
-    return { width: fullMatch[1] || '', height: fullMatch[2] || '' };
-  }
-
-  const widthOnlyMatch = normalized.match(/^([\d.]+)\s*cm?\s*x?\s*$/i)
-    || normalized.match(/^([\d.]+)\s*x\s*$/i);
-  if (widthOnlyMatch) {
-    return { width: widthOnlyMatch[1] || '', height: '' };
-  }
-
-  const heightOnlyMatch = normalized.match(/^x\s*([\d.]+)\s*cm?$/i)
-    || normalized.match(/^x\s*([\d.]+)$/i);
-  if (heightOnlyMatch) {
-    return { width: '', height: heightOnlyMatch[1] || '' };
-  }
-
-  return { width: '', height: '' };
+  return globalThis.ExhibitionInventoryModel.parseSizeParts(sizeText);
 }
 
 function handleWorkSizeChange(workId, part, value) {
@@ -7977,11 +7158,7 @@ function editSelectedWorks() {
 }
 
 function parseSoldPriceAmount(value) {
-  if (isWorkNotForSale(value)) return 0;
-  const numericText = (value || '').toString().replace(/[^\d.-]/g, '');
-  const amount = Number(numericText);
-  if (!Number.isFinite(amount) || amount <= 0) return 0;
-  return amount;
+  return globalThis.ExhibitionSalesModel.parseSoldPriceAmount(value, isWorkNotForSale);
 }
 
 function formatWonAmount(amount) {
@@ -7989,37 +7166,24 @@ function formatWonAmount(amount) {
 }
 
 function getSoldStatsForWorksTicker() {
-  const soldWorks = ensureSoldWorksArray();
-  const selectedIds = exhibitionDetailState.selectedWorkIds;
-  const selectedSet = new Set(selectedIds);
-  const scopedSales = selectedIds.length > 0
-    ? soldWorks.filter(item => selectedSet.has(item.workId))
-    : soldWorks;
-
-  return {
-    basisLabel: selectedIds.length > 0
-      ? `선택된 작품 ${selectedIds.length}개 기준 판매 통계`
-      : '전체 작품 기준 판매 통계',
-    soldCount: scopedSales.length,
-    totalAmount: scopedSales.reduce((sum, item) => sum + parseSoldPriceAmount(item.price), 0)
-  };
+  return globalThis.ExhibitionSalesModel.getSoldStats({
+    records: ensureSoldWorksArray(),
+    selectedIds: exhibitionDetailState.selectedWorkIds,
+    idField: 'workId',
+    selectedLabel: '선택된 작품',
+    allLabel: '전체 작품 기준 판매 통계',
+    isNotForSale: isWorkNotForSale
+  });
 }
 
 function getSoldStatsForSalesTicker() {
-  const soldWorks = ensureSoldWorksArray();
-  const selectedIds = exhibitionDetailState.selectedSalesIds;
-  const selectedSet = new Set(selectedIds);
-  const scopedSales = selectedIds.length > 0
-    ? soldWorks.filter(item => selectedSet.has(item.id))
-    : soldWorks;
-
-  return {
-    basisLabel: selectedIds.length > 0
-      ? `선택된 판매 ${selectedIds.length}개 기준 판매 통계`
-      : '전체 판매 기준 판매 통계',
-    soldCount: scopedSales.length,
-    totalAmount: scopedSales.reduce((sum, item) => sum + parseSoldPriceAmount(item.price), 0)
-  };
+  return globalThis.ExhibitionSalesModel.getSoldStats({
+    records: ensureSoldWorksArray(),
+    selectedIds: exhibitionDetailState.selectedSalesIds,
+    selectedLabel: '선택된 판매',
+    allLabel: '전체 판매 기준 판매 통계',
+    isNotForSale: isWorkNotForSale
+  });
 }
 
 function renderSoldStatsTicker(scope) {
@@ -8049,14 +7213,22 @@ function getVisibleWorks() {
 
 function getSortedWorks() {
   const exhibition = getCurrentExhibition();
-  let works = filterWorks(exhibition.works || []);
-  if (!exhibitionDetailState.workSortField) return works;
-
-  const direction = exhibitionDetailState.workSortDirection === 'desc' ? -1 : 1;
-  return [...works].sort((a, b) => {
-    const valueA = getWorkSortValue(a, exhibitionDetailState.workSortField);
-    const valueB = getWorkSortValue(b, exhibitionDetailState.workSortField);
-    return compareWorkValues(valueA, valueB, exhibitionDetailState.workSortField) * direction;
+  const soldWorkIdSet = new Set(
+    ensureSoldWorksArray()
+      .filter((item) => normalizeSoldItemType(item) === '작품')
+      .map((item) => item.workId)
+  );
+  return globalThis.ExhibitionInventoryModel.getSortedWorks({
+    works: exhibition.works || [],
+    advanced: exhibitionDetailState.workAdvanced,
+    filters: exhibitionDetailState.workFilters,
+    search: exhibitionDetailState.workSearch,
+    sortField: exhibitionDetailState.workSortField,
+    sortDirection: exhibitionDetailState.workSortDirection,
+    compareValues: compareWorkValues,
+    parseStockQuantity,
+    getGoodsSoldQuantity,
+    soldWorkIdSet
   });
 }
 
@@ -8066,142 +7238,40 @@ function getWorkSortValue(work, field) {
       .filter((item) => normalizeSoldItemType(item) === '작품')
       .map(item => item.workId)
   );
-  switch (field) {
-    case 'manualNumber':
-      return work.manualNumber || '';
-    case 'photoName':
-      return work.photoName || '';
-    case 'title':
-      return work.title || '';
-    case 'author':
-      return work.author || '';
-    case 'price':
-      return work.price || '';
-    case 'materials':
-      return work.materials || '';
-    case 'size':
-      return work.size || '';
-    case 'year':
-      return work.year || '';
-    case 'category':
-      return work.category || '';
-    case 'quantity':
-      return String(parseStockQuantity(work.quantity || 0));
-    case 'soldQuantity':
-      return String(getGoodsSoldQuantity(work.id));
-    case 'remainingQuantity': {
-      const stockQty = parseStockQuantity(work.quantity || 0);
-      const soldQty = getGoodsSoldQuantity(work.id);
-      return String(Math.max(0, stockQty - soldQty));
-    }
-    case 'status':
-      return soldWorkIdSet.has(work.id) ? 'sold' : '';
-    default:
-      return '';
-  }
+  return globalThis.ExhibitionInventoryModel.getWorkSortValue(work, field, {
+    parseStockQuantity,
+    getGoodsSoldQuantity,
+    soldWorkIdSet
+  });
 }
 
 function getSortedSoldWorks() {
-  const soldWorks = filterSoldWorks(ensureSoldWorksArray());
-  if (!exhibitionDetailState.salesSortField) return soldWorks;
-
-  const direction = exhibitionDetailState.salesSortDirection === 'desc' ? -1 : 1;
-  return [...soldWorks].sort((a, b) => {
-    const valueA = getSoldSortValue(a, exhibitionDetailState.salesSortField);
-    const valueB = getSoldSortValue(b, exhibitionDetailState.salesSortField);
-    return compareWorkValues(valueA, valueB, exhibitionDetailState.salesSortField) * direction;
+  return globalThis.ExhibitionSalesModel.getSortedSoldWorks({
+    records: ensureSoldWorksArray(),
+    advanced: exhibitionDetailState.salesAdvanced,
+    filters: exhibitionDetailState.salesFilters,
+    search: exhibitionDetailState.salesSearch,
+    sortField: exhibitionDetailState.salesSortField,
+    sortDirection: exhibitionDetailState.salesSortDirection,
+    compareValues: compareWorkValues,
+    isNotForSale: isWorkNotForSale
   });
 }
 
 function exportSalesToExcel() {
-  const soldWorks = getSortedSoldWorks();
-
-  const headers = ['번호', '사진', '제목', '작가', '가격', '판매일시', '구매자 성함', '구매자 연락처', '결제방법', '비고'];
-
-  const escapeHtml = (v) => String(v == null ? '' : v)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-  const headerRow = headers.map(h => `<th style="background:#f0f0f0;font-weight:bold;border:1px solid #ccc;padding:6px 10px;white-space:nowrap">${escapeHtml(h)}</th>`).join('');
-
-  const dataRows = soldWorks.map(sold => {
-    const paymentDisplay = sold.paymentMethod === '기타'
-      ? `기타${sold.paymentMethodEtc ? ` (${sold.paymentMethodEtc})` : ''}`
-      : (sold.paymentMethod || '');
-
-    const soldPreviewDataUrl = getPhotoPreviewDataUrl(sold);
-    const photoCell = soldPreviewDataUrl
-      ? `<td style="border:1px solid #ccc;padding:4px;text-align:center"><img src="${soldPreviewDataUrl}" width="80" height="80" style="object-fit:contain"></td>`
-      : `<td style="border:1px solid #ccc;padding:6px 10px">${escapeHtml(sold.photoName || '')}</td>`;
-
-    const cells = [
-      sold.manualNumber || '',
-      null, // photo handled separately
-      sold.title || '',
-      sold.author || '',
-      sold.price || '',
-      sold.soldAtKst || '',
-      sold.buyerName || '',
-      sold.buyerPhone || '',
-      paymentDisplay,
-      sold.note || ''
-    ];
-
-    const tdCells = cells.map((v, i) => {
-      if (i === 1) return photoCell;
-      return `<td style="border:1px solid #ccc;padding:6px 10px;white-space:nowrap">${escapeHtml(v)}</td>`;
-    }).join('');
-
-    return `<tr>${tdCells}</tr>`;
-  }).join('');
-
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="UTF-8">
-<style>table{border-collapse:collapse}td,th{font-family:Arial,sans-serif;font-size:12px}</style>
-</head><body>
-<table>
-  <thead><tr>${headerRow}</tr></thead>
-  <tbody>${dataRows}</tbody>
-</table>
-</body></html>`;
-
-  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${(exhibitionDetailState.exhibition?.title || 'exhibition').replace(/[^a-zA-Z0-9가-힣._-]/g, '_')}-sales.xls`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  const exportData = globalThis.ExhibitionExportModel.buildSalesExport({
+    title: exhibitionDetailState.exhibition?.title,
+    soldWorks: getSortedSoldWorks(),
+    getPhotoPreviewDataUrl
+  });
+  downloadBlobFile(
+    new Blob([exportData.content], { type: exportData.mimeType }),
+    exportData.filename
+  );
 }
 
 function getSoldSortValue(sold, field) {
-  switch (field) {
-    case 'manualNumber':
-      return sold.manualNumber || '';
-    case 'itemType':
-      return normalizeSoldItemType(sold);
-    case 'category':
-      return sold.category || '';
-    case 'title':
-      return sold.title || '';
-    case 'author':
-      return sold.author || '';
-    case 'price': {
-      const amount = parseSoldPriceAmount(sold.price);
-      return amount > 0 ? String(amount) : '';
-    }
-    case 'soldAtKst':
-      return sold.soldAtKst || '';
-    case 'buyerName':
-      return sold.buyerName || '';
-    case 'buyerPhone':
-      return sold.buyerPhone || '';
-    case 'paymentMethod':
-      return sold.paymentMethod || '';
-    default:
-      return '';
-  }
+  return globalThis.ExhibitionSalesModel.getSoldSortValue(sold, field, isWorkNotForSale);
 }
 
 function getManualNumberSortGroup(value) {
@@ -8300,166 +7370,29 @@ function toggleSalesSort(field) {
 
 function exportAccountingToExcel() {
   const exhibition = getCurrentExhibition();
-  const expenseItems = getExhibitionExpenseItems();
-  const revenueItems = getExhibitionRevenueItems();
-  const revenueTotals = {
-    art: revenueItems.find((item) => item.id === 'art')?.amount || 0,
-    goods: revenueItems.find((item) => item.id === 'goods')?.amount || 0
-  };
-
-  const expenseRows = expenseItems.map((item) => ({
-    division: item.division || '',
-    amount: formatAccountingAmount(getExpenseEffectiveAmount(item, revenueTotals))
-  }));
-
-  const revenueRows = revenueItems.map((item) => ({
-    division: item.division || '',
-    amount: formatAccountingAmount(item.amount)
-  }));
-
-  const expenseTotal = expenseItems.reduce((sum, item) => sum + getExpenseEffectiveAmount(item, revenueTotals), 0);
-  const revenueTotal = revenueItems.reduce((sum, item) => sum + parseAccountingAmount(item.amount), 0);
-  const profitTotal = revenueTotal - expenseTotal;
-
-  const escapeHtml = (v) => String(v == null ? '' : v)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-
-  const buildRows = (rows) => rows.map((row) => `
-    <tr>
-      <td style="border:1px solid #ccc;padding:8px 10px;">${escapeHtml(row.division)}</td>
-      <td style="border:1px solid #ccc;padding:8px 10px;">${escapeHtml(row.amount)}</td>
-    </tr>
-  `).join('');
-
-  const html = `
-    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        table { border-collapse: collapse; margin-bottom: 16px; width: 100%; }
-        th, td { font-family: Arial, sans-serif; font-size: 12px; }
-      </style>
-    </head>
-    <body>
-      <h2>${escapeHtml(exhibition.title || '전시 회계')}</h2>
-      <p>기간: ${escapeHtml((exhibition.startDate || '') + ' ~ ' + (exhibition.endDate || ''))}</p>
-
-      <table>
-        <thead>
-          <tr>
-            <th colspan="2" style="border:1px solid #ccc;padding:8px 10px;background:#f3f4f6;text-align:left;">지출</th>
-          </tr>
-          <tr>
-            <th style="border:1px solid #ccc;padding:8px 10px;background:#f9fafb;text-align:left;">구분</th>
-            <th style="border:1px solid #ccc;padding:8px 10px;background:#f9fafb;text-align:left;">금액</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${buildRows(expenseRows)}
-          <tr>
-            <td style="border:1px solid #ccc;padding:8px 10px;font-weight:700;background:#eef2ff;">합계</td>
-            <td style="border:1px solid #ccc;padding:8px 10px;font-weight:700;background:#eef2ff;">${escapeHtml(formatAccountingAmount(expenseTotal))}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <table>
-        <thead>
-          <tr>
-            <th colspan="2" style="border:1px solid #ccc;padding:8px 10px;background:#f3f4f6;text-align:left;">수입</th>
-          </tr>
-          <tr>
-            <th style="border:1px solid #ccc;padding:8px 10px;background:#f9fafb;text-align:left;">구분</th>
-            <th style="border:1px solid #ccc;padding:8px 10px;background:#f9fafb;text-align:left;">금액</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${buildRows(revenueRows)}
-          <tr>
-            <td style="border:1px solid #ccc;padding:8px 10px;font-weight:700;background:#eef2ff;">합계</td>
-            <td style="border:1px solid #ccc;padding:8px 10px;font-weight:700;background:#eef2ff;">${escapeHtml(formatAccountingAmount(revenueTotal))}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <table>
-        <tbody>
-          <tr>
-            <td style="border:1px solid #ccc;padding:8px 10px;font-weight:700;background:#ecfdf5;">총이익</td>
-            <td style="border:1px solid #ccc;padding:8px 10px;font-weight:700;background:#ecfdf5;">${escapeHtml(formatAccountingAmount(profitTotal))}</td>
-          </tr>
-        </tbody>
-      </table>
-    </body>
-    </html>
-  `;
-
-  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${(exhibition.title || 'exhibition').replace(/[^a-zA-Z0-9가-힣._-]/g, '_')}-accounting.xls`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  const exportData = globalThis.ExhibitionExportModel.buildAccountingExport({
+    exhibition,
+    expenseItems: getExhibitionExpenseItems(),
+    revenueItems: getExhibitionRevenueItems(),
+    formatAmount: formatAccountingAmount,
+    getExpenseEffectiveAmount,
+    parseAmount: parseAccountingAmount
+  });
+  downloadBlobFile(
+    new Blob([exportData.content], { type: exportData.mimeType }),
+    exportData.filename
+  );
 }
 
 function exportWorksToExcel() {
-  const works = getSortedWorks();
-  const rows = [
-    ['번호', '사진', '제목', '작가', '가격', '재료', '크기', '연도', '분류']
-  ];
-
-  works.forEach(work => {
-    rows.push([
-      work.manualNumber || '',
-      work.photoName || '',
-      work.title || '',
-      work.author || '',
-      work.price || '',
-      work.materials || '',
-      work.size || '',
-      work.year || '',
-      work.category || ''
-    ]);
+  const exportData = globalThis.ExhibitionExportModel.buildWorksExport({
+    title: exhibitionDetailState.exhibition?.title,
+    works: getSortedWorks()
   });
-
-  const escapeXml = (value) => String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-
-  const sheetRows = rows.map(row => {
-    const cells = row.map(value => `<Cell><Data ss:Type="String">${escapeXml(value)}</Data></Cell>`).join('');
-    return `<Row>${cells}</Row>`;
-  }).join('');
-
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-    <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
-      xmlns:o="urn:schemas-microsoft-com:office:office"
-      xmlns:x="urn:schemas-microsoft-com:office:excel"
-      xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
-      xmlns:html="http://www.w3.org/TR/REC-html40">
-      <Worksheet ss:Name="Sheet1">
-        <Table>${sheetRows}</Table>
-      </Worksheet>
-    </Workbook>`;
-
-  const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${(exhibitionDetailState.exhibition?.title || 'exhibition').replace(/[^a-zA-Z0-9가-힣._-]/g, '_')}-works.xls`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  downloadBlobFile(
+    new Blob([exportData.content], { type: exportData.mimeType }),
+    exportData.filename
+  );
 }
 
 function toggleWorkListExpanded() {
@@ -8581,56 +7514,18 @@ function resetSalesFilters() {
 }
 
 function filterSoldWorks(soldWorks) {
-  if (exhibitionDetailState.salesAdvanced) {
-    const filters = exhibitionDetailState.salesFilters;
-    return soldWorks.filter((sold) => {
-      const soldDate = (sold.soldAtKst || '').slice(0, 10);
-      const from = (filters.soldDateFrom || '').trim();
-      const to = (filters.soldDateTo || '').trim();
-      if (from && (!soldDate || soldDate < from)) return false;
-      if (to && (!soldDate || soldDate > to)) return false;
-
-      const textFields = ['manualNumber', 'title', 'author', 'buyerName', 'buyerPhone', 'paymentMethod'];
-      return textFields.every((key) => {
-        const value = (filters[key] || '').trim().toLowerCase();
-        if (!value) return true;
-        const field = (sold[key] || '').toString().toLowerCase();
-        return field.includes(value);
-      });
-    });
-  }
-
-  const search = (exhibitionDetailState.salesSearch || '').trim().toLowerCase();
-  if (!search) return soldWorks;
-
-  return soldWorks.filter((sold) => {
-    const paymentDisplay = sold.paymentMethod === '기타'
-      ? `기타 ${sold.paymentMethodEtc || ''}`
-      : (sold.paymentMethod || '');
-    const text = `${sold.manualNumber || ''} ${normalizeSoldItemType(sold)} ${sold.title || ''} ${sold.author || ''} ${sold.price || ''} ${sold.soldQuantity || ''} ${sold.soldAtKst || ''} ${sold.buyerName || ''} ${sold.buyerPhone || ''} ${paymentDisplay} ${sold.note || ''}`.toLowerCase();
-    return text.includes(search);
+  return globalThis.ExhibitionSalesModel.filterSoldWorks(soldWorks, {
+    advanced: exhibitionDetailState.salesAdvanced,
+    filters: exhibitionDetailState.salesFilters,
+    search: exhibitionDetailState.salesSearch
   });
 }
 
 function filterWorks(works) {
-  if (exhibitionDetailState.workAdvanced) {
-    return works.filter(work => {
-      const filters = exhibitionDetailState.workFilters;
-      return Object.keys(filters).every(key => {
-        const value = filters[key].trim().toLowerCase();
-        if (!value) return true;
-        const field = (work[key] || '').toString().toLowerCase();
-        return field.includes(value);
-      });
-    });
-  }
-
-  const search = exhibitionDetailState.workSearch.trim().toLowerCase();
-  if (!search) return works;
-
-  return works.filter(work => {
-    const text = `${work.manualNumber || ''} ${work.title || ''} ${work.author || ''} ${work.price || ''} ${work.materials || ''} ${work.size || ''} ${work.year || ''} ${work.category || ''}`.toLowerCase();
-    return text.includes(search);
+  return globalThis.ExhibitionInventoryModel.filterWorks(works, {
+    advanced: exhibitionDetailState.workAdvanced,
+    filters: exhibitionDetailState.workFilters,
+    search: exhibitionDetailState.workSearch
   });
 }
 
