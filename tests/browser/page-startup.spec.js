@@ -552,6 +552,15 @@ test('material orders modal preserves lifecycle and single listener behavior', a
   await page.locator('#add-order-line-btn').click();
   await expect(lines).toHaveCount(2);
 
+  const firstProduct = lines.nth(0).locator('.js-new-product');
+  await firstProduct.focus();
+  await firstProduct.press('ArrowRight');
+  await expect(lines.nth(0).locator('.js-new-quantity')).toBeFocused();
+  await page.keyboard.press('Meta+z');
+  await expect(lines).toHaveCount(1);
+  await page.locator('#add-order-line-btn').click();
+  await expect(lines).toHaveCount(2);
+
   await lines.nth(0).locator('.js-new-product').fill('CHARACTERIZATION_TEST_NEW_CLAY');
   await lines.nth(1).locator('.js-new-product').fill('CHARACTERIZATION_TEST_NEW_GLAZE');
   await page.locator('#material-order-form').evaluate((form) => form.requestSubmit());
