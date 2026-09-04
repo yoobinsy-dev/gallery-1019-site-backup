@@ -81,6 +81,42 @@ const LARGE_DROP_MIN_PREVIOUS_TOTAL = 20;
 const LARGE_DROP_MIN_ABSOLUTE = 15;
 const LARGE_DROP_RATIO = 0.7;
 
+const worksEditorController = globalThis.ExhibitionDetailWorksEditorController.create({
+  state: exhibitionDetailState,
+  document,
+  window,
+  fetchImpl: (...args) => fetch(...args),
+  FileReaderImpl: FileReader,
+  ImageImpl: Image,
+  createCanvas: () => document.createElement('canvas'),
+  inventoryModel: globalThis.ExhibitionInventoryModel,
+  imageLifecycle: globalThis.ExhibitionImageLifecycle,
+  getCurrentExhibition,
+  getCurrentUserId,
+  pushWorkUndoSnapshot,
+  saveExhibition,
+  renderWorkRows,
+  updateSaveAllButtonVisibility,
+  requestAnimationFrameImpl: (callback) => requestAnimationFrame(callback),
+  canCurrentUserModifyOwnedRow,
+  alertImpl: (...args) => alert(...args),
+  getPhotoPreviewDataUrl,
+  formatPriceForSave,
+  normalizeSoldItemType,
+  initializeInventoryData,
+  ensureWorkEditUndoSnapshot,
+  scrollRowToViewportCenter,
+  getVisibleWorks,
+  switchTab,
+  getCurrentInventoryListTabName,
+  isArtistScopedUser,
+  refreshGridKeyboardNavigation,
+  setTimeoutImpl: (callback, delay) => setTimeout(callback, delay),
+  nowImpl: () => Date.now(),
+  randomImpl: () => Math.random(),
+  consoleImpl: console
+});
+
 const worksView = globalThis.ExhibitionDetailWorksView.create({
   state: exhibitionDetailState,
   document,
@@ -3114,1039 +3150,201 @@ function renderWorkRows() {
 }
 
 function addWorkRow() {
-  const exhibition = getCurrentExhibition();
-  exhibition.works = exhibition.works || [];
-  pushWorkUndoSnapshot();
-  const author = exhibition.type === '개인전' ? (exhibition.participants?.[0] || '') : '';
-  exhibition.works.push({
-    id: Date.now(),
-    createdByUserId: getCurrentUserId(),
-    manualNumber: '',
-    photoName: '',
-    photoUrl: '',
-    photoPreviewUrl: '',
-    photoPath: '',
-    photoPreviewPath: '',
-    photoDataUrl: '',
-    photoPreviewDataUrl: '',
-    photoMimeType: '',
-    photoByteSize: 0,
-    title: '',
-    author,
-    price: '',
-    materials: '',
-    size: '',
-    year: '',
-    category: '',
-    quantity: exhibitionDetailState.inventoryMode === 'goods' ? '0' : '',
-    wasSaved: false,
-    saved: false
-  });
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.works = exhibition.works;
-  }
-  saveExhibition();
-  renderWorkRows();
-  updateSaveAllButtonVisibility();
-
-  requestAnimationFrame(() => {
-    const tbody = document.getElementById('works-tbody');
-    const lastRow = tbody?.lastElementChild;
-    if (lastRow) {
-      lastRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const focusTarget = lastRow.querySelector('input, textarea, select');
-      if (focusTarget) {
-        focusTarget.focus();
-      }
-    }
-  });
+  return worksEditorController.addWorkRow();
 }
 
 function duplicateWorkRow(workId) {
-  const exhibition = getCurrentExhibition();
-  exhibition.works = exhibition.works || [];
-  const source = exhibition.works.find((w) => w.id === workId);
-  if (!source) return;
-  if (!canCurrentUserModifyOwnedRow(source)) {
-    alert('다른 사용자가 추가한 항목은 복사할 수 없습니다.');
-    return;
-  }
-
-  pushWorkUndoSnapshot();
-
-  const duplicated = {
-    id: Date.now() + Math.floor(Math.random() * 100000),
-    createdByUserId: getCurrentUserId(),
-    manualNumber: source.manualNumber || '',
-    photoName: source.photoName || '',
-    photoUrl: source.photoUrl || '',
-    photoPreviewUrl: source.photoPreviewUrl || '',
-    photoPath: source.photoPath || '',
-    photoPreviewPath: source.photoPreviewPath || '',
-    photoDataUrl: source.photoDataUrl || '',
-    photoPreviewDataUrl: source.photoPreviewDataUrl || getPhotoPreviewDataUrl(source),
-    photoMimeType: source.photoMimeType || '',
-    photoByteSize: Number(source.photoByteSize) || 0,
-    title: source.title || '',
-    author: source.author || '',
-    price: source.price || '',
-    materials: source.materials || '',
-    size: source.size || '',
-    year: source.year || '',
-    category: source.category || '',
-    quantity: source.quantity ?? (exhibitionDetailState.inventoryMode === 'goods' ? '0' : ''),
-    wasSaved: false,
-    saved: false
-  };
-
-  exhibition.works.push(duplicated);
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.works = exhibition.works;
-  }
-  saveExhibition();
-  renderWorkRows();
-  updateSaveAllButtonVisibility();
-
-  requestAnimationFrame(() => {
-    const row = document.querySelector(`tr[data-work-id="${duplicated.id}"]`);
-    if (!row) return;
-    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const focusTarget = row.querySelector('input[data-field="manualNumber"]') || row.querySelector('input, textarea, select');
-    if (focusTarget) {
-      focusTarget.focus();
-    }
-  });
+  return worksEditorController.duplicateWorkRow(workId);
 }
 
 function saveWork(workId, triggerButton) {
-  const exhibition = getCurrentExhibition();
-  const work = exhibition.works.find(w => w.id === workId);
-  if (!work) return;
-  if (!canCurrentUserModifyOwnedRow(work)) {
-    alert('다른 사용자가 추가한 항목은 수정할 수 없습니다.');
-    return;
-  }
-
-  const row = triggerButton && typeof triggerButton.closest === 'function'
-    ? triggerButton.closest('tr')
-    : document.querySelector(`tr[data-work-id="${workId}"]`);
-  syncWorkFromRow(work, row);
-
-  const missing = getMissingRequiredWorkFields(work);
-  if (missing.length > 0) {
-    markMissingRequiredFields(row, missing);
-    return;
-  }
-
-  const allWorks = getAllInventoryWorks(exhibition);
-  const shouldValidateNumber = shouldValidateManualNumberUniqueness(work);
-  const manualNumberConflict = shouldValidateNumber ? findSavedManualNumberConflict(work, allWorks) : null;
-  if (manualNumberConflict) {
-    markMissingRequiredFields(row, ['manualNumber']);
-    alert('번호는 작품 목록/굿즈 목록 전체에서 중복 없이 저장해야 합니다.');
-    return;
-  }
-
-  markMissingRequiredFields(row, []);
-  
-  // Format price with ₩ symbol and commas
-  if (work.price) {
-    work.price = formatPriceForSave(work.price);
-  }
-  
-  work.saved = true;
-  work.wasSaved = true;
-  delete work.editOriginalManualNumber;
-  delete work.editOriginalTitle;
-  exhibitionDetailState.workEditSnapshotIds = exhibitionDetailState.workEditSnapshotIds.filter(id => id !== workId);
-  syncWorkToSalesRecords(work);
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.works = exhibition.works;
-  }
-  saveExhibition();
-  renderWorkRows();
+  return worksEditorController.saveWork(workId, triggerButton);
 }
 
 function saveAllWorks() {
-  const exhibition = getCurrentExhibition();
-  const works = exhibition.works || [];
-  let saveCount = 0;
-  const pendingWorks = [];
-
-  for (const work of works) {
-    if (work.saved) continue;
-    if (!canCurrentUserModifyOwnedRow(work)) continue;
-    const row = document.querySelector(`tr[data-work-id="${work.id}"]`);
-    syncWorkFromRow(work, row);
-    const missing = getMissingRequiredWorkFields(work);
-    if (missing.length > 0) {
-      markMissingRequiredFields(row, missing);
-      return;
-    }
-    markMissingRequiredFields(row, []);
-    pendingWorks.push(work);
-  }
-
-  const allWorks = getAllInventoryWorks(exhibition);
-  const numberConflictIds = getBulkManualNumberConflicts(allWorks, pendingWorks);
-  if (numberConflictIds.size > 0) {
-    pendingWorks.forEach((work) => {
-      const row = document.querySelector(`tr[data-work-id="${work.id}"]`);
-      if (!row) return;
-      const missingFields = [];
-      if (numberConflictIds.has(work.id)) {
-        missingFields.push('manualNumber');
-      }
-      if (missingFields.length > 0) {
-        markMissingRequiredFields(row, missingFields);
-      }
-    });
-    alert('번호는 작품 목록/굿즈 목록 전체에서 중복 없이 저장해야 합니다.');
-    return;
-  }
-
-  works.forEach(work => {
-    if (!work.saved) {
-      if (!canCurrentUserModifyOwnedRow(work)) return;
-      // Format price with ₩ symbol and commas
-      if (work.price) {
-        work.price = formatPriceForSave(work.price);
-      }
-      work.saved = true;
-      work.wasSaved = true;
-      delete work.editOriginalManualNumber;
-      delete work.editOriginalTitle;
-      exhibitionDetailState.workEditSnapshotIds = exhibitionDetailState.workEditSnapshotIds.filter(id => id !== work.id);
-      syncWorkToSalesRecords(work);
-      saveCount++;
-    }
-  });
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.works = exhibition.works;
-  }
-  saveExhibition();
-  renderWorkRows();
+  return worksEditorController.saveAllWorks();
 }
 
-// Propagate saved work field changes to any matching soldWorks snapshot records.
 function syncWorkToSalesRecords(work) {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = exhibition.soldWorks;
-  if (!soldWorks || soldWorks.length === 0) return;
-  const expectedType = exhibitionDetailState.inventoryMode === 'goods' ? '굿즈' : '작품';
-  let changed = false;
-  soldWorks.forEach(sold => {
-    if (sold.workId !== work.id) return;
-    if (normalizeSoldItemType(sold) !== expectedType) return;
-    sold.manualNumber = work.manualNumber || sold.manualNumber;
-    sold.category = work.category || sold.category;
-    sold.title = work.title || sold.title;
-    sold.author = work.author || sold.author;
-    sold.price = work.price || sold.price;
-    sold.photoName = work.photoName || sold.photoName;
-    sold.photoUrl = work.photoUrl || sold.photoUrl;
-    sold.photoPreviewUrl = work.photoPreviewUrl || work.photoUrl || sold.photoPreviewUrl;
-    sold.photoDataUrl = work.photoDataUrl || sold.photoDataUrl;
-    sold.photoPreviewDataUrl = work.photoPreviewDataUrl || getPhotoPreviewDataUrl(work) || sold.photoPreviewDataUrl;
-    changed = true;
-  });
-  if (changed && exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.soldWorks = soldWorks;
-  }
+  return worksEditorController.syncWorkToSalesRecords(work);
 }
 
 function syncWorkFromRow(work, row) {
-  if (!row || !work) return;
-  const manualNumberInput = row.querySelector('input[data-field="manualNumber"]');
-  const categoryInput = row.querySelector('input[data-field="category"]');
-  const titleInput = row.querySelector('input[data-field="title"]');
-  const authorInput = row.querySelector('input[data-field="author"]');
-  const priceInput = row.querySelector('input[data-field="price"]');
-  const materialsInput = row.querySelector('input[data-field="materials"]');
-  const yearInput = row.querySelector('input[data-field="year"]');
-  const sizeWidthInput = row.querySelector('input[data-field="sizeWidth"]');
-  const sizeHeightInput = row.querySelector('input[data-field="sizeHeight"]');
-  const quantityInput = row.querySelector('input[data-field="quantity"]');
-
-  if (manualNumberInput) {
-    work.manualNumber = manualNumberInput.value.trim();
-  }
-  if (categoryInput) {
-    work.category = categoryInput.value.trim();
-  }
-  if (titleInput) {
-    work.title = titleInput.value.trim();
-  }
-  if (authorInput) {
-    work.author = authorInput.value.trim();
-  }
-  if (priceInput) {
-    work.price = priceInput.value.trim();
-  }
-  if (materialsInput) {
-    work.materials = materialsInput.value.trim();
-  }
-  if (yearInput) {
-    work.year = yearInput.value.trim();
-  }
-  if (sizeWidthInput || sizeHeightInput) {
-    const width = (sizeWidthInput?.value || '').replace(/[^\d.]/g, '').trim();
-    const height = (sizeHeightInput?.value || '').replace(/[^\d.]/g, '').trim();
-    if (!width && !height) {
-      work.size = '';
-    } else if (width && height) {
-      work.size = `${width} cm x ${height} cm`;
-    } else {
-      work.size = width ? `${width} cm x ` : ` x ${height} cm`;
-    }
-  }
-  if (quantityInput) {
-    work.quantity = quantityInput.value.trim();
-  }
+  return worksEditorController.syncWorkFromRow(work, row);
 }
 
 function normalizeManualNumber(value) {
-  return globalThis.ExhibitionInventoryModel.normalizeManualNumber(value);
+  return worksEditorController.normalizeManualNumber(value);
 }
 
 function normalizeTitle(value) {
-  return globalThis.ExhibitionInventoryModel.normalizeTitle(value);
+  return worksEditorController.normalizeTitle(value);
 }
 
 function shouldValidateManualNumberUniqueness(work) {
-  return globalThis.ExhibitionInventoryModel.shouldValidateManualNumberUniqueness(work);
+  return worksEditorController.shouldValidateManualNumberUniqueness(work);
 }
 
 function shouldValidateTitleUniqueness(work) {
-  return globalThis.ExhibitionInventoryModel.shouldValidateTitleUniqueness(work);
+  return worksEditorController.shouldValidateTitleUniqueness(work);
 }
 
 function getAllInventoryWorks(exhibition) {
-  if (!exhibition) return [];
-  initializeInventoryData(exhibition);
-  const artWorks = Array.isArray(exhibition.artWorks) ? exhibition.artWorks : [];
-  const goods = Array.isArray(exhibition.goods) ? exhibition.goods : [];
-  return [...artWorks, ...goods];
+  return worksEditorController.getAllInventoryWorks(exhibition);
 }
 
 function findSavedManualNumberConflict(work, allWorks) {
-  return globalThis.ExhibitionInventoryModel.findSavedManualNumberConflict(work, allWorks);
+  return worksEditorController.findSavedManualNumberConflict(work, allWorks);
 }
 
 function findSavedTitleConflict(work, allWorks) {
-  return globalThis.ExhibitionInventoryModel.findSavedTitleConflict(work, allWorks);
+  return worksEditorController.findSavedTitleConflict(work, allWorks);
 }
 
 function getBulkManualNumberConflicts(allWorks, pendingWorks) {
-  return globalThis.ExhibitionInventoryModel.getBulkManualNumberConflicts(allWorks, pendingWorks);
+  return worksEditorController.getBulkManualNumberConflicts(allWorks, pendingWorks);
 }
 
 function getBulkTitleConflicts(allWorks, pendingWorks) {
-  return globalThis.ExhibitionInventoryModel.getBulkTitleConflicts(allWorks, pendingWorks);
+  return worksEditorController.getBulkTitleConflicts(allWorks, pendingWorks);
 }
 
 function getMissingRequiredWorkFields(work) {
-  return globalThis.ExhibitionInventoryModel.getMissingRequiredWorkFields(work);
+  return worksEditorController.getMissingRequiredWorkFields(work);
 }
 
 function markMissingRequiredFields(row, missingFields) {
-  if (!row) return;
-  const fields = ['manualNumber', 'title', 'price'];
-  fields.forEach((field) => {
-    const input = row.querySelector(`input[data-field="${field}"]`);
-    if (!input) return;
-    input.classList.toggle('required-missing', missingFields.includes(field));
-  });
+  return worksEditorController.markMissingRequiredFields(row, missingFields);
 }
 
 function toggleWorkEdit(workId) {
-  const exhibition = getCurrentExhibition();
-  const work = exhibition.works.find(w => w.id === workId);
-  if (!work) return;
-  if (!canCurrentUserModifyOwnedRow(work)) {
-    alert('다른 사용자가 추가한 항목은 수정할 수 없습니다.');
-    return;
-  }
-  if (work.saved) {
-    ensureWorkEditUndoSnapshot(workId);
-    work.wasSaved = true;
-    work.editOriginalManualNumber = work.manualNumber || '';
-    work.editOriginalTitle = work.title || '';
-  }
-  work.saved = false;
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.works = exhibition.works;
-  }
-  saveExhibition();
-  renderWorkRows();
-  scrollRowToViewportCenter(`tr[data-work-id="${workId}"]`);
+  return worksEditorController.toggleWorkEdit(workId);
 }
 
 function openDeleteWorkModal(workId) {
-  const exhibition = getCurrentExhibition();
-  const work = (exhibition.works || []).find((item) => item.id === workId);
-  if (!work) return;
-  if (!canCurrentUserModifyOwnedRow(work)) {
-    alert('다른 사용자가 추가한 항목은 삭제할 수 없습니다.');
-    return;
-  }
-  exhibitionDetailState.pendingDeleteWorkId = workId;
-  document.getElementById('delete-modal').style.display = 'flex';
+  return worksEditorController.openDeleteWorkModal(workId);
 }
 
 function closeDeleteWorkModal() {
-  exhibitionDetailState.pendingDeleteWorkId = null;
-  document.getElementById('delete-modal').style.display = 'none';
+  return worksEditorController.closeDeleteWorkModal();
 }
 
 function confirmDeleteWork() {
-  const workId = exhibitionDetailState.pendingDeleteWorkId;
-  if (workId === null) return;
-  deleteWork(workId);
-  closeDeleteWorkModal();
+  return worksEditorController.confirmDeleteWork();
 }
 
 function handleWorkChange(workId, field, value) {
-  const exhibition = getCurrentExhibition();
-  const work = exhibition.works.find(w => w.id === workId);
-  if (!work) return;
-  if (!canCurrentUserModifyOwnedRow(work)) return;
-  if (field === 'author' && exhibition.type === '개인전') {
-    return;
-  }
-  ensureWorkEditUndoSnapshot(workId);
-  work[field] = value;
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.works = exhibition.works;
-  }
-  saveExhibition();
+  return worksEditorController.handleWorkChange(workId, field, value);
 }
 
-const MAX_PHOTO_PREVIEW_DATA_URL_LENGTH = 360000;
-const PHOTO_PREVIEW_MAX_DIMENSION = 1280;
-const pendingPhotoUploadTokens = new Map();
-const TRANSIENT_WORK_PHOTO_FIELDS = ['pendingPhotoDataUrl', 'pendingPhotoPreviewDataUrl'];
+const TRANSIENT_WORK_PHOTO_FIELDS = worksEditorController.TRANSIENT_WORK_PHOTO_FIELDS;
 
 function canUseRemoteUploadApi() {
-  return typeof window !== 'undefined'
-    && window.location
-    && !String(window.location.protocol || '').startsWith('file');
+  return worksEditorController.canUseRemoteUploadApi();
 }
 
 function buildPhotoUploadFileName(baseName, suffix, mimeType) {
-  return globalThis.ExhibitionImageLifecycle.buildPhotoUploadFileName(baseName, suffix, mimeType);
+  return worksEditorController.buildPhotoUploadFileName(baseName, suffix, mimeType);
 }
 
 function parseDataUrlMimeType(dataUrl) {
-  return globalThis.ExhibitionImageLifecycle.parseDataUrlMimeType(dataUrl);
+  return worksEditorController.parseDataUrlMimeType(dataUrl);
 }
 
 function snapshotWorkPhotoFields(work) {
-  return globalThis.ExhibitionImageLifecycle.snapshotPhotoFields(work);
+  return worksEditorController.snapshotWorkPhotoFields(work);
 }
 
 function applyWorkPhotoFields(work, snapshot) {
-  globalThis.ExhibitionImageLifecycle.applyPhotoFields(work, snapshot);
+  return worksEditorController.applyWorkPhotoFields(work, snapshot);
 }
 
 function clearPendingWorkPhotoFields(work) {
-  globalThis.ExhibitionImageLifecycle.clearPendingPhotoFields(work);
+  return worksEditorController.clearPendingWorkPhotoFields(work);
 }
 
 async function verifyUploadedImageFile(uploadedFile) {
-  return globalThis.ExhibitionImageLifecycle.verifyUploadedImage({
-    fetchImpl: fetch,
-    uploadedFile
-  });
+  return worksEditorController.verifyUploadedImageFile(uploadedFile);
 }
 
 async function uploadImageDataUrl(dataUrl, fileName) {
-  return globalThis.ExhibitionImageLifecycle.uploadImageDataUrl({
-    fetchImpl: fetch,
-    canUpload: canUseRemoteUploadApi(),
-    dataUrl,
-    fileName
-  });
+  return worksEditorController.uploadImageDataUrl(dataUrl, fileName);
 }
 
 async function persistWorkPhotoUrls(workId, options = {}) {
-  if (!canUseRemoteUploadApi()) {
-    return { ok: false, reason: 'remote-upload-disabled' };
-  }
-
-  const exhibition = getCurrentExhibition();
-  const work = Array.isArray(exhibition.works)
-    ? exhibition.works.find((item) => item.id === workId)
-    : null;
-  if (!work) {
-    return { ok: false, reason: 'work-not-found' };
-  }
-
-  const uploadPlan = globalThis.ExhibitionImageLifecycle.buildUploadPlan(work, {
-    ...options,
-    workId
-  });
-  if (!uploadPlan.ok) return uploadPlan;
-
-  const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  pendingPhotoUploadTokens.set(workId, token);
-
-  if (uploadPlan.skipped) {
-    clearPendingWorkPhotoFields(work);
-    return { ok: true, skipped: true };
-  }
-
-  const previewUpload = uploadPlan.shouldUploadPreview
-    ? await uploadImageDataUrl(uploadPlan.previewDataUrl, uploadPlan.previewFileName)
-    : null;
-
-  const fullUpload = uploadPlan.shouldUploadFull
-    ? await uploadImageDataUrl(uploadPlan.fullDataUrl, uploadPlan.fullFileName)
-    : null;
-
-  if (uploadPlan.shouldUploadPreview && !previewUpload?.url) {
-    return { ok: false, reason: 'preview-upload-failed' };
-  }
-
-  if (uploadPlan.shouldUploadFull && !fullUpload?.url) {
-    return { ok: false, reason: 'full-upload-failed' };
-  }
-
-  const previewValidation = previewUpload ? await verifyUploadedImageFile(previewUpload) : null;
-  const fullValidation = fullUpload ? await verifyUploadedImageFile(fullUpload) : null;
-
-  if (previewUpload && !previewValidation?.ok) {
-    return {
-      ok: false,
-      reason: 'preview-upload-validation-failed',
-      details: previewValidation || null
-    };
-  }
-
-  if (fullUpload && !fullValidation?.ok) {
-    return {
-      ok: false,
-      reason: 'full-upload-validation-failed',
-      details: fullValidation || null
-    };
-  }
-
-  if (pendingPhotoUploadTokens.get(workId) !== token) {
-    return { ok: false, reason: 'upload-superseded' };
-  }
-
-  const latestExhibition = getCurrentExhibition();
-  const latestWork = Array.isArray(latestExhibition.works)
-    ? latestExhibition.works.find((item) => item.id === workId)
-    : null;
-  if (!latestWork) {
-    return { ok: false, reason: 'latest-work-not-found' };
-  }
-
-  const changed = globalThis.ExhibitionImageLifecycle.applyUploadedPhotoFields(latestWork, {
-    previewUpload,
-    fullUpload
-  });
-
-  if (!changed) {
-    return { ok: true, skipped: true };
-  }
-
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.works = latestExhibition.works;
-  }
-  saveExhibition();
-  renderWorkRows();
-
-  return {
-    ok: true,
-    previewUpload,
-    fullUpload,
-    previewValidation,
-    fullValidation
-  };
+  return worksEditorController.persistWorkPhotoUrls(workId, options);
 }
 
 function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
-    reader.onerror = () => reject(reader.error || new Error('Failed to read file.'));
-    reader.readAsDataURL(file);
-  });
+  return worksEditorController.readFileAsDataUrl(file);
 }
 
 function loadImageElement(src) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('Failed to load image data.'));
-    image.src = src;
-  });
+  return worksEditorController.loadImageElement(src);
 }
 
 function renderResizedDataUrl(image, mimeType, quality, maxDimension) {
-  const width = Number(image.naturalWidth || image.width || 0);
-  const height = Number(image.naturalHeight || image.height || 0);
-  if (!width || !height) return '';
-
-  const scale = Math.min(1, maxDimension / Math.max(width, height));
-  const targetWidth = Math.max(1, Math.round(width * scale));
-  const targetHeight = Math.max(1, Math.round(height * scale));
-
-  const canvas = document.createElement('canvas');
-  canvas.width = targetWidth;
-  canvas.height = targetHeight;
-
-  const context = canvas.getContext('2d');
-  if (!context) return '';
-  context.drawImage(image, 0, 0, targetWidth, targetHeight);
-
-  if (mimeType === 'image/png') {
-    return canvas.toDataURL(mimeType);
-  }
-  return canvas.toDataURL(mimeType, quality);
+  return worksEditorController.renderResizedDataUrl(image, mimeType, quality, maxDimension);
 }
 
 async function buildLightweightPhotoPreview(dataUrl) {
-  if (!dataUrl) return '';
-
-  try {
-    const image = await loadImageElement(dataUrl);
-    const thumbnail = renderResizedDataUrl(image, 'image/webp', 0.55, 280);
-    return thumbnail || dataUrl;
-  } catch (error) {
-    return dataUrl;
-  }
+  return worksEditorController.buildLightweightPhotoPreview(dataUrl);
 }
 
 async function buildCompactPhotoPreview(file) {
-  const originalDataUrl = await readFileAsDataUrl(file);
-  if (!originalDataUrl) return { dataUrl: '', mimeType: '', byteSize: 0 };
-
-  if (originalDataUrl.length <= MAX_PHOTO_PREVIEW_DATA_URL_LENGTH) {
-    return {
-      dataUrl: originalDataUrl,
-      mimeType: file.type || '',
-      byteSize: Number.isFinite(file.size) ? file.size : 0
-    };
-  }
-
-  const image = await loadImageElement(originalDataUrl);
-  const isPng = (file.type || '').toLowerCase() === 'image/png';
-  const mimeCandidates = isPng ? ['image/webp', 'image/jpeg', 'image/png'] : ['image/webp', 'image/jpeg'];
-  const qualities = [0.82, 0.72, 0.62, 0.52];
-  const dimensions = [PHOTO_PREVIEW_MAX_DIMENSION, 1080, 920, 760, 620];
-
-  let bestDataUrl = '';
-  let bestMimeType = '';
-
-  for (const maxDimension of dimensions) {
-    for (const mimeType of mimeCandidates) {
-      if (mimeType === 'image/png') {
-        const pngDataUrl = renderResizedDataUrl(image, mimeType, 1, maxDimension);
-        if (!pngDataUrl) continue;
-        if (!bestDataUrl || pngDataUrl.length < bestDataUrl.length) {
-          bestDataUrl = pngDataUrl;
-          bestMimeType = mimeType;
-        }
-        if (pngDataUrl.length <= MAX_PHOTO_PREVIEW_DATA_URL_LENGTH) {
-          return {
-            dataUrl: pngDataUrl,
-            mimeType,
-            byteSize: Math.round((pngDataUrl.length * 3) / 4)
-          };
-        }
-        continue;
-      }
-
-      for (const quality of qualities) {
-        const encoded = renderResizedDataUrl(image, mimeType, quality, maxDimension);
-        if (!encoded) continue;
-
-        if (!bestDataUrl || encoded.length < bestDataUrl.length) {
-          bestDataUrl = encoded;
-          bestMimeType = mimeType;
-        }
-
-        if (encoded.length <= MAX_PHOTO_PREVIEW_DATA_URL_LENGTH) {
-          return {
-            dataUrl: encoded,
-            mimeType,
-            byteSize: Math.round((encoded.length * 3) / 4)
-          };
-        }
-      }
-    }
-  }
-
-  const fallbackDataUrl = bestDataUrl || originalDataUrl;
-  return {
-    dataUrl: fallbackDataUrl,
-    mimeType: bestMimeType || file.type || '',
-    byteSize: Math.round((fallbackDataUrl.length * 3) / 4)
-  };
+  return worksEditorController.buildCompactPhotoPreview(file);
 }
 
 async function handleWorkPhotoChange(workId, event) {
-  const file = event.target.files[0];
-  const exhibition = getCurrentExhibition();
-  const work = exhibition.works.find(w => w.id === workId);
-  if (!work) return;
-  if (!canCurrentUserModifyOwnedRow(work)) return;
-
-  ensureWorkEditUndoSnapshot(workId);
-
-  const previousPhotoSnapshot = snapshotWorkPhotoFields(work);
-
-  if (!file) {
-    work.photoName = '';
-    work.photoUrl = '';
-    work.photoPreviewUrl = '';
-    work.photoPath = '';
-    work.photoPreviewPath = '';
-    work.photoDataUrl = '';
-    work.photoPreviewDataUrl = '';
-    clearPendingWorkPhotoFields(work);
-    work.photoMimeType = '';
-    work.photoByteSize = 0;
-    if (exhibitionDetailState.exhibition) {
-      exhibitionDetailState.exhibition.works = exhibition.works;
-    }
-    saveExhibition();
-    renderWorkRows();
-    return;
-  }
-
-  try {
-    const compactPhoto = await buildCompactPhotoPreview(file);
-    const lightweightPreview = await buildLightweightPhotoPreview(compactPhoto.dataUrl);
-
-    work.photoName = file.name;
-    work.pendingPhotoDataUrl = compactPhoto.dataUrl;
-    work.pendingPhotoPreviewDataUrl = lightweightPreview;
-    work.photoMimeType = compactPhoto.mimeType;
-    work.photoByteSize = compactPhoto.byteSize;
-
-    if (exhibitionDetailState.exhibition) {
-      exhibitionDetailState.exhibition.works = exhibition.works;
-    }
-    renderWorkRows();
-
-    const persisted = await persistWorkPhotoUrls(workId, {
-      fullDataUrl: compactPhoto.dataUrl,
-      previewDataUrl: lightweightPreview,
-      fileName: file.name,
-      replaceExisting: true
-    });
-
-    if (!persisted?.ok) {
-      if (persisted?.reason === 'upload-superseded') {
-        return;
-      }
-      applyWorkPhotoFields(work, previousPhotoSnapshot);
-      if (exhibitionDetailState.exhibition) {
-        exhibitionDetailState.exhibition.works = exhibition.works;
-      }
-      renderWorkRows();
-      alert('이미지 업로드에 실패했습니다. 기존 이미지 상태로 복원되었습니다. 네트워크를 확인한 뒤 다시 시도해주세요.');
-      return;
-    }
-  } catch (error) {
-    console.error('Failed to process photo preview:', error);
-    applyWorkPhotoFields(work, previousPhotoSnapshot);
-    if (exhibitionDetailState.exhibition) {
-      exhibitionDetailState.exhibition.works = exhibition.works;
-    }
-    renderWorkRows();
-    alert('이미지 처리 중 오류가 발생했습니다. 기존 이미지 상태를 유지합니다.');
-  }
+  return worksEditorController.handleWorkPhotoChange(workId, event);
 }
 
 function parseSizeParts(sizeText) {
-  return globalThis.ExhibitionInventoryModel.parseSizeParts(sizeText);
+  return worksEditorController.parseSizeParts(sizeText);
 }
 
 function handleWorkSizeChange(workId, part, value) {
-  const exhibition = getCurrentExhibition();
-  const work = exhibition.works.find(w => w.id === workId);
-  if (!work) return;
-  if (!canCurrentUserModifyOwnedRow(work)) return;
-
-  ensureWorkEditUndoSnapshot(workId);
-
-  const cleanedValue = (value || '').replace(/[^\d.]/g, '');
-  const current = parseSizeParts(work.size);
-  const width = part === 'width' ? cleanedValue : current.width;
-  const height = part === 'height' ? cleanedValue : current.height;
-
-  if (!width && !height) {
-    work.size = '';
-  } else if (width && height) {
-    work.size = `${width} cm x ${height} cm`;
-  } else {
-    work.size = width ? `${width} cm x ` : ` x ${height} cm`;
-  }
-
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.works = exhibition.works;
-  }
-  saveExhibition();
+  return worksEditorController.handleWorkSizeChange(workId, part, value);
 }
 
-let imagePreviewOutsideClickHandler = null;
-
 function openImagePreviewByWorkId(workId, event) {
-  const exhibition = getCurrentExhibition();
-  const work = (exhibition.works || []).find(w => w.id === workId);
-  const previewDataUrl = getPhotoPreviewDataUrl(work);
-  if (!work || !previewDataUrl) return;
-
-  if (event) {
-    event.stopPropagation();
-  }
-
-  closeImagePreview();
-
-  const preview = document.createElement('div');
-  preview.id = 'image-preview-popover';
-  preview.className = 'image-preview-popover';
-  preview.innerHTML = `
-    <div class="image-preview-header">
-      <span>${work.title || work.photoName || '이미지 미리보기'}</span>
-      <button type="button" class="image-preview-close" onclick="closeImagePreview()">✕</button>
-    </div>
-    <img src="${previewDataUrl}" alt="${(work.title || '작품').replace(/"/g, '&quot;')}" class="image-preview-large">
-  `;
-
-  const anchorRect = event?.currentTarget?.getBoundingClientRect();
-  const fallbackTop = Math.max(16, window.innerHeight / 2 - 140);
-  preview.style.top = `${anchorRect ? Math.max(16, anchorRect.top - 8) : fallbackTop}px`;
-  preview.style.left = `${anchorRect ? anchorRect.right + 12 : 16}px`;
-
-  document.body.appendChild(preview);
-
-  const popoverRect = preview.getBoundingClientRect();
-  if (popoverRect.right > window.innerWidth - 12 && anchorRect) {
-    preview.style.left = `${Math.max(12, anchorRect.left - popoverRect.width - 12)}px`;
-  }
-  if (popoverRect.bottom > window.innerHeight - 12) {
-    preview.style.top = `${Math.max(12, window.innerHeight - popoverRect.height - 12)}px`;
-  }
-
-  imagePreviewOutsideClickHandler = (clickEvent) => {
-    const popover = document.getElementById('image-preview-popover');
-    if (!popover) return;
-    if (!popover.contains(clickEvent.target)) {
-      closeImagePreview();
-    }
-  };
-
-  setTimeout(() => {
-    if (imagePreviewOutsideClickHandler) {
-      document.addEventListener('click', imagePreviewOutsideClickHandler);
-    }
-  }, 0);
+  return worksEditorController.openImagePreviewByWorkId(workId, event);
 }
 
 function closeImagePreview() {
-  const popover = document.getElementById('image-preview-popover');
-  if (popover) {
-    popover.remove();
-  }
-  if (imagePreviewOutsideClickHandler) {
-    document.removeEventListener('click', imagePreviewOutsideClickHandler);
-    imagePreviewOutsideClickHandler = null;
-  }
+  return worksEditorController.closeImagePreview();
 }
 
 function deleteWork(workId) {
-  const exhibition = getCurrentExhibition();
-  const work = (exhibition.works || []).find((item) => item.id === workId);
-  if (!work) return;
-  if (!canCurrentUserModifyOwnedRow(work)) {
-    alert('다른 사용자가 추가한 항목은 삭제할 수 없습니다.');
-    return;
-  }
-  pushWorkUndoSnapshot();
-  exhibition.works = exhibition.works.filter(w => w.id !== workId);
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.works = exhibition.works;
-  }
-  exhibitionDetailState.selectedWorkIds = exhibitionDetailState.selectedWorkIds.filter(id => id !== workId);
-  exhibitionDetailState.lastWorkCheckboxIndex = null;
-  saveExhibition();
-  renderWorkRows();
+  return worksEditorController.deleteWork(workId);
 }
 
 function toggleSelectAllWorks(source) {
-  const visibleWorks = getVisibleWorks();
-  const visibleIds = visibleWorks.map(work => work.id);
-  if (source.checked) {
-    exhibitionDetailState.selectedWorkIds = Array.from(new Set([...exhibitionDetailState.selectedWorkIds, ...visibleIds]));
-  } else {
-    exhibitionDetailState.selectedWorkIds = exhibitionDetailState.selectedWorkIds.filter(id => !visibleIds.includes(id));
-  }
-  exhibitionDetailState.lastWorkCheckboxIndex = null;
-  switchTab(getCurrentInventoryListTabName());
+  return worksEditorController.toggleSelectAllWorks(source);
 }
 
 function updateWorkSelectionActionButtons(visibleWorks) {
-  const scopedWorks = Array.isArray(visibleWorks) ? visibleWorks : getVisibleWorks();
-  const allVisibleSelected = scopedWorks.length > 0 && scopedWorks.every((work) => exhibitionDetailState.selectedWorkIds.includes(work.id));
-
-  ['work-select-all-btn', 'work-select-all-btn-bottom'].forEach((buttonId) => {
-    const selectAllButton = document.getElementById(buttonId);
-    if (selectAllButton) {
-      selectAllButton.textContent = allVisibleSelected ? '전체 선택 해제' : '전체 선택';
-    }
-  });
-
-  ['work-delete-selected-btn', 'work-delete-selected-btn-bottom'].forEach((buttonId) => {
-    const deleteSelectedButton = document.getElementById(buttonId);
-    if (deleteSelectedButton) {
-      deleteSelectedButton.style.display = exhibitionDetailState.selectedWorkIds.length > 0 ? 'inline-block' : 'none';
-    }
-  });
-
-  ['work-edit-selected-btn', 'work-edit-selected-btn-bottom'].forEach((buttonId) => {
-    const editSelectedButton = document.getElementById(buttonId);
-    if (editSelectedButton) {
-      editSelectedButton.style.display = exhibitionDetailState.selectedWorkIds.length > 0 ? 'inline-block' : 'none';
-    }
-  });
-
-  const selectAllCheckbox = document.getElementById('select-all-works');
-  if (selectAllCheckbox) {
-    selectAllCheckbox.checked = allVisibleSelected;
-    selectAllCheckbox.indeterminate = !allVisibleSelected && exhibitionDetailState.selectedWorkIds.length > 0;
-  }
-
-  refreshGridKeyboardNavigation('works-tbody');
+  return worksEditorController.updateWorkSelectionActionButtons(visibleWorks);
 }
 
 function toggleWorkSelection(workId, isChecked, event, rowIndex) {
-  const visibleWorks = getVisibleWorks();
-  const currentIndex = typeof rowIndex === 'number'
-    ? rowIndex
-    : visibleWorks.findIndex(work => work.id === workId);
-  const isShiftRange = Boolean(event && event.shiftKey && exhibitionDetailState.lastWorkCheckboxIndex !== null && currentIndex !== -1);
-
-  if (isShiftRange) {
-    const start = Math.min(exhibitionDetailState.lastWorkCheckboxIndex, currentIndex);
-    const end = Math.max(exhibitionDetailState.lastWorkCheckboxIndex, currentIndex);
-    const rangeIds = visibleWorks.slice(start, end + 1).map(work => work.id);
-
-    if (isChecked) {
-      exhibitionDetailState.selectedWorkIds = Array.from(new Set([...exhibitionDetailState.selectedWorkIds, ...rangeIds]));
-    } else {
-      exhibitionDetailState.selectedWorkIds = exhibitionDetailState.selectedWorkIds.filter(id => !rangeIds.includes(id));
-    }
-  } else if (isChecked) {
-    exhibitionDetailState.selectedWorkIds = Array.from(new Set([...exhibitionDetailState.selectedWorkIds, workId]));
-  } else {
-    exhibitionDetailState.selectedWorkIds = exhibitionDetailState.selectedWorkIds.filter(id => id !== workId);
-  }
-
-  if (currentIndex !== -1) {
-    exhibitionDetailState.lastWorkCheckboxIndex = currentIndex;
-  }
-
-  switchTab(getCurrentInventoryListTabName());
+  return worksEditorController.toggleWorkSelection(workId, isChecked, event, rowIndex);
 }
 
 function toggleSelectAllVisibleWorks() {
-  const visibleWorks = getVisibleWorks();
-  const visibleIds = visibleWorks.map(work => work.id);
-  const allSelected = visibleWorks.length > 0 && visibleIds.every(id => exhibitionDetailState.selectedWorkIds.includes(id));
-  if (allSelected) {
-    exhibitionDetailState.selectedWorkIds = exhibitionDetailState.selectedWorkIds.filter(id => !visibleIds.includes(id));
-  } else {
-    exhibitionDetailState.selectedWorkIds = Array.from(new Set([...exhibitionDetailState.selectedWorkIds, ...visibleIds]));
-  }
-  exhibitionDetailState.lastWorkCheckboxIndex = null;
-  switchTab(getCurrentInventoryListTabName());
+  return worksEditorController.toggleSelectAllVisibleWorks();
 }
 
 function deleteAllWorks() {
-  if (!window.confirm('모든 작품을 삭제하시겠습니까?')) return;
-  const exhibition = getCurrentExhibition();
-
-  let nextWorks = [];
-  if (isArtistScopedUser()) {
-    nextWorks = (exhibition.works || []).filter((work) => !canCurrentUserModifyOwnedRow(work));
-    if (nextWorks.length === (exhibition.works || []).length) {
-      alert('삭제할 수 있는 항목이 없습니다.');
-      return;
-    }
-  }
-
-  pushWorkUndoSnapshot();
-  exhibition.works = isArtistScopedUser() ? nextWorks : [];
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.works = exhibition.works;
-  }
-  exhibitionDetailState.selectedWorkIds = [];
-  exhibitionDetailState.lastWorkCheckboxIndex = null;
-  exhibitionDetailState.allowLargeInventoryDropOnce = true;
-  saveExhibition();
-  switchTab(getCurrentInventoryListTabName());
+  return worksEditorController.deleteAllWorks();
 }
 
 function deleteSelectedWorks() {
-  if (exhibitionDetailState.selectedWorkIds.length === 0) return;
-  if (!window.confirm('선택된 작품을 삭제하시겠습니까?')) return;
-  const exhibition = getCurrentExhibition();
-  const selectedSet = new Set(exhibitionDetailState.selectedWorkIds);
-  const deletableIds = (exhibition.works || [])
-    .filter((work) => selectedSet.has(work.id) && canCurrentUserModifyOwnedRow(work))
-    .map((work) => work.id);
-  if (deletableIds.length === 0) {
-    alert('삭제할 수 있는 항목이 없습니다.');
-    return;
-  }
-  pushWorkUndoSnapshot();
-  exhibition.works = (exhibition.works || []).filter(work => !deletableIds.includes(work.id));
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.works = exhibition.works;
-  }
-  exhibitionDetailState.selectedWorkIds = [];
-  exhibitionDetailState.lastWorkCheckboxIndex = null;
-  exhibitionDetailState.allowLargeInventoryDropOnce = true;
-  saveExhibition();
-  switchTab(getCurrentInventoryListTabName());
+  return worksEditorController.deleteSelectedWorks();
 }
 
 function editSelectedWorks() {
-  if (exhibitionDetailState.selectedWorkIds.length === 0) return;
-
-  const exhibition = getCurrentExhibition();
-  const selectedSet = new Set(exhibitionDetailState.selectedWorkIds);
-  const editableWorks = (exhibition.works || []).filter((work) => selectedSet.has(work.id) && canCurrentUserModifyOwnedRow(work));
-
-  if (editableWorks.length === 0) {
-    alert('수정할 수 있는 항목이 없습니다.');
-    return;
-  }
-
-  editableWorks.forEach((work) => {
-    if (work.saved) {
-      ensureWorkEditUndoSnapshot(work.id);
-      work.wasSaved = true;
-      work.editOriginalManualNumber = work.manualNumber || '';
-      work.editOriginalTitle = work.title || '';
-    }
-    work.saved = false;
-  });
-
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.works = exhibition.works;
-  }
-
-  exhibitionDetailState.selectedWorkIds = [];
-  exhibitionDetailState.lastWorkCheckboxIndex = null;
-  saveExhibition();
-  switchTab(getCurrentInventoryListTabName());
+  return worksEditorController.editSelectedWorks();
 }
 
 function parseSoldPriceAmount(value) {

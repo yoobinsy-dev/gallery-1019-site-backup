@@ -11,6 +11,7 @@ const imageLifecycle = require('../../exhibitions/image-lifecycle');
 const certificateModel = require('../../exhibitions/certificate-model');
 const certificateController = require('../../exhibitions/detail/certificate-controller');
 const inventoryModel = require('../../exhibitions/inventory-model');
+const worksEditorController = require('../../exhibitions/detail/works-editor-controller');
 const inventoryRenderer = require('../../exhibitions/inventory-renderer');
 const inventoryBackupModel = require('../../exhibitions/inventory-backup-model');
 const filesController = require('../../exhibitions/detail/files-controller');
@@ -99,6 +100,7 @@ function loadExhibition(overrides = {}) {
       ExhibitionCertificateModel: certificateModel,
       ExhibitionDetailCertificateController: certificateController,
       ExhibitionInventoryModel: inventoryModel,
+      ExhibitionDetailWorksEditorController: worksEditorController,
       ExhibitionInventoryRenderer: inventoryRenderer,
       ExhibitionInventoryBackupModel: inventoryBackupModel,
       ExhibitionDetailFilesController: filesController,
