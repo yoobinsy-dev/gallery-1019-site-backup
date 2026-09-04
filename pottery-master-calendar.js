@@ -1584,92 +1584,32 @@
   }
 
   function addMonthKeepDay(date, diff) {
-    const next = new Date(date);
-    const day = next.getDate();
-    next.setDate(1);
-    next.setMonth(next.getMonth() + diff);
-    const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
-    next.setDate(Math.min(day, lastDay));
-    next.setHours(0, 0, 0, 0);
-    return next;
+    return globalThis.MasterCalendarScheduleProjections.addMonthKeepDay(date, diff);
   }
 
   function getPersonalWorkCycleRangeForDate(startDateStr, referenceDate) {
-    const anchor = new Date(`${String(startDateStr || '').trim()}T00:00:00`);
-    const ref = referenceDate instanceof Date ? new Date(referenceDate) : new Date();
-
-    if (Number.isNaN(anchor.getTime())) {
-      const fallbackStart = new Date(ref);
-      fallbackStart.setHours(0, 0, 0, 0);
-      return {
-        start: formatDateInput(fallbackStart),
-        end: formatDateInput(addMonthKeepDay(fallbackStart, 1))
-      };
-    }
-
-    let cycleStart = new Date(anchor);
-    let cycleEnd = addMonthKeepDay(cycleStart, 1);
-    while (ref >= cycleEnd) {
-      cycleStart = cycleEnd;
-      cycleEnd = addMonthKeepDay(cycleStart, 1);
-    }
-
-    return {
-      start: formatDateInput(cycleStart),
-      end: formatDateInput(cycleEnd)
-    };
+    return globalThis.MasterCalendarScheduleProjections.getPersonalWorkCycleRangeForDate(
+      startDateStr,
+      referenceDate,
+      { formatDateInput, addMonthKeepDay }
+    );
   }
 
   function getPersonalWorkUsageHoursForCycle(userName, cycleStart, cycleEnd) {
-    const from = new Date(`${String(cycleStart || '').trim()}T00:00:00`);
-    const to = new Date(`${String(cycleEnd || '').trim()}T00:00:00`);
-    const now = new Date();
-    const todayKey = formatDateInput(now);
-    const targetName = String(userName || '').trim();
-    const personalKinds = new Set(['개인작업', '강사 지도 하 개인작업']);
-
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || !targetName) return 0;
-
-    let total = 0;
-    const addOccurrence = (eventItem, dateKey) => {
-      const startAt = new Date(`${dateKey}T${String(eventItem?.start || '00:00')}:00`);
-      if (Number.isNaN(startAt.getTime())) return;
-
-      const startSlot = timeToSlot(eventItem?.start);
-      const endSlot = Math.max(startSlot + 1, timeToSlot(eventItem?.end));
-      const endAt = new Date(new Date(`${dateKey}T00:00:00`).getTime() + (endSlot * SLOT_MINUTES * 60 * 1000));
-      if (Number.isNaN(endAt.getTime())) return;
-      const occurrenceKey = formatDateInput(new Date(`${dateKey}T00:00:00`));
-      if (endAt > now && occurrenceKey !== todayKey) return;
-      if (startAt < from || startAt >= to) return;
-
-      total += ((endSlot - startSlot) * SLOT_MINUTES) / 60;
-    };
-
-    const personalEvents = (state.events || []).filter((eventItem) => {
-      const kind = String(eventItem?.kind || '').trim();
-      return eventItem
-        && personalKinds.has(kind)
-        && String(eventItem.title || '').trim() === targetName;
-    });
-    globalThis.MasterCalendarOccurrences.expandOccurrences({
-      events: personalEvents,
-      rangeStart: formatDateInput(from),
-      rangeEnd: formatDateInput(addDays(to, -1)),
-      invalidRepeatEnd: 'ignore',
-      maxWeeklyIterations: 520
-    }).forEach((occurrence) => {
-      const repeatEnd = occurrence.event.repeatEndDate
-        ? new Date(`${occurrence.event.repeatEndDate}T00:00:00`)
-        : null;
-      if (occurrence.event.repeatWeekly && repeatEnd && !Number.isNaN(repeatEnd.getTime())) {
-        const occurrenceDate = new Date(`${occurrence.date}T00:00:00`);
-        if (occurrenceDate >= repeatEnd) return;
+    return globalThis.MasterCalendarScheduleProjections.getPersonalWorkUsageHoursForCycle({
+      events: state.events,
+      userName,
+      cycleStart,
+      cycleEnd,
+      now: new Date(),
+      formatDateInput,
+      addDays,
+      timeToSlot,
+      slotMinutes: SLOT_MINUTES,
+      expandOccurrences(options) {
+        return globalThis.MasterCalendarOccurrences.expandOccurrences(options);
       }
-      addOccurrence(occurrence.event, occurrence.date);
     });
-
-    return Math.round(total * 10) / 10;
   }
 
   function formatHourValue(hours) {
@@ -1831,60 +1771,16 @@
   }
 
   function rebuildClassTeachingLog() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const horizon = addDays(today, 365);
-
-    const records = [];
-    const seenKeys = new Set();
-
-    const pushOccurrence = (eventItem, occurrenceDate) => {
-      const meta = getEventClassMetadataForDate(eventItem, occurrenceDate);
-      const key = `${String(eventItem.id || '')}|${occurrenceDate}|${String(eventItem.start || '')}|${String(eventItem.end || '')}|${String(eventItem.title || '')}`;
-      if (seenKeys.has(key)) return;
-      seenKeys.add(key);
-
-      records.push({
-        key,
-        eventId: String(eventItem.id || ''),
-        date: occurrenceDate,
-        start: String(eventItem.start || ''),
-        end: String(eventItem.end || ''),
-        studentName: String(eventItem.title || '').trim(),
-        classType: meta.classType,
-        instructor: meta.instructor,
-        baseRuleId: meta.baseRuleId,
-        repeatWeekly: Boolean(eventItem.repeatWeekly)
-      });
-    };
-
-    const classEvents = (state.events || []).filter((eventItem) => {
-      return eventItem && String(eventItem.kind || '') === '수강';
+    state.classTeachingLog = globalThis.MasterCalendarScheduleProjections.buildClassTeachingLog({
+      events: state.events,
+      now: new Date(),
+      getEventClassMetadataForDate,
+      formatDateInput,
+      addDays,
+      expandOccurrences(options) {
+        return globalThis.MasterCalendarOccurrences.expandOccurrences(options);
+      }
     });
-    const rangeStart = classEvents.reduce((earliest, eventItem) => {
-      const startDate = new Date(`${String(eventItem.date || '')}T00:00:00`);
-      if (Number.isNaN(startDate.getTime())) return earliest;
-      return !earliest || startDate < earliest ? startDate : earliest;
-    }, null);
-    if (rangeStart) {
-      globalThis.MasterCalendarOccurrences.expandOccurrences({
-        events: classEvents,
-        rangeStart: formatDateInput(rangeStart),
-        rangeEnd: formatDateInput(horizon),
-        invalidRepeatEnd: 'ignore',
-        maxWeeklyIterations: 500
-      }).forEach((occurrence) => pushOccurrence(occurrence.event, occurrence.date));
-    }
-
-    records.sort((a, b) => {
-      const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
-      if (dateCompare !== 0) return dateCompare;
-      const startCompare = String(a.start || '').localeCompare(String(b.start || ''));
-      if (startCompare !== 0) return startCompare;
-      return String(a.studentName || '').localeCompare(String(b.studentName || ''), 'ko');
-    });
-
-    state.classTeachingLog = records;
   }
 
   function populateEventUserOptions(selected, selectId = 'event-user', forcedKind) {
