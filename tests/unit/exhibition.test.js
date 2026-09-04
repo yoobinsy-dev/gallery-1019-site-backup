@@ -14,6 +14,7 @@ const inventoryModel = require('../../exhibitions/inventory-model');
 const worksEditorController = require('../../exhibitions/detail/works-editor-controller');
 const inventoryRenderer = require('../../exhibitions/inventory-renderer');
 const inventoryBackupModel = require('../../exhibitions/inventory-backup-model');
+const infoController = require('../../exhibitions/detail/info-controller');
 const filesController = require('../../exhibitions/detail/files-controller');
 const salesAddController = require('../../exhibitions/detail/sales-add-controller');
 const gridNavigation = require('../../exhibitions/detail/grid-navigation');
@@ -103,6 +104,7 @@ function loadExhibition(overrides = {}) {
       ExhibitionDetailWorksEditorController: worksEditorController,
       ExhibitionInventoryRenderer: inventoryRenderer,
       ExhibitionInventoryBackupModel: inventoryBackupModel,
+      ExhibitionDetailInfoController: infoController,
       ExhibitionDetailFilesController: filesController,
       ExhibitionDetailSalesAddController: salesAddController,
       ExhibitionDetailGridNavigation: gridNavigation,
