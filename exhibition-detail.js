@@ -2574,15 +2574,6 @@ function renderLegacyWorksManagement(container) {
   renderWorkRows();
 }
 
-function updateSaveAllButtonVisibility() {
-  ['save-all-btn', 'save-all-btn-bottom'].forEach((buttonId) => {
-    const saveAllBtn = document.getElementById(buttonId);
-    if (saveAllBtn) {
-      saveAllBtn.style.display = exhibitionDetailState.unsavedWorkCount >= 2 ? 'inline-block' : 'none';
-    }
-  });
-}
-
 function toggleSalesCheckbox(soldId, isChecked) {
   if (isChecked) {
     exhibitionDetailState.selectedSalesIds = Array.from(new Set([...exhibitionDetailState.selectedSalesIds, soldId]));
