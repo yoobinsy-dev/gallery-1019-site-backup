@@ -29,7 +29,9 @@ function loadCalendar(globals = {}) {
     'markLaneOccupancy', 'buildDailyOccupancyMap', 'hasEnoughCapacityForRange',
     'isEventPlacementAllowed', 'saveEventFromModal', 'finalizeMasterCalendarEdit',
     'handleDeleteRecurringOne', 'handleDeleteRecurringFollowing',
-    'handleMoveRecurringOne', 'handleMoveRecurringFollowing'
+    'handleMoveRecurringOne', 'handleMoveRecurringFollowing',
+    'getTemplateRulesForWeek', 'setTemplateRulesForWeekFrom', 'normalizeTemplateTimeline',
+    'applyMovedRuleOverride'
   ], { globals: {
     MasterCalendarDateTime: dateTime,
     MasterCalendarOccurrences: occurrences,
@@ -432,6 +434,46 @@ test('calendar pointer command preserves unchanged updates and recurring class m
       nextInstructor: 'New Teacher', nextBaseRuleId: 'new-rule'
     }
   });
+});
+
+test('calendar base-rule domain characterizes timeline precedence, normalization, and overlap splitting', () => {
+  const calendar = loadCalendar();
+  const baseRule = { id: 'base', day: 1, startSlot: 10, endSlot: 20, type: '개인작업 시간' };
+  const changedRule = { ...baseRule, id: 'changed', startSlot: 12, endSlot: 18 };
+  calendar.state.weekStart = new Date('2026-08-03T00:00:00');
+  calendar.state.baseRules = [baseRule];
+  calendar.state.baseRuleTimeline = [
+    { weekKey: '2026-08-10', rules: [{ ...baseRule }] },
+    { weekKey: '2026-08-17', rules: [changedRule] }
+  ];
+
+  assert.equal(calendar.getTemplateRulesForWeek(new Date('2026-08-03T00:00:00'))[0].id, 'base');
+  assert.equal(calendar.getTemplateRulesForWeek(new Date('2026-08-12T00:00:00'))[0].id, 'base');
+  assert.equal(calendar.getTemplateRulesForWeek(new Date('2026-08-24T00:00:00'))[0].id, 'changed');
+
+  calendar.setTemplateRulesForWeekFrom(new Date('2026-08-24T00:00:00'), [{ ...changedRule, id: 'latest' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(calendar.state.baseRuleTimeline.map((entry) => entry.weekKey))), [
+    '2026-08-10', '2026-08-17', '2026-08-24'
+  ]);
+  calendar.normalizeTemplateTimeline();
+  assert.deepEqual(JSON.parse(JSON.stringify(calendar.state.baseRuleTimeline.map((entry) => entry.weekKey))), ['2026-08-17']);
+
+  const targetRules = [
+    { id: 'wide', day: 2, startSlot: 8, endSlot: 20, type: '개인작업 시간' },
+    { id: 'other-day', day: 3, startSlot: 8, endSlot: 20, type: '개인작업 시간' }
+  ];
+  calendar.applyMovedRuleOverride(targetRules, {
+    id: 'moved', day: 2, startSlot: 12, endSlot: 16, type: '수업시간', className: 'Wheel'
+  });
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(targetRules.map((rule) => ({ day: rule.day, startSlot: rule.startSlot, endSlot: rule.endSlot, type: rule.type })))),
+    [
+      { day: 2, startSlot: 8, endSlot: 12, type: '개인작업 시간' },
+      { day: 2, startSlot: 16, endSlot: 20, type: '개인작업 시간' },
+      { day: 3, startSlot: 8, endSlot: 20, type: '개인작업 시간' },
+      { day: 2, startSlot: 12, endSlot: 16, type: '수업시간' }
+    ]
+  );
 });
 
 function createRecurringCalendar(events) {
