@@ -24,8 +24,15 @@
       getMasterEditOccupancyMap,
       canPlaceInLane,
       findLane,
+      commandPlanner,
+      getClassBaseRuleForRange,
+      applyClassEventBaseMetadata,
+      saveState,
+      refreshWorkshopUsageUi,
+      openQuickEditEventModal,
+      openModal,
       resetMasterCreateState,
-      finalizeMasterCalendarEdit,
+      finalizeMasterCreate,
       renderCalendar
     } = dependencies;
 
@@ -222,6 +229,94 @@
       finalizeMasterCalendarEdit(event.clientX, event.clientY);
     }
 
+    function finalizeMasterCalendarEdit(clientX, clientY) {
+      if (state.masterEdit.active) {
+        const edit = state.masterEdit;
+        const editEventId = edit.eventId;
+        const shouldOpenQuickEdit = Boolean(editEventId) && !edit.pointerMoved;
+
+        if (edit.kind === '수강' && typeof clientX === 'number' && typeof clientY === 'number') {
+          const pointer = getMasterPointerDaySlot(clientX, clientY);
+          if (pointer) {
+            const classRule = getBaseRuleForSlot(pointer.day, pointer.slot);
+            if (classRule && classRule.type === '수업시간') {
+              const snapStart = Number(classRule.startSlot);
+              const snapEnd = Number(classRule.endSlot);
+              const placement = getMasterEditPlacement(pointer.day, snapStart, snapEnd, {
+                preferredLane: edit.originLane
+              });
+              if (placement) {
+                edit.validPreview = true;
+                edit.targetDayIndex = pointer.day;
+                edit.targetStartSlot = snapStart;
+                edit.targetEndSlot = snapEnd;
+                edit.targetLane = placement.lane;
+              } else {
+                edit.validPreview = false;
+              }
+            } else {
+              edit.validPreview = false;
+            }
+          }
+        }
+
+        const eventItem = state.events.find((item) => item.id === edit.eventId);
+        if (eventItem && edit.validPreview) {
+          const nextDate = formatDateInput(addDays(state.weekStart, edit.targetDayIndex));
+          const nextStart = slotToTime(edit.targetStartSlot);
+          const nextEnd = slotToTime(edit.targetEndSlot);
+          const nextClassRule = eventItem.kind === '수강'
+            ? getClassBaseRuleForRange(nextDate, nextStart, nextEnd)
+            : null;
+          const plan = commandPlanner.planPointerEdit({
+            edit,
+            event: eventItem,
+            viewMode: state.viewMode,
+            originalDate: String(edit.occurrenceDate || formatDateInput(addDays(state.weekStart, edit.dayIndex || 0)) || ''),
+            originalStart: slotToTime(Number(edit.startSlot || 0)),
+            originalEnd: slotToTime(Number(edit.endSlot || 1)),
+            target: {
+              dayIndex: edit.targetDayIndex,
+              startSlot: edit.targetStartSlot,
+              endSlot: edit.targetEndSlot,
+              date: nextDate,
+              start: nextStart,
+              end: nextEnd
+            },
+            nextClassRule
+          });
+
+          if (plan.action === 'prompt-recurring') {
+            Object.assign(state.recurringMove, plan.recurringMove);
+
+            resetMasterEditState();
+            renderCalendar();
+            openModal('recurring-move-modal');
+            return;
+          }
+
+          if (plan.action === 'update') {
+            Object.assign(eventItem, plan.patch);
+            applyClassEventBaseMetadata(eventItem, nextDate);
+            saveState();
+          }
+        }
+
+        resetMasterEditState();
+        renderCalendar();
+        refreshWorkshopUsageUi();
+
+        if (shouldOpenQuickEdit) {
+          openQuickEditEventModal(editEventId, edit.occurrenceDate || '');
+        }
+        return;
+      }
+
+      if (state.masterCreate.active) {
+        finalizeMasterCreate();
+      }
+    }
+
     function handleMasterCalendarPointerCancel(event) {
       if (!state.masterEdit.active) return;
       if (state.masterEdit.touchIdentifier !== null) return;
@@ -319,6 +414,7 @@
       getMasterEditPlacement,
       applyMasterEditPreview,
       handleMasterCalendarPointerUp,
+      finalizeMasterCalendarEdit,
       handleMasterCalendarPointerCancel,
       getTrackedMasterTouch,
       handleMasterCalendarTouchMove,
