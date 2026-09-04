@@ -5,6 +5,7 @@ const { exposeIifeFunctions } = require('../helpers/load-source');
 const dateTime = require('../../master-calendar/date-time');
 const occurrences = require('../../master-calendar/occurrences');
 const occupancy = require('../../master-calendar/occupancy');
+const baseRules = require('../../master-calendar/base-rules');
 const commands = require('../../master-calendar/commands');
 const pointerController = require('../../master-calendar/pointer-controller');
 const modalController = require('../../master-calendar/modal-controller');
@@ -36,6 +37,7 @@ function loadCalendar(globals = {}) {
     MasterCalendarDateTime: dateTime,
     MasterCalendarOccurrences: occurrences,
     MasterCalendarOccupancy: occupancy,
+    MasterCalendarBaseRules: baseRules,
     MasterCalendarCommands: commands,
     MasterCalendarPointerController: pointerController,
     MasterCalendarModalController: modalController,
@@ -695,6 +697,7 @@ test('master calendar characterizes workshop usage recurrence and exclusive boun
     Date: FixedDate,
     MasterCalendarDateTime: dateTime,
     MasterCalendarOccurrences: occurrences,
+    MasterCalendarBaseRules: baseRules,
     MasterCalendarModalController: modalController,
     MasterCalendarEventModalController: eventModalController,
     MasterCalendarRecurringEventController: recurringEventController,
@@ -732,6 +735,7 @@ test('master calendar characterizes teaching log recurrence and inclusive horizo
     Date: FixedDate,
     MasterCalendarDateTime: dateTime,
     MasterCalendarOccurrences: occurrences,
+    MasterCalendarBaseRules: baseRules,
     MasterCalendarModalController: modalController,
     MasterCalendarEventModalController: eventModalController,
     MasterCalendarRecurringEventController: recurringEventController,

@@ -156,6 +156,13 @@
     calendarZoom: 1
   };
 
+  const baseRulesDomain = globalThis.MasterCalendarBaseRules.create({
+    state,
+    getWeekStart,
+    formatDateInput,
+    createBaseRuleId
+  });
+
   const bindingsController = globalThis.MasterCalendarBindingsController.create({
     document,
     window,
@@ -2226,7 +2233,7 @@
   }
 
   function getBaseWeekKey(weekStartDate) {
-    return formatDateInput(getWeekStart(weekStartDate || new Date()));
+    return baseRulesDomain.getBaseWeekKey(weekStartDate);
   }
 
   function cloneBaseWeekOverrides(overrides) {
@@ -2239,46 +2246,27 @@
   }
 
   function cloneBaseRuleTimeline(timeline) {
-    return (timeline || []).map((entry) => ({
-      weekKey: String(entry?.weekKey || ''),
-      rules: cloneBaseRules(entry?.rules)
-    })).filter((entry) => entry.weekKey);
+    return baseRulesDomain.cloneBaseRuleTimeline(timeline);
   }
 
   function normalizeBaseRule(rule) {
-    return {
-      ...rule,
-      day: Number(rule?.day || 0),
-      startSlot: Number(rule?.startSlot || 0),
-      endSlot: Number(rule?.endSlot || 1),
-      className: String(rule?.className || '').trim(),
-      instructor: String(rule?.instructor || '').trim()
-    };
+    return baseRulesDomain.normalizeBaseRule(rule);
   }
 
   function getRulesForWeek(weekStartDate) {
-    const weekKey = getBaseWeekKey(weekStartDate || state.weekStart);
-    const override = state.baseWeekOverrides[weekKey];
-    if (Array.isArray(override)) return override;
-    return getTemplateRulesForWeek(weekStartDate || state.weekStart);
+    return baseRulesDomain.getRulesForWeek(weekStartDate);
   }
 
   function hasWeekOverride(weekStartDate) {
-    const weekKey = getBaseWeekKey(weekStartDate || state.weekStart);
-    return Array.isArray(state.baseWeekOverrides[weekKey]);
+    return baseRulesDomain.hasWeekOverride(weekStartDate);
   }
 
   function ensureWeekOverrideRules(weekStartDate) {
-    const weekKey = getBaseWeekKey(weekStartDate || state.weekStart);
-    if (!Array.isArray(state.baseWeekOverrides[weekKey])) {
-      state.baseWeekOverrides[weekKey] = cloneBaseRules(getTemplateRulesForWeek(weekStartDate || state.weekStart));
-    }
-    return state.baseWeekOverrides[weekKey];
+    return baseRulesDomain.ensureWeekOverrideRules(weekStartDate);
   }
 
   function getRulesByScope(scope, weekStartDate) {
-    if (scope === 'all') return getTemplateRulesForWeek(weekStartDate || getBaseEditorWeekStart());
-    return ensureWeekOverrideRules(weekStartDate || getBaseEditorWeekStart());
+    return baseRulesDomain.getRulesByScope(scope, weekStartDate);
   }
 
   function getBaseEditScope() {
@@ -2291,90 +2279,31 @@
   }
 
   function getTemplateRulesFromSnapshotForWeekKey(weekKey, snapshot) {
-    const timeline = Array.isArray(snapshot?.baseRuleTimeline) ? snapshot.baseRuleTimeline : [];
-    let resolved = null;
-    timeline.forEach((entry) => {
-      const key = String(entry?.weekKey || '');
-      if (!key || key > weekKey) return;
-      if (!resolved || key > resolved.weekKey) {
-        resolved = { weekKey: key, rules: entry.rules };
-      }
-    });
-    if (resolved) return cloneBaseRules(resolved.rules);
-    return cloneBaseRules(snapshot?.baseRules);
+    return baseRulesDomain.getTemplateRulesFromSnapshotForWeekKey(weekKey, snapshot);
   }
 
   function getTemplateRulesForWeek(weekStartDate) {
-    const weekKey = getBaseWeekKey(weekStartDate || state.weekStart);
-    let resolved = null;
-    (state.baseRuleTimeline || []).forEach((entry) => {
-      const key = String(entry?.weekKey || '');
-      if (!key || key > weekKey) return;
-      if (!resolved || key > resolved.weekKey) {
-        resolved = { weekKey: key, rules: entry.rules };
-      }
-    });
-    if (resolved) return resolved.rules;
-    return state.baseRules;
+    return baseRulesDomain.getTemplateRulesForWeek(weekStartDate);
   }
 
   function setTemplateRulesForWeekFrom(weekStartDate, nextRules) {
-    const weekKey = getBaseWeekKey(weekStartDate || state.weekStart);
-    const timeline = cloneBaseRuleTimeline(state.baseRuleTimeline)
-      .filter((entry) => String(entry.weekKey || '') !== weekKey);
-    timeline.push({ weekKey, rules: cloneBaseRules(nextRules) });
-    timeline.sort((a, b) => String(a.weekKey).localeCompare(String(b.weekKey)));
-    state.baseRuleTimeline = timeline;
+    return baseRulesDomain.setTemplateRulesForWeekFrom(weekStartDate, nextRules);
   }
 
   function normalizeTemplateTimeline() {
-    const timeline = cloneBaseRuleTimeline(state.baseRuleTimeline)
-      .sort((a, b) => String(a.weekKey).localeCompare(String(b.weekKey)));
-    const normalized = [];
-    let previousRules = cloneBaseRules(state.baseRules);
-    timeline.forEach((entry) => {
-      if (!areRuleSetsEquivalent(entry.rules, previousRules)) {
-        normalized.push({
-          weekKey: String(entry.weekKey),
-          rules: cloneBaseRules(entry.rules)
-        });
-        previousRules = cloneBaseRules(entry.rules);
-      }
-    });
-    state.baseRuleTimeline = normalized;
+    return baseRulesDomain.normalizeTemplateTimeline();
   }
 
   function reconcileWeekOverridesAfterTemplateChange(templateSnapshot, startWeekKey) {
-    Object.entries(state.baseWeekOverrides || {}).forEach(([weekKey, rules]) => {
-      if (!Array.isArray(rules)) return;
-      if (startWeekKey && weekKey < startWeekKey) return;
-      const previousTemplate = getTemplateRulesFromSnapshotForWeekKey(weekKey, templateSnapshot);
-      if (areRuleSetsEquivalent(rules, previousTemplate)) {
-        delete state.baseWeekOverrides[weekKey];
-      }
-    });
+    return baseRulesDomain.reconcileWeekOverridesAfterTemplateChange(templateSnapshot, startWeekKey);
   }
 
   function getRuleComparableSignature(rule) {
-    const day = Number(rule?.day || 0);
-    const startSlot = Number(rule?.startSlot || 0);
-    const endSlot = Number(rule?.endSlot || 1);
-    const type = String(rule?.type || '');
-    const className = String(rule?.className || '').trim();
-    const instructor = String(rule?.instructor || '').trim();
-    return `${day}|${startSlot}|${endSlot}|${type}|${className}|${instructor}`;
+    return baseRulesDomain.getRuleComparableSignature(rule);
   }
 
   function areRuleSetsEquivalent(left, right) {
-    const a = Array.isArray(left) ? left : [];
-    const b = Array.isArray(right) ? right : [];
-    if (a.length !== b.length) return false;
-    const aSig = a.map((rule) => getRuleComparableSignature(rule)).sort();
-    const bSig = b.map((rule) => getRuleComparableSignature(rule)).sort();
-    for (let i = 0; i < aSig.length; i += 1) {
-      if (aSig[i] !== bSig[i]) return false;
-    }
-    return true;
+    return baseRulesDomain.areRuleSetsEquivalent(left, right);
   }
 
   function requestBaseEventFollowChoice(affectedCount, onResolve) {
@@ -2473,7 +2402,7 @@
   }
 
   function rangesOverlap(startA, endA, startB, endB) {
-    return Math.max(startA, startB) < Math.min(endA, endB);
+    return baseRulesDomain.rangesOverlap(startA, endA, startB, endB);
   }
 
   function collectBaseRangeEventOccurrences(day, startSlot, endSlot, weekStartDate) {
@@ -2570,58 +2499,7 @@
   }
 
   function applyMovedRuleOverride(targetRules, movedRule) {
-    if (!Array.isArray(targetRules) || !movedRule) return;
-
-    const movedDay = Number(movedRule.day);
-    const movedStart = Number(movedRule.startSlot);
-    const movedEnd = Number(movedRule.endSlot);
-    const movedId = String(movedRule.id || '');
-    if (!Number.isInteger(movedDay) || movedEnd <= movedStart || !movedId) return;
-
-    const nextRules = [];
-
-    (targetRules || []).forEach((rule) => {
-      if (!rule) return;
-      if (String(rule.id || '') === movedId) return;
-
-      const day = Number(rule.day);
-      const start = Number(rule.startSlot);
-      const end = Number(rule.endSlot);
-      const sameDay = day === movedDay;
-
-      if (!sameDay || !rangesOverlap(movedStart, movedEnd, start, end)) {
-        nextRules.push(rule);
-        return;
-      }
-
-      if (start < movedStart) {
-        const leftEnd = Math.min(end, movedStart);
-        if (leftEnd > start) {
-          nextRules.push({
-            ...rule,
-            id: createBaseRuleId(),
-            startSlot: start,
-            endSlot: leftEnd
-          });
-        }
-      }
-
-      if (end > movedEnd) {
-        const rightStart = Math.max(start, movedEnd);
-        if (end > rightStart) {
-          nextRules.push({
-            ...rule,
-            id: createBaseRuleId(),
-            startSlot: rightStart,
-            endSlot: end
-          });
-        }
-      }
-    });
-
-    nextRules.push(movedRule);
-    targetRules.length = 0;
-    nextRules.forEach((rule) => targetRules.push(rule));
+    return baseRulesDomain.applyMovedRuleOverride(targetRules, movedRule);
   }
 
   function applyBaseRule(day, startSlot, endSlot) {
@@ -2866,7 +2744,7 @@
   }
 
   function cloneBaseRules(rules) {
-    return (rules || []).map((rule) => ({ ...rule }));
+    return baseRulesDomain.cloneBaseRules(rules);
   }
 
   function cloneEventsForUndo(events) {
