@@ -6,6 +6,7 @@ const salesModel = require('../../exhibitions/sales-model');
 const accountingProjection = require('../../exhibitions/accounting-projection');
 const exportModel = require('../../exhibitions/export-model');
 const snapshotClient = require('../../exhibitions/snapshot-client');
+const backupController = require('../../exhibitions/detail/backup-controller');
 const imageLifecycle = require('../../exhibitions/image-lifecycle');
 const certificateModel = require('../../exhibitions/certificate-model');
 const certificateController = require('../../exhibitions/detail/certificate-controller');
@@ -93,6 +94,7 @@ function loadExhibition(overrides = {}) {
       ExhibitionAccountingProjection: accountingProjection,
       ExhibitionExportModel: exportModel,
       ExhibitionSnapshotClient: snapshotClient,
+      ExhibitionDetailBackupController: backupController,
       ExhibitionImageLifecycle: imageLifecycle,
       ExhibitionCertificateModel: certificateModel,
       ExhibitionDetailCertificateController: certificateController,

@@ -156,6 +156,22 @@ const accountingViewController = globalThis.ExhibitionDetailAccountingViewContro
   updateAccountingActionButtons
 });
 
+const backupController = globalThis.ExhibitionDetailBackupController.create({
+  state: exhibitionDetailState,
+  document,
+  fetchImpl: (...args) => fetch(...args),
+  snapshotClient: globalThis.ExhibitionSnapshotClient,
+  exhibitionsRepository: globalThis.ExhibitionsRepository.repository,
+  getCurrentExhibition,
+  getCurrentUser,
+  getExhibitionAccessRole,
+  getFirstAllowedTab,
+  switchTab,
+  escapeHtml: escapeAccountingHtml,
+  alertImpl: (...args) => alert(...args),
+  confirmImpl: (...args) => confirm(...args)
+});
+
 function getCurrentExhibition() {
   return exhibitionDetailState.exhibition || {
     id: exhibitionDetailState.exhibitionId,
@@ -713,251 +729,39 @@ function switchTab(tabName) {
 }
 
 function getBackupExhibitionId() {
-  const id = Number(exhibitionDetailState.exhibitionId || getCurrentExhibition()?.id);
-  if (!Number.isFinite(id) || id <= 0) return null;
-  return id;
+  return backupController.getBackupExhibitionId();
 }
 
 function formatBackupDate(value) {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString('ko-KR', { hour12: false });
+  return backupController.formatBackupDate(value);
 }
 
 async function fetchExhibitionBackupSnapshots() {
-  const exhibitionId = getBackupExhibitionId();
-  if (!exhibitionId) {
-    exhibitionDetailState.backupError = '전시 ID를 찾을 수 없습니다.';
-    return;
-  }
-
-  exhibitionDetailState.backupLoading = true;
-  exhibitionDetailState.backupError = '';
-  switchTab('exhibition-backup');
-
-  try {
-    const result = await globalThis.ExhibitionSnapshotClient.listSnapshots({
-      fetchImpl: fetch,
-      exhibitionId
-    });
-    exhibitionDetailState.backupError = result.error;
-    exhibitionDetailState.backupSnapshots = result.snapshots;
-    exhibitionDetailState.backupCanUndo = result.canUndo;
-  } catch (error) {
-    exhibitionDetailState.backupError = '네트워크 오류로 스냅샷 목록을 불러오지 못했습니다.';
-    exhibitionDetailState.backupSnapshots = [];
-    exhibitionDetailState.backupCanUndo = false;
-  } finally {
-    exhibitionDetailState.backupLoading = false;
-    switchTab('exhibition-backup');
-  }
+  return backupController.fetchExhibitionBackupSnapshots();
 }
 
 function getBackupSnapshotRowsHtml() {
-  const rows = exhibitionDetailState.backupSnapshots || [];
-  if (rows.length === 0) {
-    return '<tr><td colspan="6" class="no-users">저장된 전시 스냅샷이 없습니다.</td></tr>';
-  }
-
-  return rows.map((snapshot) => {
-    const snapshotId = Number(snapshot.id);
-    const restoredTag = snapshot.restored_at
-      ? `<div style="font-size:12px;color:#2f6f3e;margin-top:4px;">복원됨: ${escapeAccountingHtml(formatBackupDate(snapshot.restored_at))}</div>`
-      : '';
-
-    return `
-      <tr>
-        <td>
-          <strong>#${snapshotId}</strong>
-          <div style="font-size:12px;color:#666;">${escapeAccountingHtml(snapshot.snapshot_type || '')}</div>
-        </td>
-        <td>${escapeAccountingHtml(String(snapshot.works_goods_count ?? 0))}</td>
-        <td>${escapeAccountingHtml(String(snapshot.sold_items_count ?? 0))}</td>
-        <td>${escapeAccountingHtml(formatBackupDate(snapshot.created_at))}${restoredTag}</td>
-        <td>${escapeAccountingHtml(snapshot.note || '-')}</td>
-        <td>
-          <button type="button" class="action-btn approve-btn" onclick="restoreExhibitionSnapshot(${snapshotId})">restore</button>
-        </td>
-      </tr>
-    `;
-  }).join('');
+  return backupController.getBackupSnapshotRowsHtml();
 }
 
 function renderExhibitionBackup(container) {
-  if (getExhibitionAccessRole() !== 'admin') {
-    const fallbackTab = getFirstAllowedTab() || 'exhibition-info';
-    switchTab(fallbackTab);
-    return;
-  }
-
-  const loadingNotice = exhibitionDetailState.backupLoading
-    ? '<p class="accounting-description">스냅샷 목록을 불러오는 중입니다...</p>'
-    : '';
-  const errorNotice = exhibitionDetailState.backupError
-    ? `<p class="accounting-description" style="color:#b23b3b;">${escapeAccountingHtml(exhibitionDetailState.backupError)}</p>`
-    : '';
-
-  container.innerHTML = `
-    <div class="works-sales-wrapper">
-      <div class="works-sales-title">전시 백업</div>
-      <p class="accounting-description">이 전시만 분리 저장된 스냅샷입니다. 잘못 복원했을 경우 되돌리기를 눌러 직전 상태로 복귀할 수 있습니다.</p>
-      ${loadingNotice}
-      ${errorNotice}
-      <div class="works-actions" style="margin-bottom:12px;">
-        <button type="button" class="works-action-btn" onclick="createManualExhibitionSnapshot()">스냅샷 생성</button>
-        <button type="button" class="works-action-btn works-action-btn-secondary" onclick="fetchExhibitionBackupSnapshots()">새로고침</button>
-        <button type="button" class="works-action-btn works-action-btn-secondary" onclick="undoExhibitionSnapshotRestore()" ${exhibitionDetailState.backupCanUndo ? '' : 'disabled'}>되돌리기</button>
-      </div>
-      <div class="works-table-wrapper expanded">
-        <table class="works-table">
-          <thead>
-            <tr>
-              <th>스냅샷</th>
-              <th>목록 수 (작품+굿즈)</th>
-              <th>판매 수량</th>
-              <th>생성 시각</th>
-              <th>메모</th>
-              <th>복원</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${getBackupSnapshotRowsHtml()}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-
-  if (!exhibitionDetailState.backupLoading && exhibitionDetailState.backupSnapshots.length === 0 && !exhibitionDetailState.backupError) {
-    fetchExhibitionBackupSnapshots();
-  }
+  return backupController.renderExhibitionBackup(container);
 }
 
 async function createManualExhibitionSnapshot() {
-  if (getExhibitionAccessRole() !== 'admin') {
-    alert('어드민 계정만 스냅샷을 생성할 수 있습니다.');
-    return;
-  }
-
-  const exhibitionId = getBackupExhibitionId();
-  if (!exhibitionId) {
-    alert('전시 ID를 찾을 수 없습니다.');
-    return;
-  }
-
-  const currentUser = getCurrentUser();
-  const actorName = (currentUser?.name || '').toString().trim() || 'admin';
-  const note = `manual backup by ${actorName}`;
-
-  try {
-    const result = await globalThis.ExhibitionSnapshotClient.captureSnapshot({
-      fetchImpl: fetch,
-      exhibitionId,
-      note
-    });
-    if (!result.ok) {
-      alert(result.error);
-      return;
-    }
-
-    alert('스냅샷이 생성되었습니다.');
-    await fetchExhibitionBackupSnapshots();
-  } catch (error) {
-    alert('스냅샷 생성 요청 중 오류가 발생했습니다.');
-  }
+  return backupController.createManualExhibitionSnapshot();
 }
 
 async function refreshExhibitionStateFromServer(exhibitionId) {
-  const targetId = Number(exhibitionId);
-  if (!Number.isFinite(targetId) || targetId <= 0) return false;
-
-  try {
-    const result = await globalThis.ExhibitionSnapshotClient.fetchExhibitions({ fetchImpl: fetch });
-    if (!result.ok) return false;
-    const remoteExhibitions = result.exhibitions;
-    globalThis.ExhibitionsRepository.repository.saveExhibitionsSafely(remoteExhibitions);
-
-    const index = remoteExhibitions.findIndex((item) => Number(item?.id) === targetId);
-    if (index !== -1) {
-      exhibitionDetailState.exhibition = remoteExhibitions[index];
-    }
-
-    return true;
-  } catch (error) {
-    return false;
-  }
+  return backupController.refreshExhibitionStateFromServer(exhibitionId);
 }
 
 async function restoreExhibitionSnapshot(snapshotId) {
-  if (getExhibitionAccessRole() !== 'admin') {
-    alert('어드민 계정만 복원할 수 있습니다.');
-    return;
-  }
-
-  if (!confirm('이 스냅샷으로 전시 데이터를 복원하시겠습니까?')) {
-    return;
-  }
-
-  const exhibitionId = getBackupExhibitionId();
-  if (!exhibitionId) {
-    alert('전시 ID를 찾을 수 없습니다.');
-    return;
-  }
-
-  try {
-    const result = await globalThis.ExhibitionSnapshotClient.restoreSnapshot({
-      fetchImpl: fetch,
-      exhibitionId,
-      snapshotId
-    });
-    if (!result.ok) {
-      alert(result.error);
-      return;
-    }
-
-    await refreshExhibitionStateFromServer(exhibitionId);
-
-    alert('복원이 완료되었습니다.');
-    await fetchExhibitionBackupSnapshots();
-  } catch (error) {
-    alert('복원 요청 중 오류가 발생했습니다.');
-  }
+  return backupController.restoreExhibitionSnapshot(snapshotId);
 }
 
 async function undoExhibitionSnapshotRestore() {
-  if (getExhibitionAccessRole() !== 'admin') {
-    alert('어드민 계정만 되돌릴 수 있습니다.');
-    return;
-  }
-
-  const exhibitionId = getBackupExhibitionId();
-  if (!exhibitionId) {
-    alert('전시 ID를 찾을 수 없습니다.');
-    return;
-  }
-
-  if (!confirm('마지막 복원을 되돌리시겠습니까?')) {
-    return;
-  }
-
-  try {
-    const result = await globalThis.ExhibitionSnapshotClient.undoRestore({
-      fetchImpl: fetch,
-      exhibitionId
-    });
-    if (!result.ok) {
-      alert(result.error);
-      return;
-    }
-
-    await refreshExhibitionStateFromServer(exhibitionId);
-
-    alert('되돌리기가 완료되었습니다.');
-    await fetchExhibitionBackupSnapshots();
-  } catch (error) {
-    alert('되돌리기 요청 중 오류가 발생했습니다.');
-  }
+  return backupController.undoExhibitionSnapshotRestore();
 }
 
 function ensureExhibitionInfoData() {
