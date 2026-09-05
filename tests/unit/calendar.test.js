@@ -7,6 +7,7 @@ const occurrences = require('../../master-calendar/occurrences');
 const occupancy = require('../../master-calendar/occupancy');
 const baseRules = require('../../master-calendar/base-rules');
 const baseTransactionController = require('../../master-calendar/base-transaction-controller');
+const quickCreateController = require('../../master-calendar/quick-create-controller');
 const scheduleProjections = require('../../master-calendar/schedule-projections');
 const participantsController = require('../../master-calendar/participants-controller');
 const commands = require('../../master-calendar/commands');
@@ -44,6 +45,7 @@ function loadCalendar(globals = {}) {
     MasterCalendarOccupancy: occupancy,
     MasterCalendarBaseRules: baseRules,
     MasterCalendarBaseTransactionController: baseTransactionController,
+    MasterCalendarQuickCreateController: quickCreateController,
     MasterCalendarScheduleProjections: scheduleProjections,
     MasterCalendarStateController: stateController,
     MasterCalendarParticipantsController: participantsController,
@@ -709,6 +711,7 @@ test('master calendar characterizes workshop usage recurrence and exclusive boun
     MasterCalendarOccurrences: occurrences,
     MasterCalendarBaseRules: baseRules,
     MasterCalendarBaseTransactionController: baseTransactionController,
+    MasterCalendarQuickCreateController: quickCreateController,
     MasterCalendarScheduleProjections: scheduleProjections,
     MasterCalendarStateController: stateController,
     MasterCalendarRepository: { repository: {} },
@@ -753,6 +756,7 @@ test('master calendar characterizes teaching log recurrence and inclusive horizo
     MasterCalendarOccurrences: occurrences,
     MasterCalendarBaseRules: baseRules,
     MasterCalendarBaseTransactionController: baseTransactionController,
+    MasterCalendarQuickCreateController: quickCreateController,
     MasterCalendarScheduleProjections: scheduleProjections,
     MasterCalendarStateController: stateController,
     MasterCalendarRepository: { repository: {} },
