@@ -13,17 +13,15 @@
       slotHeight,
       resizeEdgePx,
       canManageEventOccurrence,
-      getMasterPointerDaySlot,
+      getCalendarZoomFactor,
       getBaseRuleForSlot,
-      buildMasterEditOccupancySnapshot,
       formatDateInput,
       addDays,
       slotToTime,
       canManageEventPlacementByRole,
       isEventPlacementAllowed,
-      getMasterEditOccupancyMap,
-      canPlaceInLane,
-      findLane,
+      buildDailyOccupancyMap,
+      occupancy,
       commandPlanner,
       getClassBaseRuleForRange,
       applyClassEventBaseMetadata,
@@ -35,6 +33,79 @@
       finalizeMasterCreate,
       renderCalendar
     } = dependencies;
+
+    function getMasterPointerDaySlot(clientX, clientY) {
+      const pointed = document.elementFromPoint(clientX, clientY);
+      const slotEl = pointed && typeof pointed.closest === 'function'
+        ? pointed.closest('.day-slot')
+        : null;
+
+      if (slotEl) {
+        const day = Number(slotEl.dataset.dayIndex);
+        const slot = Number(slotEl.dataset.slot);
+        if (Number.isInteger(day) && Number.isInteger(slot)) {
+          return { day, slot };
+        }
+      }
+
+      const body = document.getElementById('calendar-body');
+      if (!body) return null;
+      const rect = body.getBoundingClientRect();
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+        return null;
+      }
+
+      const totalWidth = rect.width - 64;
+      if (totalWidth <= 0) return null;
+
+      const allDayRow = body.querySelector('.calendar-all-day-row');
+      const allDayOffset = allDayRow ? allDayRow.offsetHeight : 0;
+
+      const x = clientX - rect.left - 64;
+      const y = clientY - rect.top + body.scrollTop - allDayOffset;
+      const day = Math.max(0, Math.min(6, Math.floor((x / totalWidth) * 7)));
+      const slot = Math.max(0, Math.min(slotsPerDay - 1, Math.floor(y / (slotHeight * getCalendarZoomFactor()))));
+      return { day, slot };
+    }
+
+    function buildMasterEditOccupancySnapshot(excludeEventId) {
+      const snapshot = {};
+      for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+        const date = formatDateInput(addDays(state.weekStart, dayIndex));
+        snapshot[date] = occupancy.createEmptyDailyOccupancy(slotsPerDay);
+      }
+
+      const bubbles = Array.from(document.querySelectorAll('#calendar-body .events-overlay .event-bubble[data-event-id]'));
+      bubbles.forEach((bubble) => {
+        const eventId = String(bubble?.dataset?.eventId || '');
+        if (!eventId || (excludeEventId && eventId === excludeEventId)) return;
+
+        const date = String(bubble?.dataset?.date || '').trim();
+        if (!date || !snapshot[date]) return;
+
+        const startSlot = Number(bubble?.dataset?.startSlot);
+        const endSlot = Number(bubble?.dataset?.endSlot);
+        const lane = Number(bubble?.dataset?.lane);
+        const need = Math.max(1, Math.min(3, Number(bubble?.dataset?.need || 1)));
+
+        if (!Number.isInteger(startSlot) || !Number.isInteger(endSlot) || endSlot <= startSlot) return;
+        if (!occupancy.canPlaceInLane(snapshot[date], startSlot, endSlot, need, lane)) return;
+
+        occupancy.markLaneOccupancy(snapshot[date], startSlot, endSlot, lane, need);
+      });
+
+      return snapshot;
+    }
+
+    function getMasterEditOccupancyMap(date) {
+      const key = String(date || '').trim();
+      const snapshot = state.masterEdit.occupancySnapshot;
+      const saved = snapshot && snapshot[key];
+      if (saved) {
+        return occupancy.cloneDailyOccupancy(saved, slotsPerDay);
+      }
+      return buildDailyOccupancyMap(key, state.masterEdit.eventId);
+    }
 
     function startMasterEventEdit(event, item, dayIndex, occurrenceDate, startSlot, endSlot, lane, need, bubble) {
       if (!event) return;
@@ -189,17 +260,17 @@
       if (!canManageEventPlacementByRole(kind, date, start, end, state.masterEdit.title)) return null;
       if (!isEventPlacementAllowed(kind, dayIndex, startSlot, endSlot)) return null;
 
-      const occupancy = getMasterEditOccupancyMap(date);
+      const occupancyMap = getMasterEditOccupancyMap(date);
       const preferredLaneRaw = Number(options?.preferredLane);
       const preferredLane = Number.isInteger(preferredLaneRaw) ? preferredLaneRaw : null;
       const requirePreferredLane = Boolean(options?.requirePreferredLane);
 
-      if (preferredLane !== null && canPlaceInLane(occupancy, startSlot, endSlot, cap, preferredLane)) {
+      if (preferredLane !== null && occupancy.canPlaceInLane(occupancyMap, startSlot, endSlot, cap, preferredLane)) {
         return { lane: preferredLane };
       }
       if (requirePreferredLane) return null;
 
-      const lane = findLane(occupancy, startSlot, endSlot, cap);
+      const lane = occupancy.findLane(occupancyMap, startSlot, endSlot, cap);
       if (lane < 0) return null;
       return { lane };
     }
@@ -407,6 +478,9 @@
     }
 
     return {
+      getMasterPointerDaySlot,
+      buildMasterEditOccupancySnapshot,
+      getMasterEditOccupancyMap,
       startMasterEventEdit,
       getMasterEventResizeEdge,
       handleMasterCalendarPointerMove,
