@@ -163,6 +163,28 @@
     createBaseRuleId
   });
 
+  const baseTransactionController = globalThis.MasterCalendarBaseTransactionController.create({
+    state,
+    document,
+    SLOTS_PER_DAY,
+    baseRulesDomain,
+    getWeekStart,
+    formatDateInput,
+    addDays,
+    timeToSlot,
+    slotToTime,
+    getEventsForDate,
+    isAllDayKind,
+    openModal,
+    closeModal,
+    saveState,
+    renderAll,
+    applyClassEventBaseMetadata,
+    alert: (message) => alert(message),
+    now: () => Date.now(),
+    random: () => Math.random()
+  });
+
   const navigationController = globalThis.MasterCalendarNavigationController.create({
     document,
     state,
@@ -1694,7 +1716,7 @@
   }
 
   function getBaseEditorWeekStart() {
-    return getWeekStart(state.baseEditorWeekStart || state.weekStart || new Date());
+    return baseTransactionController.getBaseEditorWeekStart();
   }
 
   function getBaseWeekKey(weekStartDate) {
@@ -1702,12 +1724,7 @@
   }
 
   function cloneBaseWeekOverrides(overrides) {
-    const result = {};
-    Object.entries(overrides || {}).forEach(([key, rules]) => {
-      if (!Array.isArray(rules)) return;
-      result[key] = cloneBaseRules(rules);
-    });
-    return result;
+    return baseTransactionController.cloneBaseWeekOverrides(overrides);
   }
 
   function cloneBaseRuleTimeline(timeline) {
@@ -1735,12 +1752,11 @@
   }
 
   function getBaseEditScope() {
-    return state.baseEditMode === 'week' ? 'week' : 'all';
+    return baseTransactionController.getBaseEditScope();
   }
 
   function isEditFromCurrentWeekEnabled() {
-    const checkbox = document.getElementById('base-edit-from-current-week');
-    return state.baseEditMode === 'base' && Boolean(checkbox?.checked);
+    return baseTransactionController.isEditFromCurrentWeekEnabled();
   }
 
   function getTemplateRulesFromSnapshotForWeekKey(weekKey, snapshot) {
@@ -1772,98 +1788,31 @@
   }
 
   function requestBaseEventFollowChoice(affectedCount, onResolve) {
-    state.baseEventFollowPrompt.pending = onResolve;
-    const message = document.getElementById('base-event-follow-message');
-    if (message) {
-      if (affectedCount > 1) {
-        message.textContent = `해당 베이스 시간표 위에 이벤트 ${affectedCount}건이 있습니다. 이벤트도 같이 옮길까요?`;
-      } else {
-        message.textContent = '해당 베이스 시간표 위에 이벤트가 있습니다. 이벤트도 같이 옮길까요?';
-      }
-    }
-    openModal('base-event-follow-modal');
+    return baseTransactionController.requestBaseEventFollowChoice(affectedCount, onResolve);
   }
 
   function resolveBaseEventFollowPrompt(choice) {
-    const pending = state.baseEventFollowPrompt.pending;
-    state.baseEventFollowPrompt.pending = null;
-    closeModal('base-event-follow-modal');
-    if (typeof pending === 'function') {
-      pending(choice);
-    }
+    return baseTransactionController.resolveBaseEventFollowPrompt(choice);
   }
 
   function executeBaseChangeWithScopeAndEventPrompt(scopeOrResolver, buildPayload, applyChange) {
-    const resolvedScope = scopeOrResolver;
-    const payload = buildPayload(resolvedScope);
-    const affectedEvents = Array.isArray(payload?.affectedEvents) ? payload.affectedEvents : [];
-    const askEventFollow = Boolean(payload?.askEventFollow) && resolvedScope === 'week';
-
-    const commit = (moveEvents) => {
-      const templateSnapshot = resolvedScope === 'all'
-        ? {
-            baseRules: cloneBaseRules(state.baseRules),
-            baseRuleTimeline: cloneBaseRuleTimeline(state.baseRuleTimeline)
-          }
-        : null;
-      const fromCurrent = resolvedScope === 'all' && isEditFromCurrentWeekEnabled();
-      const startWeekKey = fromCurrent ? getBaseWeekKey(getBaseEditorWeekStart()) : null;
-      pushBaseUndoState();
-      applyChange({ ...payload, scope: resolvedScope, moveEvents: Boolean(moveEvents) });
-      if (templateSnapshot) {
-        reconcileWeekOverridesAfterTemplateChange(templateSnapshot, startWeekKey);
-        normalizeTemplateTimeline();
-      }
-      saveState();
-      renderAll();
-    };
-
-    if (!askEventFollow || affectedEvents.length === 0) {
-      commit(false);
-      return;
-    }
-
-    requestBaseEventFollowChoice(affectedEvents.length, (choice) => {
-      if (choice === 'cancel') return;
-      commit(choice === 'yes');
-    });
+    return baseTransactionController.executeBaseChangeWithScopeAndEventPrompt(
+      scopeOrResolver,
+      buildPayload,
+      applyChange
+    );
   }
 
   function withBaseScope(scopeOrResolver, mutationFn) {
-    const scope = scopeOrResolver;
-    const templateSnapshot = scope === 'all'
-      ? {
-          baseRules: cloneBaseRules(state.baseRules),
-          baseRuleTimeline: cloneBaseRuleTimeline(state.baseRuleTimeline)
-        }
-      : null;
-    const fromCurrent = scope === 'all' && isEditFromCurrentWeekEnabled();
-    const startWeekKey = fromCurrent ? getBaseWeekKey(getBaseEditorWeekStart()) : null;
-    pushBaseUndoState();
-    mutationFn(scope);
-    if (templateSnapshot) {
-      reconcileWeekOverridesAfterTemplateChange(templateSnapshot, startWeekKey);
-      normalizeTemplateTimeline();
-    }
-    saveState();
-    renderAll();
+    return baseTransactionController.withBaseScope(scopeOrResolver, mutationFn);
   }
 
   function getEditableBaseRulesForAllMode(weekStartDate) {
-    const editorWeekStart = getWeekStart(weekStartDate || getBaseEditorWeekStart());
-    const seedRules = cloneBaseRules(getTemplateRulesForWeek(editorWeekStart));
-    if (isEditFromCurrentWeekEnabled()) {
-      setTemplateRulesForWeekFrom(editorWeekStart, seedRules);
-      return getRulesByScope('all', editorWeekStart);
-    }
-    state.baseRules = seedRules;
-    state.baseRuleTimeline = [];
-    return state.baseRules;
+    return baseTransactionController.getEditableBaseRulesForAllMode(weekStartDate);
   }
 
   function resetBaseApplyWeeklyCheckbox() {
-    const checkbox = document.getElementById('base-apply-weekly');
-    if (checkbox) checkbox.checked = false;
+    return baseTransactionController.resetBaseApplyWeeklyCheckbox();
   }
 
   function rangesOverlap(startA, endA, startB, endB) {
@@ -1871,96 +1820,19 @@
   }
 
   function collectBaseRangeEventOccurrences(day, startSlot, endSlot, weekStartDate) {
-    if (!Number.isInteger(day) || endSlot <= startSlot) return [];
-    const date = formatDateInput(addDays(getWeekStart(weekStartDate || new Date()), day));
-    const events = getEventsForDate(date);
-    const seen = new Set();
-    const affected = [];
-
-    events.forEach((eventItem) => {
-      if (!eventItem || isAllDayKind(eventItem.kind)) return;
-      const eventStart = timeToSlot(eventItem.start);
-      const eventEnd = Math.max(eventStart + 1, timeToSlot(eventItem.end));
-      if (!rangesOverlap(startSlot, endSlot, eventStart, eventEnd)) return;
-      const key = `${String(eventItem.id || '')}|${date}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      affected.push({ eventId: String(eventItem.id || ''), occurrenceDate: date });
-    });
-
-    return affected;
+    return baseTransactionController.collectBaseRangeEventOccurrences(day, startSlot, endSlot, weekStartDate);
   }
 
   function buildBaseEventMovePlan(affectedEvents, dayShift, slotShift) {
-    if (!Array.isArray(affectedEvents) || affectedEvents.length === 0) return [];
-    return affectedEvents.map((item) => ({
-      eventId: String(item.eventId || ''),
-      occurrenceDate: String(item.occurrenceDate || ''),
-      dayShift: Number(dayShift || 0),
-      slotShift: Number(slotShift || 0)
-    })).filter((item) => item.eventId && item.occurrenceDate);
+    return baseTransactionController.buildBaseEventMovePlan(affectedEvents, dayShift, slotShift);
   }
 
   function applyBaseEventMovePlan(movePlan) {
-    (movePlan || []).forEach((plan) => {
-      const eventItem = state.events.find((item) => item && String(item.id || '') === String(plan.eventId || ''));
-      if (!eventItem) return;
-
-      const occurrenceDate = String(plan.occurrenceDate || '');
-      const currentOccurrenceDate = new Date(`${occurrenceDate}T00:00:00`);
-      if (Number.isNaN(currentOccurrenceDate.getTime())) return;
-
-      const nextDate = formatDateInput(addDays(currentOccurrenceDate, Number(plan.dayShift || 0)));
-      const startSlot = timeToSlot(eventItem.start);
-      const endSlot = Math.max(startSlot + 1, timeToSlot(eventItem.end));
-      const duration = Math.max(1, endSlot - startSlot);
-      const shiftedStart = Math.max(0, Math.min(SLOTS_PER_DAY - duration, startSlot + Number(plan.slotShift || 0)));
-      const shiftedEnd = shiftedStart + duration;
-      const nextStart = slotToTime(shiftedStart);
-      const nextEnd = slotToTime(shiftedEnd);
-
-      if (eventItem.repeatWeekly) {
-        const skipDates = Array.isArray(eventItem.repeatSkipDates) ? eventItem.repeatSkipDates.slice() : [];
-        if (!skipDates.includes(occurrenceDate)) {
-          skipDates.push(occurrenceDate);
-          skipDates.sort();
-        }
-        eventItem.repeatSkipDates = skipDates;
-
-        const movedOccurrence = {
-          id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          kind: eventItem.kind,
-          title: eventItem.title,
-          date: nextDate,
-          endDate: eventItem.endDate || '',
-          start: nextStart,
-          end: nextEnd,
-          classType: eventItem.classType || '',
-          instructor: eventItem.instructor || '',
-          baseRuleId: eventItem.baseRuleId || '',
-          capacity: Math.max(1, Math.min(3, Number(eventItem.capacity || 1))),
-          repeatWeekly: false,
-          repeatEndDate: '',
-          repeatSkipDates: []
-        };
-        if (String(movedOccurrence.kind || '') === '수강') {
-          applyClassEventBaseMetadata(movedOccurrence, nextDate);
-        }
-        state.events.push(movedOccurrence);
-        return;
-      }
-
-      eventItem.date = nextDate;
-      eventItem.start = nextStart;
-      eventItem.end = nextEnd;
-      if (String(eventItem.kind || '') === '수강') {
-        applyClassEventBaseMetadata(eventItem, nextDate);
-      }
-    });
+    return baseTransactionController.applyBaseEventMovePlan(movePlan);
   }
 
   function createBaseRuleId() {
-    return `base-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return baseTransactionController.createBaseRuleId();
   }
 
   function applyMovedRuleOverride(targetRules, movedRule) {
@@ -1968,44 +1840,7 @@
   }
 
   function applyBaseRule(day, startSlot, endSlot) {
-    const type = document.getElementById('base-type').value;
-    const className = document.getElementById('base-class-name').value;
-    const instructor = String(document.getElementById('base-instructor')?.value || '').trim();
-    if (!type) {
-      alert('유형을 먼저 선택해주세요.');
-      return false;
-    }
-
-    if (type === '수업시간' && !className) {
-      alert('수업시간은 수업명을 입력해주세요.');
-      return false;
-    }
-    if (type === '수업시간' && !instructor) {
-      alert('수업시간은 강사를 선택해주세요.');
-      return false;
-    }
-
-    const scope = getBaseEditScope();
-    withBaseScope(scope, (resolvedScope) => {
-      let targetRules = null;
-      if (resolvedScope === 'all') {
-        targetRules = getEditableBaseRulesForAllMode(getBaseEditorWeekStart());
-      } else {
-        targetRules = getRulesByScope(resolvedScope, getBaseEditorWeekStart());
-      }
-      targetRules.push({
-        id: `base-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        day,
-        startSlot,
-        endSlot,
-        type,
-        className: type === '수업시간' ? className : '',
-        instructor: type === '수업시간' ? instructor : ''
-      });
-    });
-
-    resetBaseApplyWeeklyCheckbox();
-    return true;
+    return baseTransactionController.applyBaseRule(day, startSlot, endSlot);
   }
 
   function getRuleForSlotFromRules(rules, day, slot) {
@@ -2213,48 +2048,19 @@
   }
 
   function cloneEventsForUndo(events) {
-    return (events || []).map((eventItem) => ({
-      ...eventItem,
-      repeatSkipDates: Array.isArray(eventItem?.repeatSkipDates) ? eventItem.repeatSkipDates.slice() : []
-    }));
+    return baseTransactionController.cloneEventsForUndo(events);
   }
 
   function pushBaseUndoState() {
-    state.baseUndoStack.push({
-      events: cloneEventsForUndo(state.events),
-      baseRules: cloneBaseRules(state.baseRules),
-      baseRuleTimeline: cloneBaseRuleTimeline(state.baseRuleTimeline),
-      baseWeekOverrides: cloneBaseWeekOverrides(state.baseWeekOverrides)
-    });
-    if (state.baseUndoStack.length > 100) {
-      state.baseUndoStack.shift();
-    }
-    updateUndoButtonState();
+    return baseTransactionController.pushBaseUndoState();
   }
 
   function undoBaseChange() {
-    if (state.baseUndoStack.length === 0) return;
-    const previous = state.baseUndoStack.pop();
-    if (Array.isArray(previous)) {
-      state.baseRules = cloneBaseRules(previous);
-      state.baseRuleTimeline = [];
-      state.baseWeekOverrides = {};
-    } else {
-      if (Array.isArray(previous?.events)) {
-        state.events = cloneEventsForUndo(previous.events);
-      }
-      state.baseRules = cloneBaseRules(previous?.baseRules);
-      state.baseRuleTimeline = cloneBaseRuleTimeline(previous?.baseRuleTimeline);
-      state.baseWeekOverrides = cloneBaseWeekOverrides(previous?.baseWeekOverrides);
-    }
-    saveState();
-    renderAll();
+    return baseTransactionController.undoBaseChange();
   }
 
   function updateUndoButtonState() {
-    const button = document.getElementById('undo-base-btn');
-    if (!button) return;
-    button.disabled = state.baseUndoStack.length === 0;
+    return baseTransactionController.updateUndoButtonState();
   }
 
   function openModal(id) {

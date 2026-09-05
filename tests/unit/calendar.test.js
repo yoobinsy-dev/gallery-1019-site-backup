@@ -6,6 +6,7 @@ const dateTime = require('../../master-calendar/date-time');
 const occurrences = require('../../master-calendar/occurrences');
 const occupancy = require('../../master-calendar/occupancy');
 const baseRules = require('../../master-calendar/base-rules');
+const baseTransactionController = require('../../master-calendar/base-transaction-controller');
 const scheduleProjections = require('../../master-calendar/schedule-projections');
 const participantsController = require('../../master-calendar/participants-controller');
 const commands = require('../../master-calendar/commands');
@@ -42,6 +43,7 @@ function loadCalendar(globals = {}) {
     MasterCalendarOccurrences: occurrences,
     MasterCalendarOccupancy: occupancy,
     MasterCalendarBaseRules: baseRules,
+    MasterCalendarBaseTransactionController: baseTransactionController,
     MasterCalendarScheduleProjections: scheduleProjections,
     MasterCalendarStateController: stateController,
     MasterCalendarParticipantsController: participantsController,
@@ -706,6 +708,7 @@ test('master calendar characterizes workshop usage recurrence and exclusive boun
     MasterCalendarDateTime: dateTime,
     MasterCalendarOccurrences: occurrences,
     MasterCalendarBaseRules: baseRules,
+    MasterCalendarBaseTransactionController: baseTransactionController,
     MasterCalendarScheduleProjections: scheduleProjections,
     MasterCalendarStateController: stateController,
     MasterCalendarRepository: { repository: {} },
@@ -749,6 +752,7 @@ test('master calendar characterizes teaching log recurrence and inclusive horizo
     MasterCalendarDateTime: dateTime,
     MasterCalendarOccurrences: occurrences,
     MasterCalendarBaseRules: baseRules,
+    MasterCalendarBaseTransactionController: baseTransactionController,
     MasterCalendarScheduleProjections: scheduleProjections,
     MasterCalendarStateController: stateController,
     MasterCalendarRepository: { repository: {} },
