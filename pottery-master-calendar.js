@@ -163,6 +163,52 @@
     createBaseRuleId
   });
 
+  const navigationController = globalThis.MasterCalendarNavigationController.create({
+    document,
+    state,
+    minCalendarZoom: MIN_CALENDAR_ZOOM,
+    maxCalendarZoom: MAX_CALENDAR_ZOOM,
+    dayNames: DAY_NAMES,
+    slotHeight: SLOT_HEIGHT,
+    slotsPerDay: SLOTS_PER_DAY,
+    allDayRowHeight: ALL_DAY_ROW_HEIGHT,
+    monthRows: MONTH_ROWS,
+    monthRowHeight: MONTH_ROW_HEIGHT,
+    getWeekStart,
+    getMonthStart,
+    addDays,
+    addMonths,
+    formatDateDisplay,
+    formatMonthDate,
+    isSameCalendarDate,
+    formatDateInput,
+    weekViewModule: globalThis.MasterCalendarWeekView,
+    monthViewModule: globalThis.MasterCalendarMonthView,
+    isAllDayKind,
+    isExhibitionKind,
+    getAllDayPriority,
+    canManageEventOccurrence,
+    kindToClass,
+    escapeHtml,
+    getEventDisplayTitle,
+    requestDeleteEvent,
+    setRoleLockedMessage,
+    openQuickEditEventModal,
+    slotToTime,
+    getBaseRuleForSlot,
+    baseTypeToClass,
+    canCreateFromBaseRule,
+    startMasterCreate,
+    moveMasterCreate,
+    finalizeMasterCreate,
+    isBaseLabelStart,
+    getBaseLabelText,
+    getEventsForDate,
+    timeToSlot,
+    findLane,
+    startMasterEventEdit
+  });
+
   const bindingsController = globalThis.MasterCalendarBindingsController.create({
     document,
     window,
@@ -302,9 +348,7 @@
   }
 
   function setCalendarToToday() {
-    const now = new Date();
-    state.weekStart = getWeekStart(now);
-    state.monthStart = getMonthStart(now);
+    return navigationController.setCalendarToToday();
   }
 
   function enforceStudioAccess() {
@@ -549,33 +593,19 @@
   }
 
   function getCalendarZoomFactor() {
-    const zoom = Number(state.calendarZoom);
-    if (!Number.isFinite(zoom)) return 1;
-    return Math.max(MIN_CALENDAR_ZOOM, Math.min(MAX_CALENDAR_ZOOM, zoom));
+    return navigationController.getCalendarZoomFactor();
   }
 
   function applyCalendarZoomStyles() {
-    const viewport = document.getElementById('calendar-viewport');
-    if (!viewport) return;
-    const zoom = getCalendarZoomFactor();
-    viewport.style.zoom = String(zoom);
-    viewport.style.transformOrigin = 'top left';
+    return navigationController.applyCalendarZoomStyles();
   }
 
   function setCalendarZoom(nextZoom) {
-    const numeric = Number(nextZoom);
-    if (!Number.isFinite(numeric)) return;
-    state.calendarZoom = Math.max(MIN_CALENDAR_ZOOM, Math.min(MAX_CALENDAR_ZOOM, Math.round(numeric * 10) / 10));
-    updateCalendarZoomButtons();
-    renderCalendar();
+    return navigationController.setCalendarZoom(nextZoom);
   }
 
   function updateCalendarZoomButtons() {
-    const zoomInBtn = document.getElementById('zoom-in-btn');
-    const zoomOutBtn = document.getElementById('zoom-out-btn');
-    if (!zoomInBtn || !zoomOutBtn) return;
-    zoomInBtn.disabled = state.calendarZoom >= MAX_CALENDAR_ZOOM;
-    zoomOutBtn.disabled = state.calendarZoom <= MIN_CALENDAR_ZOOM;
+    return navigationController.updateCalendarZoomButtons();
   }
 
   function applyStudioRoleUiLocks() {
@@ -629,23 +659,7 @@
   }
 
   function renderWeekLabel() {
-    const prevBtn = document.getElementById('prev-week-btn');
-    const nextBtn = document.getElementById('next-week-btn');
-    const labelEl = document.getElementById('week-label');
-    if (!prevBtn || !nextBtn || !labelEl) return;
-
-    if (state.viewMode === 'month') {
-      prevBtn.textContent = '이전 달';
-      nextBtn.textContent = '다음 달';
-      labelEl.textContent = `${state.monthStart.getFullYear()}년 ${String(state.monthStart.getMonth() + 1).padStart(2, '0')}월`;
-      return;
-    }
-
-    prevBtn.textContent = '이전 주';
-    nextBtn.textContent = '다음 주';
-    const start = state.weekStart;
-    const end = addDays(start, 6);
-    labelEl.textContent = `${formatDateDisplay(start)} ~ ${formatDateDisplay(end)}`;
+    return navigationController.renderWeekLabel();
   }
 
   function renderBaseEditorWeekLabel() {
@@ -713,48 +727,21 @@
   }
 
   function setViewMode(mode) {
-    if (mode !== 'week' && mode !== 'month') return;
-    state.viewMode = mode;
-    if (mode === 'week') {
-      state.weekStart = getWeekStart(state.weekStart || new Date());
-      return;
-    }
-    state.monthStart = getMonthStart(state.weekStart || state.monthStart || new Date());
-    state.weekStart = getWeekStart(state.monthStart);
+    return navigationController.setViewMode(mode);
   }
 
   function shiftCurrentRange(direction) {
-    if (state.viewMode === 'month') {
-      state.monthStart = addMonths(state.monthStart, direction);
-      state.weekStart = getWeekStart(state.monthStart);
-      return;
-    }
-    state.weekStart = addDays(state.weekStart, direction * 7);
+    return navigationController.shiftCurrentRange(direction);
   }
 
   function syncViewToggleButtons() {
-    const weekBtn = document.getElementById('week-view-btn');
-    const monthBtn = document.getElementById('month-view-btn');
-    if (!weekBtn || !monthBtn) return;
-    const isWeek = state.viewMode === 'week';
-    weekBtn.classList.toggle('is-active', isWeek);
-    monthBtn.classList.toggle('is-active', !isWeek);
+    return navigationController.syncViewToggleButtons();
   }
 
   function renderCalendar() {
-    const dayHeader = document.getElementById('calendar-day-header');
-    const body = document.getElementById('calendar-body');
-    const wrap = body ? body.closest('.studio-calendar-wrap') : null;
-    applyCalendarZoomStyles();
-    if (state.viewMode === 'month') {
-      renderMonthCalendar(dayHeader, body, wrap);
-      return;
-    }
-    renderWeekCalendar(dayHeader, body, wrap);
+    return navigationController.renderCalendar();
   }
 
-  let weekView = null;
-  let monthView = null;
   let pointerController = null;
 
   function getPointerController() {
@@ -791,85 +778,15 @@
   }
 
   function renderWeekCalendar(dayHeader, body, wrap) {
-    if (!weekView) {
-      weekView = globalThis.MasterCalendarWeekView.create({
-        document,
-        state,
-        dayNames: DAY_NAMES,
-        slotHeight: SLOT_HEIGHT,
-        slotsPerDay: SLOTS_PER_DAY,
-        allDayRowHeight: ALL_DAY_ROW_HEIGHT,
-        addDays,
-        formatMonthDate,
-        isSameCalendarDate,
-        formatDateInput,
-        isAllDayKind,
-        isExhibitionKind,
-        getAllDayPriority,
-        canManageEventOccurrence,
-        kindToClass,
-        escapeHtml,
-        getEventDisplayTitle,
-        requestDeleteEvent,
-        setRoleLockedMessage,
-        openQuickEditEventModal,
-        slotToTime,
-        getBaseRuleForSlot,
-        baseTypeToClass,
-        canCreateFromBaseRule,
-        startMasterCreate,
-        moveMasterCreate,
-        finalizeMasterCreate,
-        isBaseLabelStart,
-        getBaseLabelText,
-        getEventsForDate,
-        timeToSlot,
-        findLane,
-        startMasterEventEdit,
-        syncCalendarHeaderScrollbarGap
-      });
-    }
-    weekView.render(dayHeader, body, wrap);
+    return navigationController.renderWeekCalendar(dayHeader, body, wrap);
   }
 
   function renderMonthCalendar(dayHeader, body, wrap) {
-    if (!monthView) {
-      monthView = globalThis.MasterCalendarMonthView.create({
-        document,
-        state,
-        dayNames: DAY_NAMES,
-        monthRows: MONTH_ROWS,
-        monthRowHeight: MONTH_ROW_HEIGHT,
-        getWeekStart,
-        addDays,
-        formatDateInput,
-        isSameCalendarDate,
-        isExhibitionKind,
-        getEventsForDate,
-        isAllDayKind,
-        timeToSlot,
-        kindToClass,
-        getEventDisplayTitle,
-        canManageEventOccurrence,
-        setRoleLockedMessage,
-        openQuickEditEventModal,
-        syncCalendarHeaderScrollbarGap
-      });
-    }
-    monthView.render(dayHeader, body, wrap);
+    return navigationController.renderMonthCalendar(dayHeader, body, wrap);
   }
 
   function syncCalendarHeaderScrollbarGap() {
-    const body = document.getElementById('calendar-body');
-    if (!body) return;
-    const wrap = body.closest('.studio-calendar-wrap');
-    if (!wrap) return;
-    if (state.viewMode === 'month') {
-      wrap.style.setProperty('--calendar-scrollbar-gap', '0px');
-      return;
-    }
-    const scrollbarGap = Math.max(0, body.offsetWidth - body.clientWidth);
-    wrap.style.setProperty('--calendar-scrollbar-gap', `${scrollbarGap}px`);
+    return navigationController.syncCalendarHeaderScrollbarGap();
   }
 
   function startMasterCreate(event, dayIndex, slot, baseRule) {
