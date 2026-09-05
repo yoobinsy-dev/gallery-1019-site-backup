@@ -224,6 +224,20 @@ const infoController = globalThis.ExhibitionDetailInfoController.create({
   switchTab: (tabName) => switchTab(tabName)
 });
 
+const staffController = globalThis.ExhibitionDetailStaffController.create({
+  state: exhibitionDetailState,
+  document,
+  getCurrentExhibition: () => getCurrentExhibition(),
+  canManageStaffRoles: () => canManageStaffRoles(),
+  getFirstAllowedTab: () => getFirstAllowedTab(),
+  getEffectiveGalleryRole: (user) => getEffectiveGalleryRole(user),
+  normalizeAccountType: (type) => normalizeAccountType(type),
+  loadUsers: () => globalThis.ExhibitionDetailRepository.repository.loadUsers(),
+  saveExhibition: () => saveExhibition(),
+  switchTab: (tabName) => switchTab(tabName),
+  alert: (...args) => alert(...args)
+});
+
 function getCurrentExhibition() {
   return exhibitionDetailState.exhibition || {
     id: exhibitionDetailState.exhibitionId,
@@ -1628,12 +1642,7 @@ function ensureSalesEditUndoSnapshot(soldId) {
   return salesViewController.ensureSalesEditUndoSnapshot(soldId);
 }
 
-function getInviteRoleLabel(role) {
-  if (role === 'planners') return '기획자';
-  if (role === 'artists') return '작가';
-  if (role === 'staffs') return '스탭';
-  return '관계자';
-}
+function getInviteRoleLabel(role) { return staffController.getInviteRoleLabel(role); }
 
 function renderLegacyWorksManagement(container) {
   const wrapper = document.createElement('div');
@@ -1895,180 +1904,31 @@ function openImagePreviewBySoldId(soldId, event) {
 }
 
 function renderStaffManagement(container) {
-  if (!canManageStaffRoles()) {
-    const fallbackTab = getFirstAllowedTab() || 'exhibition-info';
-    switchTab(fallbackTab);
-    return;
-  }
-
-  const exhibition = getCurrentExhibition();
-  const planners = exhibition.staff?.planners || [];
-  const artists = exhibition.staff?.artists || [];
-  const staffs = exhibition.staff?.staffs || [];
-
-  const users = globalThis.ExhibitionDetailRepository.repository.loadUsers();
-  const candidates = users.filter(user => user.approved && normalizeAccountType(getEffectiveGalleryRole(user)) === '기획자/작가');
-
-  const roleSection = (role, label, assignedIds) => {
-    const section = document.createElement('section');
-    section.className = 'role-section';
-
-    const header = document.createElement('div');
-    header.className = 'section-heading';
-    header.innerHTML = `<h2>${label}</h2><button class="add-exhibition-btn small" onclick="openInviteModal('${role}')">+ 초대</button>`;
-    section.appendChild(header);
-
-    const list = document.createElement('div');
-    list.className = 'role-list';
-
-    if (assignedIds.length === 0) {
-      const empty = document.createElement('p');
-      empty.className = 'empty-state';
-      empty.textContent = '아직 초대된 사용자가 없습니다.';
-      list.appendChild(empty);
-    } else {
-      assignedIds.forEach(userId => {
-        const user = users.find(u => u.id === userId);
-        if (!user) return;
-        const row = document.createElement('div');
-        row.className = 'role-row';
-        row.innerHTML = `
-          <div>
-            <p class="role-name">${user.name}</p>
-            <p class="role-meta">${user.username} · ${user.email}</p>
-          </div>
-          <button class="action-btn delete-btn" onclick="removeStaffMember('${role}', ${user.id})">제거</button>
-        `;
-        list.appendChild(row);
-      });
-    }
-
-    section.appendChild(list);
-    return section;
-  };
-
-  const wrapper = document.createElement('div');
-  wrapper.className = 'works-sales-wrapper';
-
-  const title = document.createElement('div');
-  title.className = 'works-sales-title';
-  title.textContent = '전시 관계자 관리';
-  wrapper.appendChild(title);
-
-  wrapper.appendChild(roleSection('planners', '기획자', planners));
-  wrapper.appendChild(roleSection('artists', '작가', artists));
-  wrapper.appendChild(roleSection('staffs', '스탭', staffs));
-  container.appendChild(wrapper);
+  return staffController.renderStaffManagement(container);
 }
 
 function openInviteModal(role) {
-  if (!canManageStaffRoles()) {
-    alert('전시 관계자 관리 권한이 없습니다.');
-    return;
-  }
-
-  exhibitionDetailState.inviteRole = role;
-  const exhibition = getCurrentExhibition();
-  const users = globalThis.ExhibitionDetailRepository.repository.loadUsers();
-
-  document.getElementById('invite-modal-title').textContent = `${getInviteRoleLabel(role)} 초대`;
-  document.getElementById('invite-modal-description').textContent = '모든 사용자 중에서 전시에 참여자를 선택하세요.';
-
-  const listContainer = document.getElementById('invite-user-list');
-  listContainer.innerHTML = '';
-
-  const assignedIds = new Set(exhibition.staff?.[role] || []);
-
-  exhibitionDetailState.inviteSearch = '';
-  renderInviteUserList(users, assignedIds);
-  document.getElementById('invite-search').value = '';
-  document.getElementById('invite-modal').style.display = 'flex';
+  return staffController.openInviteModal(role);
 }
 
 function closeInviteModal() {
-  document.getElementById('invite-modal').style.display = 'none';
-  exhibitionDetailState.inviteRole = null;
-  exhibitionDetailState.inviteSearch = '';
+  return staffController.closeInviteModal();
 }
 
 function filterInviteUsers() {
-  exhibitionDetailState.inviteSearch = document.getElementById('invite-search').value.trim().toLowerCase();
-  const users = globalThis.ExhibitionDetailRepository.repository.loadUsers();
-  const exhibition = getCurrentExhibition();
-  const assignedIds = new Set(exhibition.staff?.[exhibitionDetailState.inviteRole] || []);
-  renderInviteUserList(users, assignedIds);
+  return staffController.filterInviteUsers();
 }
 
 function renderInviteUserList(users, assignedIds) {
-  const listContainer = document.getElementById('invite-user-list');
-  listContainer.innerHTML = '';
-  const search = exhibitionDetailState.inviteSearch;
-
-  if (users.length === 0) {
-    listContainer.innerHTML = '<p class="empty-state">등록된 사용자가 없습니다.</p>';
-    return;
-  }
-
-  let renderedCount = 0;
-
-  users.forEach(user => {
-    const label = normalizeAccountType(getEffectiveGalleryRole(user)) || '미지정';
-    const text = `${user.name} ${user.username} ${user.email} ${label}`.toLowerCase();
-    if (search && !text.includes(search)) return;
-
-    const row = document.createElement('label');
-    row.className = 'invite-user-row';
-    row.innerHTML = `
-      <input type="checkbox" value="${user.id}" ${assignedIds.has(user.id) ? 'checked' : ''}>
-      <span>
-        <strong>${user.name}</strong> (${user.username}) • ${user.email} • ${label}
-      </span>
-    `;
-    listContainer.appendChild(row);
-    renderedCount += 1;
-  });
-
-  if (renderedCount === 0) {
-    listContainer.innerHTML = '<p class="empty-state">검색 결과가 없습니다.</p>';
-  }
+  return staffController.renderInviteUserList(users, assignedIds);
 }
 
 function confirmInvite() {
-  if (!canManageStaffRoles()) {
-    alert('전시 관계자 관리 권한이 없습니다.');
-    return;
-  }
-
-  const role = exhibitionDetailState.inviteRole;
-  if (!role) return;
-
-  const checkboxes = Array.from(document.querySelectorAll('#invite-user-list input[type="checkbox"]'));
-  const selectedIds = checkboxes.filter(cb => cb.checked).map(cb => Number(cb.value));
-
-  const exhibition = getCurrentExhibition();
-  exhibition.staff = exhibition.staff || { planners: [], artists: [], staffs: [] };
-  exhibition.staff[role] = Array.from(new Set(selectedIds));
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.staff = exhibition.staff;
-  }
-  saveExhibition();
-  closeInviteModal();
-  switchTab('staff');
+  return staffController.confirmInvite();
 }
 
 function removeStaffMember(role, userId) {
-  if (!canManageStaffRoles()) {
-    alert('전시 관계자 관리 권한이 없습니다.');
-    return;
-  }
-
-  const exhibition = getCurrentExhibition();
-  exhibition.staff[role] = (exhibition.staff[role] || []).filter(id => id !== userId);
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.staff = exhibition.staff;
-  }
-  saveExhibition();
-  switchTab('staff');
+  return staffController.removeStaffMember(role, userId);
 }
 
 function renderWorksManagement(container) {
