@@ -22,6 +22,7 @@
   const DAY_NAMES = ['월', '화', '수', '목', '금', '토', '일'];
   const ROLE_LOCK_MESSAGE = '계정 등급으로 인해 선택 불가능';
   const KILN_CATEGORY_OPTIONS = ['초벌', '재벌'];
+  const displayPolicy = globalThis.MasterCalendarDisplayPolicy;
 
   const state = {
     weekStart: getWeekStart(new Date()),
@@ -1761,13 +1762,7 @@
   }
 
   function getBaseLabelText(rule) {
-    if (!rule) return '';
-    if (rule.type === '수업시간') {
-      const className = String(rule.className || '수업시간').trim();
-      const instructor = String(rule.instructor || '').trim();
-      return instructor ? `${className} · ${instructor}` : className;
-    }
-    return rule.type;
+    return displayPolicy.getBaseLabelText(rule);
   }
 
   function isBaseLabelStart(day, slot, rule, weekStartDate) {
@@ -1786,75 +1781,43 @@
   }
 
   function baseTypeToClass(type) {
-    if (type === '수업시간') return 'base-class';
-    if (type === '개인작업 시간') return 'base-personal';
-    if (type === '이용 불가') return 'base-closed';
-    return '';
+    return displayPolicy.baseTypeToClass(type);
   }
 
   function kindToClass(kind) {
-    if (kind === '수강') return 'kind-class';
-    if (kind === '개인작업') return 'kind-personal';
-    if (kind === '강사 지도 하 개인작업') return 'kind-guided';
-    if (isExhibitionKind(kind)) return 'kind-exhibition';
-    if (kind === '기타') return 'kind-other';
-    if (isKilnKind(kind)) return 'kind-kiln';
-    return 'kind-personal';
+    return displayPolicy.kindToClass(kind);
   }
 
   function isExhibitionKind(kind) {
-    const value = String(kind || '').trim();
-    return value === '전시회' || value.includes('전시');
+    return displayPolicy.isExhibitionKind(kind);
   }
 
   function isAllDayKind(kind) {
-    return isKilnKind(kind) || isExhibitionKind(kind);
+    return displayPolicy.isAllDayKind(kind);
   }
 
   function getAllDayPriority(kind) {
-    if (isKilnKind(kind)) return 0;
-    if (isExhibitionKind(kind)) return 1;
-    return 2;
+    return displayPolicy.getAllDayPriority(kind);
   }
 
   function isKilnKind(kind) {
-    const value = String(kind || '').trim();
-    return value === '가마 소성' || value === '가마 관련' || value.includes('가마');
+    return displayPolicy.isKilnKind(kind);
   }
 
   function normalizeKilnCategory(value) {
-    const text = String(value || '').trim();
-    return KILN_CATEGORY_OPTIONS.includes(text) ? text : '';
+    return displayPolicy.normalizeKilnCategory(value, KILN_CATEGORY_OPTIONS);
   }
 
   function extractKilnCategoryFromTitle(title) {
-    const text = String(title || '').trim();
-    const matched = text.match(/^가마\s*소성\s*\(([^)]+)\)$/);
-    if (!matched) return '';
-    return normalizeKilnCategory(matched[1]);
+    return displayPolicy.extractKilnCategoryFromTitle(title, KILN_CATEGORY_OPTIONS);
   }
 
   function buildKilnEventTitle(category) {
-    const normalized = normalizeKilnCategory(category);
-    return normalized ? `가마 소성 (${normalized})` : '가마 소성';
+    return displayPolicy.buildKilnEventTitle(category, KILN_CATEGORY_OPTIONS);
   }
 
   function getEventDisplayTitle(eventItem, fallbackTitle) {
-    const fallback = String(fallbackTitle || '새 일정');
-    if (!eventItem) return fallback;
-
-    if (isKilnKind(eventItem.kind)) {
-      const fromCategory = normalizeKilnCategory(eventItem.kilnCategory);
-      if (fromCategory) {
-        return buildKilnEventTitle(fromCategory);
-      }
-
-      const fromTitle = String(eventItem.title || '').trim();
-      return fromTitle || '가마 소성';
-    }
-
-    const title = String(eventItem.title || '').trim();
-    return title || fallback;
+    return displayPolicy.getEventDisplayTitle(eventItem, fallbackTitle, KILN_CATEGORY_OPTIONS);
   }
 
   const baseEditController = globalThis.MasterCalendarBaseEditController.create({
