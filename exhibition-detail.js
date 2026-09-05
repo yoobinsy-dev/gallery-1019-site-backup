@@ -152,13 +152,8 @@ const worksView = globalThis.ExhibitionDetailWorksView.create({
 const salesViewController = globalThis.ExhibitionDetailSalesViewController.create({
   state: exhibitionDetailState,
   document,
+  window,
   openSalesAddModal,
-  toggleSelectAllSalesFromButton,
-  saveAllSoldWorks,
-  deleteAllSoldWorks,
-  deleteSelectedSoldWorks,
-  editSelectedSoldWorks,
-  undoSalesChanges,
   exportSalesToExcel,
   handleDownloadAllCertificatesAction,
   isArtistScopedUser,
@@ -173,8 +168,15 @@ const salesViewController = globalThis.ExhibitionDetailSalesViewController.creat
   getSoldQuantityForItemType,
   hasGeneratedCertificate,
   soldKstToInputValue,
+  soldInputValueToKst,
+  formatKoreanPhone,
+  parseSoldQuantity,
+  saveExhibition,
   renderSoldStatsTicker,
-  updateSalesActionButtons
+  refreshGridKeyboardNavigation,
+  scrollRowToViewportCenter,
+  alert: (...args) => alert(...args),
+  confirm: (...args) => confirm(...args)
 });
 
 const accountingViewController = globalThis.ExhibitionDetailAccountingViewController.create({
@@ -1203,7 +1205,7 @@ function closeArtistSalesSummaryModal() {
 }
 
 function cloneSalesRecords(records) {
-  return JSON.parse(JSON.stringify(records || []));
+  return salesViewController.cloneSalesRecords(records);
 }
 
 function cloneWorkRecords(records) {
@@ -1254,60 +1256,11 @@ function ensureWorkEditUndoSnapshot(workId) {
 }
 
 function pushSalesUndoSnapshot() {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  exhibitionDetailState.salesUndoStack.push(cloneSalesRecords(soldWorks));
-  if (exhibitionDetailState.salesUndoStack.length > 30) {
-    exhibitionDetailState.salesUndoStack.shift();
-  }
+  return salesViewController.pushSalesUndoSnapshot();
 }
 
 function updateSalesActionButtons() {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  const selectedCount = exhibitionDetailState.selectedSalesIds.length;
-  const unsavedCount = soldWorks.filter(item => !item.saved).length;
-
-  const allSelected = soldWorks.length > 0 && soldWorks.every(item => exhibitionDetailState.selectedSalesIds.includes(item.id));
-  ['sales-select-all-btn', 'sales-select-all-btn-bottom'].forEach((buttonId) => {
-    const selectAllButton = document.getElementById(buttonId);
-    if (selectAllButton) {
-      selectAllButton.textContent = allSelected ? '전체 선택 해제' : '전체 선택';
-    }
-  });
-
-  ['sales-delete-selected-btn', 'sales-delete-selected-btn-bottom'].forEach((buttonId) => {
-    const deleteSelectedButton = document.getElementById(buttonId);
-    if (deleteSelectedButton) {
-      deleteSelectedButton.style.display = selectedCount > 0 ? 'inline-block' : 'none';
-    }
-  });
-
-  ['sales-edit-selected-btn', 'sales-edit-selected-btn-bottom'].forEach((buttonId) => {
-    const editSelectedButton = document.getElementById(buttonId);
-    if (editSelectedButton) {
-      editSelectedButton.style.display = selectedCount > 0 ? 'inline-block' : 'none';
-    }
-  });
-
-  ['sales-save-all-btn', 'sales-save-all-btn-bottom'].forEach((buttonId) => {
-    const saveAllButton = document.getElementById(buttonId);
-    if (saveAllButton) {
-      saveAllButton.style.display = unsavedCount > 0 ? 'inline-block' : 'none';
-    }
-  });
-
-  const canUndo = exhibitionDetailState.salesUndoStack.length > 0;
-  ['sales-undo-btn', 'sales-undo-btn-bottom'].forEach((buttonId) => {
-    const undoButton = document.getElementById(buttonId);
-    if (undoButton) {
-      undoButton.disabled = !canUndo;
-      undoButton.style.opacity = canUndo ? '1' : '0.5';
-      undoButton.style.cursor = canUndo ? 'pointer' : 'not-allowed';
-    }
-  });
-
-  refreshGridKeyboardNavigation('sold-works-tbody');
+  return salesViewController.updateSalesActionButtons();
 }
 
 function renderSoldWorkRows() {
@@ -1479,119 +1432,27 @@ function confirmSalesAddModal() {
 }
 
 function isValidKoreanPhone(value) {
-  return /^01\d-\d{3,4}-\d{4}$/.test((value || '').trim());
+  return salesViewController.isValidKoreanPhone(value);
 }
 
 function getMissingRequiredSoldFields(sold) {
-  const missing = [];
-  if (!(sold.buyerName || '').toString().trim()) {
-    missing.push('buyerName');
-  }
-  if (!(sold.paymentMethod || '').toString().trim()) {
-    missing.push('paymentMethod');
-  }
-  if ((sold.paymentMethod || '').toString().trim() === '기타' && !(sold.paymentMethodEtc || '').toString().trim()) {
-    missing.push('paymentMethodEtc');
-  }
-  return missing;
+  return salesViewController.getMissingRequiredSoldFields(sold);
 }
 
 function markMissingSoldFields(row, missingFields) {
-  if (!row) return;
-  const fields = ['buyerName', 'paymentMethod', 'paymentMethodEtc'];
-  fields.forEach((field) => {
-    const el = row.querySelector(`[data-field="${field}"]`);
-    if (!el) return;
-    el.classList.toggle('sales-required-missing', missingFields.includes(field));
-  });
+  return salesViewController.markMissingSoldFields(row, missingFields);
 }
 
 function saveSoldWork(soldId, triggerButton) {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  const sold = soldWorks.find(item => item.id === soldId);
-  if (!sold) return;
-  if (!canCurrentUserModifyOwnedRow(sold)) {
-    alert('다른 사용자가 추가한 판매 항목은 수정할 수 없습니다.');
-    return;
-  }
-
-  const row = triggerButton && typeof triggerButton.closest === 'function'
-    ? triggerButton.closest('tr')
-    : document.querySelector(`tr[data-sold-id="${soldId}"]`);
-  syncSoldFromRow(sold, row);
-
-  const missing = getMissingRequiredSoldFields(sold);
-  if (missing.length > 0) {
-    markMissingSoldFields(row, missing);
-    return;
-  }
-
-  sold.soldQuantity = getSoldQuantityForItemType(normalizeSoldItemType(sold), sold.soldQuantity);
-  markMissingSoldFields(row, []);
-  sold.saved = true;
-  exhibitionDetailState.salesEditSnapshotIds = exhibitionDetailState.salesEditSnapshotIds.filter(id => id !== soldId);
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.soldWorks = soldWorks;
-  }
-  saveExhibition();
-  renderSoldWorkRows();
+  return salesViewController.saveSoldWork(soldId, triggerButton);
 }
 
 function saveAllSoldWorks() {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-
-  for (const sold of soldWorks) {
-    if (sold.saved) continue;
-    if (!canCurrentUserModifyOwnedRow(sold)) continue;
-    const row = document.querySelector(`tr[data-sold-id="${sold.id}"]`);
-    syncSoldFromRow(sold, row);
-    const missing = getMissingRequiredSoldFields(sold);
-    if (missing.length > 0) {
-      markMissingSoldFields(row, missing);
-      return;
-    }
-    markMissingSoldFields(row, []);
-  }
-
-  soldWorks.forEach((sold) => {
-    if (!sold.saved) {
-      if (!canCurrentUserModifyOwnedRow(sold)) return;
-      sold.soldQuantity = getSoldQuantityForItemType(normalizeSoldItemType(sold), sold.soldQuantity);
-      sold.saved = true;
-      exhibitionDetailState.salesEditSnapshotIds = exhibitionDetailState.salesEditSnapshotIds.filter(id => id !== sold.id);
-    }
-  });
-
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.soldWorks = soldWorks;
-  }
-  saveExhibition();
-  renderSoldWorkRows();
+  return salesViewController.saveAllSoldWorks();
 }
 
 function toggleSoldWorkEdit(soldId) {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  const sold = soldWorks.find(item => item.id === soldId);
-  if (!sold) return;
-  if (!canCurrentUserModifyOwnedRow(sold)) {
-    alert('다른 사용자가 추가한 판매 항목은 수정할 수 없습니다.');
-    return;
-  }
-
-  if (sold.saved) {
-    ensureSalesEditUndoSnapshot(soldId);
-  }
-
-  sold.saved = false;
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.soldWorks = soldWorks;
-  }
-  saveExhibition();
-  renderSoldWorkRows();
-  scrollRowToViewportCenter(`tr[data-sold-id="${soldId}"]`);
+  return salesViewController.toggleSoldWorkEdit(soldId);
 }
 
 function scrollRowToViewportCenter(selector) {
@@ -1604,24 +1465,7 @@ function scrollRowToViewportCenter(selector) {
 }
 
 function deleteSoldWork(soldId) {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  const target = soldWorks.find((item) => item.id === soldId);
-  if (!target) return;
-  if (!canCurrentUserModifyOwnedRow(target)) {
-    alert('다른 사용자가 추가한 판매 항목은 삭제할 수 없습니다.');
-    return;
-  }
-  if (!window.confirm('이 판매 기록을 삭제하시겠습니까?')) return;
-
-  pushSalesUndoSnapshot();
-  exhibition.soldWorks = soldWorks.filter(item => item.id !== soldId);
-  exhibitionDetailState.selectedSalesIds = exhibitionDetailState.selectedSalesIds.filter(id => id !== soldId);
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.soldWorks = exhibition.soldWorks;
-  }
-  saveExhibition();
-  renderSoldWorkRows();
+  return salesViewController.deleteSoldWork(soldId);
 }
 
 // Convert "YYYY-MM-DD HH:mm:ss" → "YYYY-MM-DDTHH:mm" for datetime-local input value
@@ -1746,66 +1590,11 @@ function handleSoldCertificateAction(soldId) { return certificateController.hand
 function handleSoldCertificateRemakeAction(soldId) { return certificateController.handleSoldCertificateRemakeAction(soldId); }
 
 function handleSoldFieldChange(soldId, field, value) {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  const sold = soldWorks.find(item => item.id === soldId);
-  if (!sold) return;
-  if (!canCurrentUserModifyOwnedRow(sold)) return;
-
-  ensureSalesEditUndoSnapshot(soldId);
-
-  if (field === 'soldQuantity') {
-    if (sold.saved) {
-      return;
-    }
-    sold.soldQuantity = getSoldQuantityForItemType(normalizeSoldItemType(sold), value);
-  } else {
-    sold[field] = (value || '').trim();
-  }
-  if (field === 'paymentMethodEtc' && sold.paymentMethod !== '기타') {
-    sold.paymentMethodEtc = '';
-  }
-
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.soldWorks = soldWorks;
-  }
-  saveExhibition();
+  return salesViewController.handleSoldFieldChange(soldId, field, value);
 }
 
 function syncSoldFromRow(sold, row) {
-  if (!sold || !row) return;
-
-  const soldAtInput = row.querySelector('input[data-field="soldAtKst"]');
-  const buyerNameInput = row.querySelector('input[data-field="buyerName"]');
-  const buyerPhoneInput = row.querySelector('input[data-field="buyerPhone"]');
-  const noteInput = row.querySelector('input[data-field="note"]');
-  const paymentMethodSelect = row.querySelector('select[data-field="paymentMethod"]');
-  const paymentMethodEtcInput = row.querySelector('input[data-field="paymentMethodEtc"]');
-  const soldQuantityInput = row.querySelector('input[data-field="soldQuantity"]');
-
-  if (soldAtInput) {
-    sold.soldAtKst = soldInputValueToKst(soldAtInput.value);
-  }
-  if (buyerNameInput) {
-    sold.buyerName = buyerNameInput.value.trim();
-  }
-  if (buyerPhoneInput) {
-    sold.buyerPhone = buyerPhoneInput.value.trim();
-  }
-  if (noteInput) {
-    sold.note = noteInput.value.trim();
-  }
-  if (paymentMethodSelect) {
-    sold.paymentMethod = paymentMethodSelect.value;
-  }
-  if (paymentMethodEtcInput) {
-    sold.paymentMethodEtc = paymentMethodEtcInput.value.trim();
-  } else if (sold.paymentMethod !== '기타') {
-    sold.paymentMethodEtc = '';
-  }
-  if (soldQuantityInput) {
-    sold.soldQuantity = getSoldQuantityForItemType(normalizeSoldItemType(sold), soldQuantityInput.value);
-  }
+  return salesViewController.syncSoldFromRow(sold, row);
 }
 
 function formatKoreanPhone(value) {
@@ -1816,30 +1605,11 @@ function formatKoreanPhone(value) {
 }
 
 function handleSoldPhoneInput(soldId, event) {
-  const formatted = formatKoreanPhone(event.target.value);
-  event.target.value = formatted;
-  handleSoldFieldChange(soldId, 'buyerPhone', formatted);
+  return salesViewController.handleSoldPhoneInput(soldId, event);
 }
 
 function handleSoldPaymentMethodChange(soldId, value) {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  const sold = soldWorks.find(item => item.id === soldId);
-  if (!sold) return;
-  if (!canCurrentUserModifyOwnedRow(sold)) return;
-
-  ensureSalesEditUndoSnapshot(soldId);
-
-  sold.paymentMethod = value;
-  if (value !== '기타') {
-    sold.paymentMethodEtc = '';
-  }
-
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.soldWorks = soldWorks;
-  }
-  saveExhibition();
-  renderSoldWorkRows();
+  return salesViewController.handleSoldPaymentMethodChange(soldId, value);
 }
 
 function addSoldWorkRow() {
@@ -1847,93 +1617,15 @@ function addSoldWorkRow() {
 }
 
 function handleSoldWorkSearchChange(soldId, field, value) {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  const sold = soldWorks.find(item => item.id === soldId);
-  if (!sold) return;
-  if (!canCurrentUserModifyOwnedRow(sold)) return;
-  pushSalesUndoSnapshot();
-
-  const query = (value || '').trim();
-  sold[field] = query;
-
-  const sourceWorks = getSalesSearchResults('__all__');
-  const match = sourceWorks.find((work) => {
-    if (field === 'manualNumber') {
-      return (work.manualNumber || '').toString().trim().toLowerCase() === query.toLowerCase();
-    }
-    return (work.title || '').toString().trim().toLowerCase() === query.toLowerCase();
-  });
-
-  if (match) {
-    sold.workId = match.id;
-    sold.itemType = match.itemType || '작품';
-    sold.manualNumber = match.manualNumber || '';
-    sold.category = match.category || '';
-    sold.title = match.title || '';
-    sold.photoName = match.photoName || '';
-    sold.photoUrl = match.photoUrl || '';
-    sold.photoPreviewUrl = match.photoPreviewUrl || match.photoUrl || '';
-    sold.photoDataUrl = match.photoDataUrl || '';
-    sold.photoPreviewDataUrl = match.photoPreviewDataUrl || getPhotoPreviewDataUrl(match);
-    sold.author = match.author || '';
-    sold.price = match.price || '';
-    sold.soldQuantity = sold.itemType === '굿즈' ? parseSoldQuantity(sold.soldQuantity) : 1;
-  } else {
-    sold.workId = null;
-    sold.itemType = '작품';
-    sold.category = '';
-    sold.photoName = '';
-    sold.photoUrl = '';
-    sold.photoPreviewUrl = '';
-    sold.photoDataUrl = '';
-    sold.photoPreviewDataUrl = '';
-    sold.author = '';
-    sold.price = '';
-  }
-
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.soldWorks = soldWorks;
-  }
-  saveExhibition();
-  renderSoldWorkRows();
+  return salesViewController.handleSoldWorkSearchChange(soldId, field, value);
 }
 
-function toggleSalesSelection(soldId, isChecked) {
-  const soldWorks = getSortedSoldWorks();
-  const currentIndex = typeof arguments[3] === 'number'
-    ? arguments[3]
-    : soldWorks.findIndex(item => item.id === soldId);
-  const event = arguments[2];
-  const isShiftRange = Boolean(event && event.shiftKey && exhibitionDetailState.lastSalesCheckboxIndex !== null && currentIndex !== -1);
-
-  if (isShiftRange) {
-    const start = Math.min(exhibitionDetailState.lastSalesCheckboxIndex, currentIndex);
-    const end = Math.max(exhibitionDetailState.lastSalesCheckboxIndex, currentIndex);
-    const rangeIds = soldWorks.slice(start, end + 1).map(item => item.id);
-
-    if (isChecked) {
-      exhibitionDetailState.selectedSalesIds = Array.from(new Set([...exhibitionDetailState.selectedSalesIds, ...rangeIds]));
-    } else {
-      exhibitionDetailState.selectedSalesIds = exhibitionDetailState.selectedSalesIds.filter(id => !rangeIds.includes(id));
-    }
-  } else if (isChecked) {
-    exhibitionDetailState.selectedSalesIds = Array.from(new Set([...exhibitionDetailState.selectedSalesIds, soldId]));
-  } else {
-    exhibitionDetailState.selectedSalesIds = exhibitionDetailState.selectedSalesIds.filter(id => id !== soldId);
-  }
-
-  if (currentIndex !== -1) {
-    exhibitionDetailState.lastSalesCheckboxIndex = currentIndex;
-  }
-
-  renderSoldWorkRows();
+function toggleSalesSelection(soldId, isChecked, event, rowIndex) {
+  return salesViewController.toggleSalesSelection(soldId, isChecked, event, rowIndex);
 }
 
 function ensureSalesEditUndoSnapshot(soldId) {
-  if (exhibitionDetailState.salesEditSnapshotIds.includes(soldId)) return;
-  pushSalesUndoSnapshot();
-  exhibitionDetailState.salesEditSnapshotIds.push(soldId);
+  return salesViewController.ensureSalesEditUndoSnapshot(soldId);
 }
 
 function getInviteRoleLabel(role) {
@@ -2175,168 +1867,31 @@ function jumpToSoldWork(workId) {
 }
 
 function toggleSelectAllSales(source) {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  const ids = soldWorks.map(item => item.id);
-  exhibitionDetailState.selectedSalesIds = source.checked ? ids : [];
-  renderSoldWorkRows();
+  return salesViewController.toggleSelectAllSales(source);
 }
 
 function toggleSelectAllSalesFromButton() {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  const ids = soldWorks.map(item => item.id);
-  const allSelected = soldWorks.length > 0 && soldWorks.every(item => exhibitionDetailState.selectedSalesIds.includes(item.id));
-  exhibitionDetailState.selectedSalesIds = allSelected ? [] : ids;
-  renderSoldWorkRows();
+  return salesViewController.toggleSelectAllSalesFromButton();
 }
 
 function editSelectedSoldWorks() {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  if (exhibitionDetailState.selectedSalesIds.length === 0) return;
-
-  const selectedSet = new Set(exhibitionDetailState.selectedSalesIds);
-  const editableSoldWorks = soldWorks.filter((item) => selectedSet.has(item.id) && canCurrentUserModifyOwnedRow(item));
-
-  if (editableSoldWorks.length === 0) {
-    alert('수정할 수 있는 판매 기록이 없습니다.');
-    return;
-  }
-
-  editableSoldWorks.forEach((item) => {
-    if (item.saved) {
-      ensureSalesEditUndoSnapshot(item.id);
-    }
-    item.saved = false;
-  });
-
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.soldWorks = soldWorks;
-  }
-
-  exhibitionDetailState.selectedSalesIds = [];
-  exhibitionDetailState.lastSalesCheckboxIndex = null;
-  saveExhibition();
-  renderSoldWorkRows();
+  return salesViewController.editSelectedSoldWorks();
 }
 
 function deleteAllSoldWorks() {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  if (soldWorks.length === 0) return;
-  if (!window.confirm('모든 판매 기록을 삭제하시겠습니까?')) return;
-
-  let nextSoldWorks = [];
-  if (isArtistScopedUser()) {
-    nextSoldWorks = soldWorks.filter((item) => !canCurrentUserModifyOwnedRow(item));
-    if (nextSoldWorks.length === soldWorks.length) {
-      alert('삭제할 수 있는 판매 기록이 없습니다.');
-      return;
-    }
-  }
-
-  pushSalesUndoSnapshot();
-  exhibition.soldWorks = isArtistScopedUser() ? nextSoldWorks : [];
-  exhibitionDetailState.selectedSalesIds = exhibitionDetailState.selectedSalesIds.filter((id) => {
-    const item = soldWorks.find((sold) => sold.id === id);
-    return item && !canCurrentUserModifyOwnedRow(item);
-  });
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.soldWorks = exhibition.soldWorks;
-  }
-  saveExhibition();
-  renderSoldWorkRows();
+  return salesViewController.deleteAllSoldWorks();
 }
 
 function deleteSelectedSoldWorks() {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  if (exhibitionDetailState.selectedSalesIds.length === 0) return;
-  if (!window.confirm('선택된 판매 기록을 삭제하시겠습니까?')) return;
-
-  const selectedSet = new Set(exhibitionDetailState.selectedSalesIds);
-  const deletableIds = soldWorks
-    .filter((item) => selectedSet.has(item.id) && canCurrentUserModifyOwnedRow(item))
-    .map((item) => item.id);
-  if (deletableIds.length === 0) {
-    alert('삭제할 수 있는 판매 기록이 없습니다.');
-    return;
-  }
-
-  pushSalesUndoSnapshot();
-  exhibition.soldWorks = soldWorks.filter(item => !deletableIds.includes(item.id));
-  exhibitionDetailState.selectedSalesIds = [];
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.soldWorks = exhibition.soldWorks;
-  }
-  saveExhibition();
-  renderSoldWorkRows();
+  return salesViewController.deleteSelectedSoldWorks();
 }
 
 function undoSalesChanges() {
-  const exhibition = getCurrentExhibition();
-  if (exhibitionDetailState.salesUndoStack.length === 0) return;
-
-  const previous = exhibitionDetailState.salesUndoStack.pop();
-  exhibition.soldWorks = cloneSalesRecords(previous);
-  exhibitionDetailState.selectedSalesIds = [];
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.soldWorks = exhibition.soldWorks;
-  }
-  saveExhibition();
-  renderSoldWorkRows();
+  return salesViewController.undoSalesChanges();
 }
 
 function openImagePreviewBySoldId(soldId, event) {
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  const sold = soldWorks.find(item => item.id === soldId);
-  const previewDataUrl = getPhotoPreviewDataUrl(sold);
-  if (!sold || !previewDataUrl) return;
-
-  // Reuse existing preview popover behavior with sales record payload.
-  if (event) event.stopPropagation();
-  closeImagePreview();
-
-  const preview = document.createElement('div');
-  preview.id = 'image-preview-popover';
-  preview.className = 'image-preview-popover';
-  preview.innerHTML = `
-    <div class="image-preview-header">
-      <span>${sold.title || sold.photoName || '이미지 미리보기'}</span>
-      <button type="button" class="image-preview-close" onclick="closeImagePreview()">✕</button>
-    </div>
-    <img src="${previewDataUrl}" alt="${(sold.title || '작품').replace(/"/g, '&quot;')}" class="image-preview-large">
-  `;
-
-  const anchorRect = event?.currentTarget?.getBoundingClientRect();
-  const fallbackTop = Math.max(16, window.innerHeight / 2 - 140);
-  preview.style.top = `${anchorRect ? Math.max(16, anchorRect.top - 8) : fallbackTop}px`;
-  preview.style.left = `${anchorRect ? anchorRect.right + 12 : 16}px`;
-  document.body.appendChild(preview);
-
-  const popoverRect = preview.getBoundingClientRect();
-  if (popoverRect.right > window.innerWidth - 12 && anchorRect) {
-    preview.style.left = `${Math.max(12, anchorRect.left - popoverRect.width - 12)}px`;
-  }
-  if (popoverRect.bottom > window.innerHeight - 12) {
-    preview.style.top = `${Math.max(12, window.innerHeight - popoverRect.height - 12)}px`;
-  }
-
-  imagePreviewOutsideClickHandler = (clickEvent) => {
-    const popover = document.getElementById('image-preview-popover');
-    if (!popover) return;
-    if (!popover.contains(clickEvent.target)) {
-      closeImagePreview();
-    }
-  };
-
-  setTimeout(() => {
-    if (imagePreviewOutsideClickHandler) {
-      document.addEventListener('click', imagePreviewOutsideClickHandler);
-    }
-  }, 0);
+  return salesViewController.openImagePreviewBySoldId(soldId, event);
 }
 
 function renderStaffManagement(container) {
