@@ -1179,7 +1179,18 @@ const salesAddController = globalThis.ExhibitionDetailSalesAddController.create(
   parseSoldQuantity,
   normalizeSoldItemType,
   parsePriceToNumber,
-  formatCurrencyKrw
+  formatCurrencyKrw,
+  getCurrentExhibition,
+  ensureSoldWorksArray,
+  pushSalesUndoSnapshot,
+  getCurrentKstDateTimeString,
+  getCurrentUserId,
+  saveExhibition,
+  getCurrentTab: () => exhibitionDetailState.currentTab,
+  switchTab,
+  renderSoldWorkRows,
+  now: Date.now,
+  random: Math.random
 });
 
 function resetSalesAddCommonBuyerState() {
@@ -1256,66 +1267,7 @@ function removeWorkFromSalesBuffer(bufferKey) {
 }
 
 function confirmSalesAddModal() {
-  const items = exhibitionDetailState.salesAddBuffer;
-  if (!items || items.length === 0) {
-    closeSalesAddModal();
-    return;
-  }
-
-  const applyCommonBuyer = !!exhibitionDetailState.salesAddApplyCommonBuyer;
-  const commonBuyerName = applyCommonBuyer
-    ? (exhibitionDetailState.salesAddCommonBuyerName || '').trim()
-    : '';
-  const commonBuyerPhone = applyCommonBuyer
-    ? formatKoreanPhone((exhibitionDetailState.salesAddCommonBuyerPhone || '').trim())
-    : '';
-  const commonPaymentMethod = applyCommonBuyer
-    ? (exhibitionDetailState.salesAddCommonPaymentMethod || '').trim()
-    : '';
-
-  const exhibition = getCurrentExhibition();
-  const soldWorks = ensureSoldWorksArray();
-  pushSalesUndoSnapshot();
-  const soldAtKst = getCurrentKstDateTimeString();
-
-  items.forEach(item => {
-    soldWorks.push({
-      id: Date.now() + Math.floor(Math.random() * 100000),
-      createdByUserId: getCurrentUserId(),
-      workId: item.workId,
-      itemType: item.itemType || '작품',
-      manualNumber: item.manualNumber,
-      category: item.category || '',
-      photoName: item.photoName,
-      photoUrl: item.photoUrl || '',
-      photoPreviewUrl: item.photoPreviewUrl || '',
-      photoDataUrl: item.photoDataUrl,
-      photoPreviewDataUrl: item.photoPreviewDataUrl || getPhotoPreviewDataUrl(item),
-      title: item.title,
-      author: item.author,
-      price: item.price,
-      soldQuantity: parseSoldQuantity(item.soldQuantity),
-      soldAtKst,
-      buyerName: commonBuyerName,
-      buyerPhone: commonBuyerPhone,
-      paymentMethod: commonPaymentMethod,
-      paymentMethodEtc: '',
-      madeToOrder: !!item.madeToOrder,
-      note: '',
-      saved: false
-    });
-  });
-
-  if (exhibitionDetailState.exhibition) {
-    exhibitionDetailState.exhibition.soldWorks = soldWorks;
-  }
-  saveExhibition();
-  closeSalesAddModal();
-  if (exhibitionDetailState.currentTab === 'exhibition-accounting') {
-    switchTab('exhibition-accounting');
-  } else {
-    renderSoldWorkRows();
-  }
+  return salesAddController.confirmSalesAddModal();
 }
 
 function isValidKoreanPhone(value) {

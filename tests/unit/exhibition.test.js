@@ -736,6 +736,218 @@ test('exhibition inventory renderer builds saved, editable, and goods rows', () 
   assert.doesNotMatch(goods.html, /openDeleteWorkModal/);
 });
 
+test('exhibition sales add controller closes an empty confirmation without saving', () => {
+  const calls = [];
+  const modal = { style: { display: 'flex' } };
+  const state = {
+    salesAddBuffer: [],
+    salesSearchQuery: 'query',
+    salesSearchResults: [{ id: 1 }],
+    salesAddApplyCommonBuyer: true,
+    salesAddCommonBuyerName: 'Buyer',
+    salesAddCommonBuyerPhone: '010-1234-5678',
+    salesAddCommonPaymentMethod: '카드'
+  };
+  const controller = salesAddController.create({
+    state,
+    document: { getElementById: (id) => id === 'sales-add-modal' ? modal : null },
+    setTimeout,
+    saveExhibition: () => calls.push('save'),
+    switchTab: () => calls.push('switch'),
+    renderSoldWorkRows: () => calls.push('render')
+  });
+
+  controller.confirmSalesAddModal();
+
+  assert.equal(modal.style.display, 'none');
+  assert.deepEqual(calls, []);
+  assert.deepEqual(state.salesAddBuffer, []);
+  assert.equal(state.salesSearchQuery, '');
+  assert.deepEqual(state.salesSearchResults, []);
+  assert.equal(state.salesAddApplyCommonBuyer, false);
+  assert.equal(state.salesAddCommonBuyerName, '');
+  assert.equal(state.salesAddCommonBuyerPhone, '');
+  assert.equal(state.salesAddCommonPaymentMethod, '');
+});
+
+test('exhibition sales add controller saves populated confirmation with shared metadata and ordered accounting rerender', () => {
+  const calls = [];
+  const modalStyle = {};
+  Object.defineProperty(modalStyle, 'display', {
+    set(value) {
+      calls.push(`close:${value}`);
+    }
+  });
+  const soldWorks = [{ id: 'existing' }];
+  const exhibition = { soldWorks: [{ id: 'stale' }] };
+  const state = {
+    currentTab: 'exhibition-accounting',
+    exhibition,
+    salesAddApplyCommonBuyer: true,
+    salesAddCommonBuyerName: '  Buyer Name  ',
+    salesAddCommonBuyerPhone: ' 01012345678 ',
+    salesAddCommonPaymentMethod: '  카드  ',
+    salesAddBuffer: [{
+      workId: 11,
+      manualNumber: 'A-11',
+      photoName: 'art.jpg',
+      photoDataUrl: 'legacy-art',
+      title: 'Artwork',
+      author: 'Artist',
+      price: '100000',
+      soldQuantity: '9',
+      madeToOrder: 0
+    }, {
+      workId: 22,
+      itemType: '굿즈',
+      manualNumber: 'G-22',
+      category: 'Edition',
+      photoName: 'goods.jpg',
+      photoUrl: 'full-url',
+      photoPreviewUrl: 'preview-url',
+      photoDataUrl: 'legacy-goods',
+      photoPreviewDataUrl: 'legacy-preview',
+      title: 'Goods',
+      author: 'Maker',
+      price: '2500',
+      soldQuantity: '3.9',
+      madeToOrder: 1
+    }]
+  };
+  const nowValues = [1000, 2000];
+  const randomValues = [0.12345, 0.99999];
+  const controller = salesAddController.create({
+    state,
+    document: { getElementById: (id) => id === 'sales-add-modal' ? { style: modalStyle } : null },
+    setTimeout,
+    formatKoreanPhone(value) { calls.push(`phone:${value}`); return '010-1234-5678'; },
+    getCurrentExhibition() { calls.push('exhibition'); return exhibition; },
+    ensureSoldWorksArray() { calls.push('soldWorks'); return soldWorks; },
+    pushSalesUndoSnapshot() { calls.push('undo'); },
+    getCurrentKstDateTimeString() { calls.push('timestamp'); return '2026-09-05 12:34:56'; },
+    now: () => nowValues.shift(),
+    random: () => randomValues.shift(),
+    getCurrentUserId() { calls.push('user'); return 77; },
+    getPhotoPreviewDataUrl(item) { calls.push(`preview:${item.workId}`); return `fallback-${item.workId}`; },
+    parseSoldQuantity(value) { calls.push(`quantity:${value}`); return Math.max(1, Math.floor(Number(value) || 1)); },
+    saveExhibition() { calls.push('save'); },
+    getCurrentTab: () => state.currentTab,
+    switchTab(tab) {
+      calls.push(`switch:${tab}:${state.salesAddBuffer.length}:${state.salesAddApplyCommonBuyer}`);
+    },
+    renderSoldWorkRows() { calls.push('render'); }
+  });
+
+  controller.confirmSalesAddModal();
+
+  assert.deepEqual(calls, [
+    'phone:01012345678',
+    'exhibition',
+    'soldWorks',
+    'undo',
+    'timestamp',
+    'user',
+    'preview:11',
+    'quantity:9',
+    'user',
+    'quantity:3.9',
+    'save',
+    'close:none',
+    'switch:exhibition-accounting:0:false'
+  ]);
+  assert.equal(exhibition.soldWorks, soldWorks);
+  assert.deepEqual(soldWorks, [{ id: 'existing' }, {
+    id: 13345,
+    createdByUserId: 77,
+    workId: 11,
+    itemType: '작품',
+    manualNumber: 'A-11',
+    category: '',
+    photoName: 'art.jpg',
+    photoUrl: '',
+    photoPreviewUrl: '',
+    photoDataUrl: 'legacy-art',
+    photoPreviewDataUrl: 'fallback-11',
+    title: 'Artwork',
+    author: 'Artist',
+    price: '100000',
+    soldQuantity: 9,
+    soldAtKst: '2026-09-05 12:34:56',
+    buyerName: 'Buyer Name',
+    buyerPhone: '010-1234-5678',
+    paymentMethod: '카드',
+    paymentMethodEtc: '',
+    madeToOrder: false,
+    note: '',
+    saved: false
+  }, {
+    id: 101999,
+    createdByUserId: 77,
+    workId: 22,
+    itemType: '굿즈',
+    manualNumber: 'G-22',
+    category: 'Edition',
+    photoName: 'goods.jpg',
+    photoUrl: 'full-url',
+    photoPreviewUrl: 'preview-url',
+    photoDataUrl: 'legacy-goods',
+    photoPreviewDataUrl: 'legacy-preview',
+    title: 'Goods',
+    author: 'Maker',
+    price: '2500',
+    soldQuantity: 3,
+    soldAtKst: '2026-09-05 12:34:56',
+    buyerName: 'Buyer Name',
+    buyerPhone: '010-1234-5678',
+    paymentMethod: '카드',
+    paymentMethodEtc: '',
+    madeToOrder: true,
+    note: '',
+    saved: false
+  }]);
+});
+
+test('exhibition sales add controller closes before row rendering outside accounting', () => {
+  const calls = [];
+  const modalStyle = {};
+  Object.defineProperty(modalStyle, 'display', {
+    set(value) {
+      calls.push(`close:${value}`);
+    }
+  });
+  const soldWorks = [];
+  const state = {
+    currentTab: 'inventory-sales',
+    exhibition: {},
+    salesAddApplyCommonBuyer: false,
+    salesAddBuffer: [{ workId: 1, soldQuantity: 1 }]
+  };
+  const controller = salesAddController.create({
+    state,
+    document: { getElementById: (id) => id === 'sales-add-modal' ? { style: modalStyle } : null },
+    setTimeout,
+    formatKoreanPhone: (value) => value,
+    getCurrentExhibition: () => state.exhibition,
+    ensureSoldWorksArray: () => soldWorks,
+    pushSalesUndoSnapshot: () => calls.push('undo'),
+    getCurrentKstDateTimeString: () => '2026-09-05 12:34:56',
+    now: () => 100,
+    random: () => 0,
+    getCurrentUserId: () => 77,
+    getPhotoPreviewDataUrl: () => '',
+    parseSoldQuantity: Number,
+    saveExhibition: () => calls.push('save'),
+    getCurrentTab: () => state.currentTab,
+    switchTab: () => calls.push('switch'),
+    renderSoldWorkRows: () => calls.push(`render:${state.salesAddBuffer.length}`)
+  });
+
+  controller.confirmSalesAddModal();
+
+  assert.deepEqual(calls, ['undo', 'save', 'close:none', 'render:0']);
+  assert.equal(soldWorks.length, 1);
+});
+
 test('exhibition inventory backup characterizes precedence, stripping, and drop guards', () => {
   const exhibition = loadExhibition();
   const source = {

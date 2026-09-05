@@ -332,6 +332,69 @@
       renderSalesAddBuffer();
     }
 
+    function confirmSalesAddModal() {
+      const items = state.salesAddBuffer;
+      if (!items || items.length === 0) {
+        closeSalesAddModal();
+        return;
+      }
+
+      const applyCommonBuyer = !!state.salesAddApplyCommonBuyer;
+      const commonBuyerName = applyCommonBuyer
+        ? (state.salesAddCommonBuyerName || '').trim()
+        : '';
+      const commonBuyerPhone = applyCommonBuyer
+        ? options.formatKoreanPhone((state.salesAddCommonBuyerPhone || '').trim())
+        : '';
+      const commonPaymentMethod = applyCommonBuyer
+        ? (state.salesAddCommonPaymentMethod || '').trim()
+        : '';
+
+      const exhibition = options.getCurrentExhibition();
+      const soldWorks = options.ensureSoldWorksArray();
+      options.pushSalesUndoSnapshot();
+      const soldAtKst = options.getCurrentKstDateTimeString();
+
+      items.forEach(item => {
+        soldWorks.push({
+          id: options.now() + Math.floor(options.random() * 100000),
+          createdByUserId: options.getCurrentUserId(),
+          workId: item.workId,
+          itemType: item.itemType || '작품',
+          manualNumber: item.manualNumber,
+          category: item.category || '',
+          photoName: item.photoName,
+          photoUrl: item.photoUrl || '',
+          photoPreviewUrl: item.photoPreviewUrl || '',
+          photoDataUrl: item.photoDataUrl,
+          photoPreviewDataUrl: item.photoPreviewDataUrl || options.getPhotoPreviewDataUrl(item),
+          title: item.title,
+          author: item.author,
+          price: item.price,
+          soldQuantity: options.parseSoldQuantity(item.soldQuantity),
+          soldAtKst,
+          buyerName: commonBuyerName,
+          buyerPhone: commonBuyerPhone,
+          paymentMethod: commonPaymentMethod,
+          paymentMethodEtc: '',
+          madeToOrder: !!item.madeToOrder,
+          note: '',
+          saved: false
+        });
+      });
+
+      if (state.exhibition) {
+        state.exhibition.soldWorks = soldWorks;
+      }
+      options.saveExhibition();
+      closeSalesAddModal();
+      if (options.getCurrentTab() === 'exhibition-accounting') {
+        options.switchTab('exhibition-accounting');
+      } else {
+        options.renderSoldWorkRows();
+      }
+    }
+
     return Object.freeze({
       resetSalesAddCommonBuyerState,
       renderSalesAddCommonBuyerSection,
@@ -348,7 +411,8 @@
       renderSalesAddBuffer,
       updateSalesAddSelectedTicker,
       updateSalesBufferQuantity,
-      removeWorkFromSalesBuffer
+      removeWorkFromSalesBuffer,
+      confirmSalesAddModal
     });
   }
 
