@@ -81,6 +81,11 @@ const LARGE_DROP_MIN_PREVIOUS_TOTAL = 20;
 const LARGE_DROP_MIN_ABSOLUTE = 15;
 const LARGE_DROP_RATIO = 0.7;
 
+const inventoryStateController = globalThis.ExhibitionDetailInventoryStateController.create({
+  state: exhibitionDetailState,
+  getCurrentExhibition
+});
+
 const worksEditorController = globalThis.ExhibitionDetailWorksEditorController.create({
   state: exhibitionDetailState,
   document,
@@ -617,159 +622,27 @@ async function initDetailPage() {
 }
 
 function getDefaultInventoryUiState() {
-  return {
-    workSearch: '',
-    workAdvanced: false,
-    salesSearch: '',
-    salesAdvanced: false,
-    workListExpanded: true,
-    selectedWorkIds: [],
-    selectedSalesIds: [],
-    salesUndoStack: [],
-    workUndoStack: [],
-    salesEditSnapshotIds: [],
-    salesSearchQuery: '',
-    salesSearchResults: [],
-    salesAddBuffer: [],
-    salesSearchHighlightIndex: -1,
-    workSortField: null,
-    workSortDirection: 'asc',
-    salesSortField: null,
-    salesSortDirection: 'asc',
-    unsavedWorkCount: 0,
-    workEditSnapshotIds: [],
-    lastWorkCheckboxIndex: null,
-    lastSalesCheckboxIndex: null,
-    workFilters: {
-      title: '',
-      artist: '',
-      price: '',
-      materials: '',
-      size: '',
-      year: '',
-      category: ''
-    },
-    salesFilters: {
-      manualNumber: '',
-      title: '',
-      author: '',
-      soldDateFrom: '',
-      soldDateTo: '',
-      buyerName: '',
-      buyerPhone: '',
-      paymentMethod: ''
-    }
-  };
+  return inventoryStateController.getDefaultInventoryUiState();
 }
 
 function cloneInventoryUiState(uiState) {
-  return JSON.parse(JSON.stringify(uiState));
+  return inventoryStateController.cloneInventoryUiState(uiState);
 }
 
 function initializeInventoryData(exhibition) {
-  if (!exhibition) return;
-  exhibition.artWorks = Array.isArray(exhibition.artWorks)
-    ? exhibition.artWorks
-    : (Array.isArray(exhibition.works) ? exhibition.works : []);
-  exhibition.artSoldWorks = Array.isArray(exhibition.artSoldWorks)
-    ? exhibition.artSoldWorks
-    : (Array.isArray(exhibition.soldWorks) ? exhibition.soldWorks : []);
-  exhibition.goods = Array.isArray(exhibition.goods) ? exhibition.goods : [];
-  exhibition.soldGoods = Array.isArray(exhibition.soldGoods) ? exhibition.soldGoods : [];
-
-  if (!exhibitionDetailState.inventoryUiStateByMode.art) {
-    exhibitionDetailState.inventoryUiStateByMode.art = cloneInventoryUiState(getDefaultInventoryUiState());
-  }
-  if (!exhibitionDetailState.inventoryUiStateByMode.goods) {
-    exhibitionDetailState.inventoryUiStateByMode.goods = cloneInventoryUiState(getDefaultInventoryUiState());
-  }
+  return inventoryStateController.initializeInventoryData(exhibition);
 }
 
 function persistActiveInventoryUiState() {
-  const mode = exhibitionDetailState.inventoryMode;
-  if (!mode) return;
-  const target = {
-    workSearch: exhibitionDetailState.workSearch,
-    workAdvanced: exhibitionDetailState.workAdvanced,
-    salesSearch: exhibitionDetailState.salesSearch,
-    salesAdvanced: exhibitionDetailState.salesAdvanced,
-    workListExpanded: exhibitionDetailState.workListExpanded,
-    selectedWorkIds: exhibitionDetailState.selectedWorkIds,
-    selectedSalesIds: exhibitionDetailState.selectedSalesIds,
-    salesUndoStack: exhibitionDetailState.salesUndoStack,
-    workUndoStack: exhibitionDetailState.workUndoStack,
-    salesEditSnapshotIds: exhibitionDetailState.salesEditSnapshotIds,
-    salesSearchQuery: exhibitionDetailState.salesSearchQuery,
-    salesSearchResults: exhibitionDetailState.salesSearchResults,
-    salesAddBuffer: exhibitionDetailState.salesAddBuffer,
-    salesSearchHighlightIndex: exhibitionDetailState.salesSearchHighlightIndex,
-    workSortField: exhibitionDetailState.workSortField,
-    workSortDirection: exhibitionDetailState.workSortDirection,
-    salesSortField: exhibitionDetailState.salesSortField,
-    salesSortDirection: exhibitionDetailState.salesSortDirection,
-    unsavedWorkCount: exhibitionDetailState.unsavedWorkCount,
-    workEditSnapshotIds: exhibitionDetailState.workEditSnapshotIds,
-    lastWorkCheckboxIndex: exhibitionDetailState.lastWorkCheckboxIndex,
-    lastSalesCheckboxIndex: exhibitionDetailState.lastSalesCheckboxIndex,
-    workFilters: exhibitionDetailState.workFilters,
-    salesFilters: exhibitionDetailState.salesFilters
-  };
-  exhibitionDetailState.inventoryUiStateByMode[mode] = cloneInventoryUiState(target);
+  return inventoryStateController.persistActiveInventoryUiState();
 }
 
 function restoreInventoryUiState(mode) {
-  const snapshot = exhibitionDetailState.inventoryUiStateByMode[mode]
-    || cloneInventoryUiState(getDefaultInventoryUiState());
-  exhibitionDetailState.workSearch = snapshot.workSearch;
-  exhibitionDetailState.workAdvanced = snapshot.workAdvanced;
-  exhibitionDetailState.salesSearch = snapshot.salesSearch;
-  exhibitionDetailState.salesAdvanced = snapshot.salesAdvanced;
-  exhibitionDetailState.workListExpanded = snapshot.workListExpanded;
-  exhibitionDetailState.selectedWorkIds = snapshot.selectedWorkIds;
-  exhibitionDetailState.selectedSalesIds = snapshot.selectedSalesIds;
-  exhibitionDetailState.salesUndoStack = snapshot.salesUndoStack;
-  exhibitionDetailState.workUndoStack = snapshot.workUndoStack;
-  exhibitionDetailState.salesEditSnapshotIds = snapshot.salesEditSnapshotIds;
-  exhibitionDetailState.salesSearchQuery = snapshot.salesSearchQuery;
-  exhibitionDetailState.salesSearchResults = snapshot.salesSearchResults;
-  exhibitionDetailState.salesAddBuffer = snapshot.salesAddBuffer;
-  exhibitionDetailState.salesSearchHighlightIndex = snapshot.salesSearchHighlightIndex;
-  exhibitionDetailState.workSortField = snapshot.workSortField;
-  exhibitionDetailState.workSortDirection = snapshot.workSortDirection;
-  exhibitionDetailState.salesSortField = snapshot.salesSortField;
-  exhibitionDetailState.salesSortDirection = snapshot.salesSortDirection;
-  exhibitionDetailState.unsavedWorkCount = snapshot.unsavedWorkCount;
-  exhibitionDetailState.workEditSnapshotIds = snapshot.workEditSnapshotIds;
-  exhibitionDetailState.lastWorkCheckboxIndex = snapshot.lastWorkCheckboxIndex;
-  exhibitionDetailState.lastSalesCheckboxIndex = snapshot.lastSalesCheckboxIndex;
-  exhibitionDetailState.workFilters = snapshot.workFilters;
-  exhibitionDetailState.salesFilters = snapshot.salesFilters;
+  return inventoryStateController.restoreInventoryUiState(mode);
 }
 
 function syncInventoryMode(mode) {
-  const exhibition = getCurrentExhibition();
-  initializeInventoryData(exhibition);
-  persistActiveInventoryUiState();
-
-  if (exhibitionDetailState.inventoryMode === 'goods') {
-    exhibition.goods = Array.isArray(exhibition.works) ? exhibition.works : exhibition.goods;
-    exhibition.soldGoods = Array.isArray(exhibition.soldWorks) ? exhibition.soldWorks : exhibition.soldGoods;
-  } else {
-    exhibition.artWorks = Array.isArray(exhibition.works) ? exhibition.works : exhibition.artWorks;
-    exhibition.artSoldWorks = Array.isArray(exhibition.soldWorks) ? exhibition.soldWorks : exhibition.artSoldWorks;
-  }
-
-  exhibitionDetailState.inventoryMode = mode;
-
-  if (mode === 'goods') {
-    exhibition.works = exhibition.goods;
-    exhibition.soldWorks = exhibition.soldGoods;
-  } else {
-    exhibition.works = exhibition.artWorks;
-    exhibition.soldWorks = exhibition.artSoldWorks;
-  }
-
-  restoreInventoryUiState(mode);
+  return inventoryStateController.syncInventoryMode(mode);
 }
 
 function switchTab(tabName) {
