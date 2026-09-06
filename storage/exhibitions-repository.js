@@ -14,11 +14,30 @@
     });
   }
 
-  const storage = root.BrowserStorageAdapter?.storage;
+  function createDeferredExhibitionsRepository(getStorage) {
+    function requireStorage() {
+      const storage = getStorage();
+      if (!storage) {
+        throw new Error('Exhibitions storage adapter is unavailable.');
+      }
+      return storage;
+    }
+
+    return Object.freeze({
+      loadExhibitions() {
+        return createExhibitionsRepository(requireStorage()).loadExhibitions();
+      },
+      saveExhibitionsSafely(exhibitions) {
+        return createExhibitionsRepository(requireStorage()).saveExhibitionsSafely(exhibitions);
+      }
+    });
+  }
+
   const api = Object.freeze({
     KEY,
     createExhibitionsRepository,
-    repository: storage ? createExhibitionsRepository(storage) : null
+    createDeferredExhibitionsRepository,
+    repository: createDeferredExhibitionsRepository(() => root.BrowserStorageAdapter?.storage)
   });
   root.ExhibitionsRepository = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

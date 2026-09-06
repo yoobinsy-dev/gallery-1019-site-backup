@@ -23,6 +23,7 @@ const gridNavigation = require('../../exhibitions/detail/grid-navigation');
 const worksView = require('../../exhibitions/detail/works-view');
 const salesViewController = require('../../exhibitions/detail/sales-view-controller');
 const accountingViewController = require('../../exhibitions/detail/accounting-view-controller');
+const tabsController = require('../../exhibitions/detail/tabs-controller');
 const { createStorageAdapter } = require('../../storage/storage-adapter');
 const exhibitionsRepository = require('../../storage/exhibitions-repository');
 const exhibitionDetailRepository = require('../../storage/exhibition-detail-repository');
@@ -34,7 +35,8 @@ function loadExhibition(overrides = {}) {
     removeItem() {}
   };
   const adapter = createStorageAdapter({ storage, safeWrite: overrides.safeSetLocalStorageItem });
-  return exposeClassicScriptFunctions('exhibition-detail.js', [
+  const loaded = exposeClassicScriptFunctions('exhibition-detail.js', [
+    'initializeExhibitionDetailControllers',
     'exhibitionDetailState',
     'getPhotoPreviewDataUrl',
     'getPhotoDataUrl',
@@ -115,11 +117,14 @@ function loadExhibition(overrides = {}) {
       ExhibitionDetailWorksView: worksView,
       ExhibitionDetailSalesViewController: salesViewController,
       ExhibitionDetailAccountingViewController: accountingViewController,
+      ExhibitionDetailTabsController: tabsController,
       ExhibitionsRepository: { repository: exhibitionsRepository.createExhibitionsRepository(adapter) },
       ExhibitionDetailRepository: { repository: exhibitionDetailRepository.createExhibitionDetailRepository(adapter) },
       ...overrides
     }
-  }).exposed;
+  });
+  loaded.exposed.initializeExhibitionDetailControllers();
+  return loaded.exposed;
 }
 
 test('exhibition detail persistence characterizes main-save shaping and backup order', () => {
@@ -188,6 +193,18 @@ test('exhibition detail repository preserves backup, preference, and user contra
 
   values.set('backup:1', '{malformed');
   assert.equal(repository.loadInventoryBackup('backup:1'), null);
+});
+
+test('certificate controller resolves required model after controller construction', () => {
+  let model = null;
+  const controller = certificateController.create({
+    getExhibitionCertificateModel: () => model
+  });
+
+  assert.throws(() => controller.hasGeneratedCertificate({}), /ExhibitionCertificateModel is unavailable/);
+
+  model = { hasGeneratedCertificate(sold) { return sold.ready === true; } };
+  assert.equal(controller.hasGeneratedCertificate({ ready: true }), true);
 });
 
 test('exhibition images characterize pending, URL, and legacy preview precedence', () => {

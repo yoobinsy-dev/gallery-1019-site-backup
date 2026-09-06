@@ -281,8 +281,24 @@ for (const [name, path] of pages) {
   });
 }
 
+test('exhibition detail initializes required controllers before loading page state', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  for (let startup = 0; startup < 3; startup += 1) {
+    await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+    await page.evaluate(() => window.exhibitionDetailReady);
+
+    expect(await page.evaluate(() => typeof window.buildCertificateWorkbookBlob)).toBe('function');
+    await expect(page.locator('#exhibition-title')).toHaveText('CHARACTERIZATION_TEST_EXHIBITION');
+  }
+
+  expect(pageErrors).toEqual([]);
+});
+
 test('works renderer preserves controlling body, roles, modes, and works compatibility', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
   await page.locator('.tab-button[data-tab="inventory-list"]').click();
 
   await expect(page.locator('tr[data-work-id="900101"]')).toContainText('CHARACTERIZATION_TEST_WORKS_PRECEDENCE');
@@ -340,6 +356,7 @@ test('works renderer preserves controlling body, roles, modes, and works compati
 
 test('exhibition detail grid preserves click, arrow, enter, and modal keyboard behavior', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
   await page.evaluate(() => window.switchTab('inventory-list'));
 
   const row = page.locator('tr[data-work-id="900101"]');
@@ -367,6 +384,7 @@ test('exhibition detail shell preserves tab state, aliases, and single render be
     localStorage.setItem(`exhibition-detail-last-tab:${userId}:${exhibitionId}`, 'inventory-sales');
   }, { userId: currentUser.id, exhibitionId: EXHIBITION_ID });
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
 
   const activeTabs = page.locator('.tab-button.active');
   await expect(activeTabs).toHaveCount(1);
@@ -400,6 +418,7 @@ test('exhibition detail shell preserves tab state, aliases, and single render be
 
 test('exhibition sales add modal preserves search, buffer, buyer, and reset behavior', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
   await page.evaluate(() => window.switchTab('inventory-sales'));
   await page.evaluate(() => window.openSalesAddModal());
 
@@ -433,6 +452,7 @@ test('exhibition sales add modal preserves search, buffer, buyer, and reset beha
 
 test('exhibition sales shell preserves table and duplicated action controls', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
   await page.locator('.tab-button[data-tab="inventory-sales"]').click();
 
   await expect(page.locator('.sales-table thead th')).toHaveCount(16);
@@ -466,6 +486,7 @@ test('exhibition sales shell preserves table and duplicated action controls', as
 
 test('exhibition accounting shell preserves projection, rows, and duplicated controls', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
   await page.locator('.tab-button[data-tab="exhibition-accounting"]').click();
 
   await expect(page.locator('.accounting-card')).toHaveCount(2);
@@ -510,6 +531,7 @@ test('exhibition snapshot client preserves requests, defaults, and refresh order
   });
   page.on('dialog', (dialog) => dialog.accept());
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
 
   await page.evaluate(() => window.fetchExhibitionBackupSnapshots());
   expect(requests[0]).toMatchObject({ method: 'GET', body: null });
@@ -535,6 +557,7 @@ test('exhibition snapshot client preserves requests, defaults, and refresh order
 
 test('certificate builder preserves template cells, date, image, and source records', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
   const result = await page.evaluate(async () => {
     const [exhibition] = JSON.parse(localStorage.getItem('exhibitions') || '[]');
     const sold = exhibition.soldWorks.find((item) => item.id === 1);
@@ -565,6 +588,7 @@ test('certificate builder preserves template cells, date, image, and source reco
 
 test('certificate batch builder preserves page blocks, print area, images, and source records', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
   const result = await page.evaluate(async () => {
     const [exhibition] = JSON.parse(localStorage.getItem('exhibitions') || '[]');
     const sourceWork = exhibition.works.find((item) => item.id === 900101);
@@ -618,6 +642,7 @@ test('certificate batch builder preserves page blocks, print area, images, and s
 
 test('exhibition files preserve upload, preview, download, ownership, and delete behavior', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
   await page.locator('[data-tab="exhibition-files"]').click();
   await page.locator('.exhibition-file-upload-card').click();
   await expect(page.locator('#file-upload-modal')).toHaveCSS('display', 'flex');
@@ -674,6 +699,7 @@ test('exhibition files preserve upload, preview, download, ownership, and delete
 
 test('exhibition exports preserve filenames and key payload cells', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
   const captureExport = async (action) => {
     const result = await page.evaluate(async (actionName) => {
       const originalCreateObjectURL = URL.createObjectURL;
@@ -712,6 +738,7 @@ test('exhibition exports preserve filenames and key payload cells', async ({ pag
 test('master calendar preserves recurrence across week and month navigation', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
   await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.masterCalendarReady);
 
   await expect(page.locator('#week-label')).toHaveText('2026.08.24 ~ 2026.08.30');
   await expect(page.getByText('CHARACTERIZATION_TEST_CALENDAR_WEEKLY', { exact: true })).toHaveCount(1);
@@ -741,6 +768,7 @@ test('master calendar preserves recurrence across week and month navigation', as
 test('master calendar preserves week and month DOM projection', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
   await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.masterCalendarReady);
 
   const events = [
     { id: 'GOLD_ORDINARY', kind: '개인작업', title: 'GOLD_ORDINARY', date: '2026-08-24', start: '10:00', end: '11:00', capacity: 1 },
@@ -817,6 +845,7 @@ test('master calendar preserves week and month DOM projection', async ({ page })
 test('master calendar recurring delete preserves one-occurrence prompt behavior', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
   await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.masterCalendarReady);
   await page.evaluate(() => {
     localStorage.setItem('studio-calendar-state-v1', JSON.stringify({
       events: [{
@@ -866,6 +895,7 @@ test('master calendar recurring delete preserves one-occurrence prompt behavior'
 test('master calendar event modal preserves reset and single listener behavior', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
   await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.masterCalendarReady);
 
   const modal = page.locator('#event-modal');
   await page.locator('#open-add-event-btn').click();
@@ -895,6 +925,7 @@ test('master calendar event modal preserves reset and single listener behavior',
 test('master calendar event selector preserves drag selection and single save behavior', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
   await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.masterCalendarReady);
   await page.locator('#open-add-event-btn').click();
   await page.locator('#event-kind').selectOption('기타');
   await page.locator('#event-title').fill('CHARACTERIZATION_TEST_SELECTOR_CREATED');
@@ -931,6 +962,7 @@ test('master calendar event selector preserves drag selection and single save be
 test('master calendar quick edit preserves population, reset, and single save behavior', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
   await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.masterCalendarReady);
   await page.locator('#next-week-btn').click();
 
   const eventBubble = page.locator('.event-bubble[data-event-id="CHARACTERIZATION_TEST_CALENDAR_SINGLE"]');
@@ -970,6 +1002,7 @@ test('master calendar quick edit preserves population, reset, and single save be
 test('master calendar base edit preserves population, reset, save, and delete behavior', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
   await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.masterCalendarReady);
   await page.evaluate(() => {
     const documentState = JSON.parse(localStorage.getItem('studio-calendar-state-v1') || '{}');
     documentState.baseRules = [{
@@ -1037,6 +1070,7 @@ test('master calendar base edit preserves population, reset, save, and delete be
 test('master calendar base editor preserves drag add, ghost cleanup, and undo behavior', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-08-26T12:00:00'));
   await page.goto('/pottery-master-calendar.html', { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.masterCalendarReady);
   await page.locator('#open-base-editor-btn').click();
   await page.locator('#base-add-block-btn').click();
   await page.locator('#base-type').selectOption('개인작업 시간');
@@ -1178,6 +1212,7 @@ test('certificate generation resolves synthetic Blob-backed art and produces a v
     });
   });
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
   const result = await page.evaluate(async (source) => {
     if (typeof window.buildCertificateWorkbookBlob !== 'function') {
       throw new Error('Certificate generator global is unavailable.');
@@ -1217,6 +1252,7 @@ test('certificate generation resolves synthetic Blob-backed art and produces a v
 
 test('selected artwork file uses the current client-side compact-image path', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
   const result = await page.evaluate(async () => {
     const bytes = Uint8Array.from(
       atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nVQAAAAASUVORK5CYII='),

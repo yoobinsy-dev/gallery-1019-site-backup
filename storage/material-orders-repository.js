@@ -29,11 +29,24 @@
     });
   }
 
-  const storage = root.BrowserStorageAdapter?.storage;
+  function createDeferredMaterialOrdersRepository(getStorage) {
+    function repository() {
+      const storage = getStorage();
+      if (!storage) throw new Error('Material orders storage adapter is unavailable.');
+      return createMaterialOrdersRepository(storage);
+    }
+    return Object.freeze({
+      loadOrders: () => repository().loadOrders(),
+      loadProductOptions: () => repository().loadProductOptions(),
+      saveOrders: (orders) => repository().saveOrders(orders)
+    });
+  }
+
   const api = Object.freeze({
     KEYS,
     createMaterialOrdersRepository,
-    repository: storage ? createMaterialOrdersRepository(storage) : null
+    createDeferredMaterialOrdersRepository,
+    repository: createDeferredMaterialOrdersRepository(() => root.BrowserStorageAdapter?.storage)
   });
   root.MaterialOrdersRepository = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

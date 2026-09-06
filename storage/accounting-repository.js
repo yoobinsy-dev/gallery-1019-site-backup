@@ -50,11 +50,28 @@
     });
   }
 
-  const storage = root.BrowserStorageAdapter?.storage;
+  function createDeferredAccountingRepository(getStorage) {
+    function repository() {
+      const storage = getStorage();
+      if (!storage) throw new Error('Accounting storage adapter is unavailable.');
+      return createAccountingRepository(storage);
+    }
+    return Object.freeze({
+      loadEntries: () => repository().loadEntries(),
+      loadExhibitions: () => repository().loadExhibitions(),
+      loadStudents: () => repository().loadStudents(),
+      loadPersonalWorkEntries: () => repository().loadPersonalWorkEntries(),
+      loadMaterialOrders: () => repository().loadMaterialOrders(),
+      loadCalendarEvents: () => repository().loadCalendarEvents(),
+      saveEntries: (entries) => repository().saveEntries(entries)
+    });
+  }
+
   const api = Object.freeze({
     KEYS,
     createAccountingRepository,
-    repository: storage ? createAccountingRepository(storage) : null
+    createDeferredAccountingRepository,
+    repository: createDeferredAccountingRepository(() => root.BrowserStorageAdapter?.storage)
   });
   root.AccountingRepository = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

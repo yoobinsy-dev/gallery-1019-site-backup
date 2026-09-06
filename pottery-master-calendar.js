@@ -23,6 +23,11 @@
   const ROLE_LOCK_MESSAGE = '계정 등급으로 인해 선택 불가능';
   const KILN_CATEGORY_OPTIONS = ['초벌', '재벌'];
   const displayPolicy = globalThis.MasterCalendarDisplayPolicy;
+  let studioPageInitialized = false;
+  let studioPageStartupStarted = false;
+  let resolveMasterCalendarReady;
+  let rejectMasterCalendarReady;
+  const pendingExternalStateKeys = new Set();
 
   const state = {
     weekStart: getWeekStart(new Date()),
@@ -313,13 +318,19 @@
     applyStudioRoleUiLocks
   });
 
-  document.addEventListener('DOMContentLoaded', () => {
-    initializeStudioPage();
+  window.masterCalendarReady = new Promise((resolve, reject) => {
+    resolveMasterCalendarReady = resolve;
+    rejectMasterCalendarReady = reject;
   });
 
   window.addEventListener('cloud-sync:state-applied', (event) => {
     const keys = Array.isArray(event?.detail?.keys) ? event.detail.keys : [];
     if (!keys.length) return;
+
+    if (!studioPageInitialized) {
+      keys.forEach((key) => pendingExternalStateKeys.add(key));
+      return;
+    }
 
     if (keys.includes(STORAGE_KEY)) {
       loadState();
@@ -336,6 +347,11 @@
   window.addEventListener('storage', (event) => {
     const changedKey = String(event?.key || '');
     if (!changedKey) return;
+
+    if (!studioPageInitialized) {
+      pendingExternalStateKeys.add(changedKey);
+      return;
+    }
 
     if (changedKey === STORAGE_KEY) {
       loadState();
@@ -375,6 +391,8 @@
     bindEvents();
     renderAll();
     startWorkshopUsageTicker();
+    studioPageInitialized = true;
+    pendingExternalStateKeys.clear();
   }
 
   function startWorkshopUsageTicker() {
@@ -2011,5 +2029,15 @@
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#39;');
+  }
+
+  function startMasterCalendarPage() {
+    if (studioPageStartupStarted) return;
+    studioPageStartupStarted = true;
+    initializeStudioPage().then(resolveMasterCalendarReady, rejectMasterCalendarReady);
+  }
+
+  if (document.getElementById('calendar-body')) {
+    startMasterCalendarPage();
   }
 })();

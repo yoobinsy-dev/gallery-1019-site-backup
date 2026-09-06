@@ -83,3 +83,18 @@ test('exhibitions repository preserves raw documents, parse failures, and safe r
   const malformed = exhibitionsRepository.createExhibitionsRepository({ read() { return '{'; } });
   assert.throws(() => malformed.loadExhibitions(), SyntaxError);
 });
+
+test('exhibitions repository resolves storage when it becomes available after module initialization', () => {
+  let storage = null;
+  const repository = exhibitionsRepository.createDeferredExhibitionsRepository(() => storage);
+
+  assert.throws(() => repository.loadExhibitions(), /storage adapter is unavailable/);
+
+  storage = {
+    read(key) { return key === 'exhibitions' ? '[{"id":7}]' : null; },
+    writeSafely(key, value) { return key === 'exhibitions' && value === '[{"id":8}]'; }
+  };
+
+  assert.deepEqual(repository.loadExhibitions(), [{ id: 7 }]);
+  assert.equal(repository.saveExhibitionsSafely([{ id: 8 }]), true);
+});

@@ -81,113 +81,230 @@ const LARGE_DROP_MIN_PREVIOUS_TOTAL = 20;
 const LARGE_DROP_MIN_ABSOLUTE = 15;
 const LARGE_DROP_RATIO = 0.7;
 
-const inventoryStateController = globalThis.ExhibitionDetailInventoryStateController.create({
-  state: exhibitionDetailState,
-  getCurrentExhibition
-});
+let certificateController = null;
+let inventoryStateController = null;
+let worksEditorController = null;
+let worksView = null;
+let salesViewController = null;
+let accountingViewController = null;
+let backupController = null;
+let infoController = null;
+let staffController = null;
+let filesController = null;
+let salesAddController = null;
+let gridNavigationController = null;
+let exhibitionDetailDependencies = null;
+let certificateLibrariesPromise = null;
 
-const worksEditorController = globalThis.ExhibitionDetailWorksEditorController.create({
+function loadClassicScript(source) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = source;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error(`Failed to load certificate dependency: ${source}`));
+    document.head.appendChild(script);
+  });
+}
+
+function ensureCertificateLibraries() {
+  if (globalThis.XlsxPopulate && globalThis.JSZip) return Promise.resolve();
+  if (!certificateLibrariesPromise) {
+    certificateLibrariesPromise = Promise.all([
+      globalThis.XlsxPopulate
+        ? Promise.resolve()
+        : loadClassicScript('node_modules/xlsx-populate/browser/xlsx-populate.min.js'),
+      globalThis.JSZip
+        ? Promise.resolve()
+        : loadClassicScript('node_modules/jszip/dist/jszip.min.js')
+    ]).then(() => {
+      if (!globalThis.XlsxPopulate || !globalThis.JSZip) {
+        throw new Error('Certificate dependencies did not initialize.');
+      }
+    });
+  }
+  return certificateLibrariesPromise;
+}
+
+function resolveExhibitionDetailDependencies() {
+  const dependencies = {
+    accountingProjection: globalThis.ExhibitionAccountingProjection,
+    backupControllerModule: globalThis.ExhibitionDetailBackupController,
+    certificateControllerModule: globalThis.ExhibitionDetailCertificateController,
+    certificateModel: globalThis.ExhibitionCertificateModel,
+    detailRepository: globalThis.ExhibitionDetailRepository?.repository,
+    exportModel: globalThis.ExhibitionExportModel,
+    filesControllerModule: globalThis.ExhibitionDetailFilesController,
+    gridNavigationModule: globalThis.ExhibitionDetailGridNavigation,
+    imageLifecycle: globalThis.ExhibitionImageLifecycle,
+    infoControllerModule: globalThis.ExhibitionDetailInfoController,
+    inventoryBackupModel: globalThis.ExhibitionInventoryBackupModel,
+    inventoryModel: globalThis.ExhibitionInventoryModel,
+    inventoryRenderer: globalThis.ExhibitionInventoryRenderer,
+    inventoryStateControllerModule: globalThis.ExhibitionDetailInventoryStateController,
+    repository: globalThis.ExhibitionsRepository?.repository,
+    salesAddControllerModule: globalThis.ExhibitionDetailSalesAddController,
+    salesModel: globalThis.ExhibitionSalesModel,
+    salesViewControllerModule: globalThis.ExhibitionDetailSalesViewController,
+    snapshotClient: globalThis.ExhibitionSnapshotClient,
+    staffControllerModule: globalThis.ExhibitionDetailStaffController,
+    tabsController: globalThis.ExhibitionDetailTabsController,
+    worksEditorControllerModule: globalThis.ExhibitionDetailWorksEditorController,
+    worksViewModule: globalThis.ExhibitionDetailWorksView,
+    accountingViewControllerModule: globalThis.ExhibitionDetailAccountingViewController
+  };
+  const missing = Object.entries(dependencies).find(([, dependency]) => !dependency);
+  if (missing) throw new Error(`Exhibition detail dependency is unavailable: ${missing[0]}`);
+  return Object.freeze(dependencies);
+}
+
+function createCertificateController() {
+  return exhibitionDetailDependencies.certificateControllerModule.create({
+    ExhibitionCertificateModel: exhibitionDetailDependencies.certificateModel,
+    ExhibitionImageLifecycle: exhibitionDetailDependencies.imageLifecycle,
+    ensureCertificateLibraries,
+    getJSZip: () => globalThis.JSZip,
+    getXlsxPopulate: () => globalThis.XlsxPopulate,
+    document,
+    URL,
+    fetch: (...args) => globalThis.fetch(...args),
+    DOMParser: globalThis.DOMParser,
+    XMLSerializer: globalThis.XMLSerializer,
+    FileReader: globalThis.FileReader,
+    ArrayBuffer: globalThis.ArrayBuffer,
+    Uint8Array: globalThis.Uint8Array,
+    atob: (...args) => globalThis.atob(...args),
+    loadImageElement,
+    getCurrentExhibition,
+    ensureExhibitionInfoData,
+    ensureSoldWorksArray,
+    normalizeSoldItemType,
+    getSourceArtworkForSold: (sold) => exhibitionDetailDependencies.certificateModel.getSourceArtwork(getCurrentExhibition(), sold),
+    saveExhibition,
+    renderSalesManagement: renderSoldWorkRows,
+    setStateSoldWorks(soldWorks) {
+      if (exhibitionDetailState.exhibition) exhibitionDetailState.exhibition.soldWorks = soldWorks;
+    },
+    alert,
+    console
+  });
+}
+
+function createInventoryStateController() {
+  return exhibitionDetailDependencies.inventoryStateControllerModule.create({
+    state: exhibitionDetailState,
+    getCurrentExhibition
+  });
+}
+
+function createWorksEditorController() {
+  return exhibitionDetailDependencies.worksEditorControllerModule.create({
+    state: exhibitionDetailState,
+    document,
+    window,
+    fetchImpl: (...args) => fetch(...args),
+    FileReaderImpl: FileReader,
+    ImageImpl: Image,
+    createCanvas: () => document.createElement('canvas'),
+    inventoryModel: exhibitionDetailDependencies.inventoryModel,
+    imageLifecycle: exhibitionDetailDependencies.imageLifecycle,
+    getCurrentExhibition,
+    getCurrentUserId,
+    pushWorkUndoSnapshot,
+    saveExhibition,
+    renderWorkRows,
+    updateSaveAllButtonVisibility,
+    requestAnimationFrameImpl: (callback) => requestAnimationFrame(callback),
+    canCurrentUserModifyOwnedRow,
+    alertImpl: (...args) => alert(...args),
+    getPhotoPreviewDataUrl,
+    formatPriceForSave,
+    normalizeSoldItemType,
+    initializeInventoryData,
+    ensureWorkEditUndoSnapshot,
+    scrollRowToViewportCenter,
+    getVisibleWorks,
+    switchTab,
+    getCurrentInventoryListTabName,
+    isArtistScopedUser,
+    refreshGridKeyboardNavigation,
+    setTimeoutImpl: (callback, delay) => setTimeout(callback, delay),
+    nowImpl: () => Date.now(),
+    randomImpl: () => Math.random(),
+    consoleImpl: console
+  });
+}
+
+function createWorksView() {
+  return exhibitionDetailDependencies.worksViewModule.create({
+    state: exhibitionDetailState,
+    document,
+    syncInventoryMode,
+    getCurrentExhibition,
+    getExhibitionAccessRole,
+    isArtistScopedUser,
+    getVisibleWorks,
+    getSortedWorks,
+    updateWorkSelectionActionButtons,
+    updateWorksUndoButton,
+    inventoryRenderer: exhibitionDetailDependencies.inventoryRenderer,
+    canCurrentUserModifyOwnedRow,
+    getPhotoPreviewDataUrl,
+    ensureSoldWorksArray,
+    normalizeSoldItemType,
+    getGoodsSoldQuantity,
+    parseStockQuantity,
+    parseSizeParts,
+    isWorkNotForSale,
+    refreshGridKeyboardNavigation,
+    getSortIndicator,
+    addWorkRow,
+    toggleSelectAllVisibleWorks,
+    deleteAllWorks,
+    deleteSelectedWorks,
+    editSelectedWorks,
+    exportWorksToExcel,
+    saveAllWorks,
+    undoWorkChanges
+  });
+}
+
+function createSalesViewController() {
+  return exhibitionDetailDependencies.salesViewControllerModule.create({
+    state: exhibitionDetailState,
+    document,
+    window,
+    openSalesAddModal,
+    exportSalesToExcel,
+    handleDownloadAllCertificatesAction,
+    isArtistScopedUser,
+    getSalesSortIndicator,
+    getCurrentExhibition,
+    ensureSoldWorksArray,
+    getSortedSoldWorks,
+    getSalesSearchResults,
+    canCurrentUserModifyOwnedRow,
+    getPhotoPreviewDataUrl,
+    normalizeSoldItemType,
+    getSoldQuantityForItemType,
+    hasGeneratedCertificate,
+    soldKstToInputValue,
+    soldInputValueToKst,
+    formatKoreanPhone,
+    parseSoldQuantity,
+    saveExhibition,
+    renderSoldStatsTicker,
+    refreshGridKeyboardNavigation,
+    scrollRowToViewportCenter,
+    alert: (...args) => alert(...args),
+    confirm: (...args) => confirm(...args)
+  });
+}
+
+function createAccountingViewController() {
+  return exhibitionDetailDependencies.accountingViewControllerModule.create({
   state: exhibitionDetailState,
   document,
-  window,
-  fetchImpl: (...args) => fetch(...args),
-  FileReaderImpl: FileReader,
-  ImageImpl: Image,
-  createCanvas: () => document.createElement('canvas'),
-  inventoryModel: globalThis.ExhibitionInventoryModel,
-  imageLifecycle: globalThis.ExhibitionImageLifecycle,
-  getCurrentExhibition,
-  getCurrentUserId,
-  pushWorkUndoSnapshot,
-  saveExhibition,
-  renderWorkRows,
-  updateSaveAllButtonVisibility,
-  requestAnimationFrameImpl: (callback) => requestAnimationFrame(callback),
-  canCurrentUserModifyOwnedRow,
-  alertImpl: (...args) => alert(...args),
-  getPhotoPreviewDataUrl,
-  formatPriceForSave,
-  normalizeSoldItemType,
-  initializeInventoryData,
-  ensureWorkEditUndoSnapshot,
-  scrollRowToViewportCenter,
-  getVisibleWorks,
-  switchTab,
-  getCurrentInventoryListTabName,
-  isArtistScopedUser,
-  refreshGridKeyboardNavigation,
-  setTimeoutImpl: (callback, delay) => setTimeout(callback, delay),
-  nowImpl: () => Date.now(),
-  randomImpl: () => Math.random(),
-  consoleImpl: console
-});
-
-const worksView = globalThis.ExhibitionDetailWorksView.create({
-  state: exhibitionDetailState,
-  document,
-  syncInventoryMode,
-  getCurrentExhibition,
-  getExhibitionAccessRole,
-  isArtistScopedUser,
-  getVisibleWorks,
-  getSortedWorks,
-  updateWorkSelectionActionButtons,
-  updateWorksUndoButton,
-  inventoryRenderer: globalThis.ExhibitionInventoryRenderer,
-  canCurrentUserModifyOwnedRow,
-  getPhotoPreviewDataUrl,
-  ensureSoldWorksArray,
-  normalizeSoldItemType,
-  getGoodsSoldQuantity,
-  parseStockQuantity,
-  parseSizeParts,
-  isWorkNotForSale,
-  refreshGridKeyboardNavigation,
-  getSortIndicator,
-  addWorkRow,
-  toggleSelectAllVisibleWorks,
-  deleteAllWorks,
-  deleteSelectedWorks,
-  editSelectedWorks,
-  exportWorksToExcel,
-  saveAllWorks,
-  undoWorkChanges
-});
-
-const salesViewController = globalThis.ExhibitionDetailSalesViewController.create({
-  state: exhibitionDetailState,
-  document,
-  window,
-  openSalesAddModal,
-  exportSalesToExcel,
-  handleDownloadAllCertificatesAction,
-  isArtistScopedUser,
-  getSalesSortIndicator,
-  getCurrentExhibition,
-  ensureSoldWorksArray,
-  getSortedSoldWorks,
-  getSalesSearchResults,
-  canCurrentUserModifyOwnedRow,
-  getPhotoPreviewDataUrl,
-  normalizeSoldItemType,
-  getSoldQuantityForItemType,
-  hasGeneratedCertificate,
-  soldKstToInputValue,
-  soldInputValueToKst,
-  formatKoreanPhone,
-  parseSoldQuantity,
-  saveExhibition,
-  renderSoldStatsTicker,
-  refreshGridKeyboardNavigation,
-  scrollRowToViewportCenter,
-  alert: (...args) => alert(...args),
-  confirm: (...args) => confirm(...args)
-});
-
-const accountingViewController = globalThis.ExhibitionDetailAccountingViewController.create({
-  state: exhibitionDetailState,
-  document,
-  accountingProjection: globalThis.ExhibitionAccountingProjection,
+  accountingProjection: exhibitionDetailDependencies.accountingProjection,
   canManageAccountingData,
   getFirstAllowedTab,
   switchTab,
@@ -201,14 +318,16 @@ const accountingViewController = globalThis.ExhibitionDetailAccountingViewContro
   alert: (...args) => alert(...args),
   now: () => Date.now(),
   random: () => Math.random()
-});
+  });
+}
 
-const backupController = globalThis.ExhibitionDetailBackupController.create({
+function createBackupController() {
+  return exhibitionDetailDependencies.backupControllerModule.create({
   state: exhibitionDetailState,
   document,
   fetchImpl: (...args) => fetch(...args),
-  snapshotClient: globalThis.ExhibitionSnapshotClient,
-  exhibitionsRepository: globalThis.ExhibitionsRepository.repository,
+  snapshotClient: exhibitionDetailDependencies.snapshotClient,
+  exhibitionsRepository: exhibitionDetailDependencies.repository,
   getCurrentExhibition,
   getCurrentUser,
   getExhibitionAccessRole,
@@ -217,19 +336,23 @@ const backupController = globalThis.ExhibitionDetailBackupController.create({
   escapeHtml: escapeAccountingHtml,
   alertImpl: (...args) => alert(...args),
   confirmImpl: (...args) => confirm(...args)
-});
+  });
+}
 
-const infoController = globalThis.ExhibitionDetailInfoController.create({
+function createInfoController() {
+  return exhibitionDetailDependencies.infoControllerModule.create({
   state: exhibitionDetailState,
   document,
-  loadUsers: () => globalThis.ExhibitionDetailRepository.repository.loadUsers(),
+  loadUsers: () => exhibitionDetailDependencies.detailRepository.loadUsers(),
   getCurrentExhibition: () => getCurrentExhibition(),
   escapeHtml: (value) => escapeAccountingHtml(value),
   saveExhibition: () => saveExhibition(),
   switchTab: (tabName) => switchTab(tabName)
-});
+  });
+}
 
-const staffController = globalThis.ExhibitionDetailStaffController.create({
+function createStaffController() {
+  return exhibitionDetailDependencies.staffControllerModule.create({
   state: exhibitionDetailState,
   document,
   getCurrentExhibition: () => getCurrentExhibition(),
@@ -237,11 +360,12 @@ const staffController = globalThis.ExhibitionDetailStaffController.create({
   getFirstAllowedTab: () => getFirstAllowedTab(),
   getEffectiveGalleryRole: (user) => getEffectiveGalleryRole(user),
   normalizeAccountType: (type) => normalizeAccountType(type),
-  loadUsers: () => globalThis.ExhibitionDetailRepository.repository.loadUsers(),
+  loadUsers: () => exhibitionDetailDependencies.detailRepository.loadUsers(),
   saveExhibition: () => saveExhibition(),
   switchTab: (tabName) => switchTab(tabName),
   alert: (...args) => alert(...args)
-});
+  });
+}
 
 function getCurrentExhibition() {
   return exhibitionDetailState.exhibition || {
@@ -360,7 +484,7 @@ function getFirstAllowedTab() {
 }
 
 function applyTabVisibilityByPermission() {
-  globalThis.ExhibitionDetailTabsController.applyTabVisibilityByPermission({
+  exhibitionDetailDependencies.tabsController.applyTabVisibilityByPermission({
     document,
     canAccessTab
   });
@@ -429,29 +553,29 @@ function waitForCloudSyncReady(timeoutMs = 5000) {
 }
 
 function cloneJson(value, fallback) {
-  return globalThis.ExhibitionInventoryBackupModel.cloneJson(value, fallback);
+  return exhibitionDetailDependencies.inventoryBackupModel.cloneJson(value, fallback);
 }
 
 function stripLargePayloadFields(value) {
-  return globalThis.ExhibitionInventoryBackupModel.stripLargePayloadFields(value);
+  return exhibitionDetailDependencies.inventoryBackupModel.stripLargePayloadFields(value);
 }
 
 function getInventoryBackupStorageKey(exhibitionId) {
-  return globalThis.ExhibitionInventoryBackupModel.getInventoryBackupStorageKey(exhibitionId);
+  return exhibitionDetailDependencies.inventoryBackupModel.getInventoryBackupStorageKey(exhibitionId);
 }
 
 function getInventoryListCounts(exhibition) {
-  return globalThis.ExhibitionInventoryBackupModel.getInventoryListCounts(exhibition);
+  return exhibitionDetailDependencies.inventoryBackupModel.getInventoryListCounts(exhibition);
 }
 
 function normalizeInventoryBackupSnapshot(exhibition) {
-  return globalThis.ExhibitionInventoryBackupModel.normalizeInventoryBackupSnapshot(exhibition);
+  return exhibitionDetailDependencies.inventoryBackupModel.normalizeInventoryBackupSnapshot(exhibition);
 }
 
 function loadInventoryBackup(exhibitionId) {
   const key = getInventoryBackupStorageKey(exhibitionId);
   if (!key) return null;
-  return globalThis.ExhibitionDetailRepository.repository.loadInventoryBackup(key);
+  return exhibitionDetailDependencies.detailRepository.loadInventoryBackup(key);
 }
 
 function persistInventoryBackup(exhibition) {
@@ -466,7 +590,7 @@ function persistInventoryBackup(exhibition) {
     counts: getInventoryListCounts(snapshot),
     snapshot
   };
-  return globalThis.ExhibitionDetailRepository.repository.saveInventoryBackupSafely(key, backup);
+  return exhibitionDetailDependencies.detailRepository.saveInventoryBackupSafely(key, backup);
 }
 
 function updateInventoryResetMarker(exhibition) {
@@ -521,7 +645,7 @@ function restoreInventoryFromBackupIfNeeded(exhibitions, exhibitionIndex) {
 
   exhibitions[exhibitionIndex] = exhibition;
 
-  const restoredSaved = globalThis.ExhibitionsRepository.repository.saveExhibitionsSafely(exhibitions);
+  const restoredSaved = exhibitionDetailDependencies.repository.saveExhibitionsSafely(exhibitions);
 
   if (!restoredSaved) return false;
 
@@ -530,7 +654,7 @@ function restoreInventoryFromBackupIfNeeded(exhibitions, exhibitionIndex) {
 }
 
 function isLargeUnexpectedInventoryDrop(previousExhibition, nextExhibition) {
-  return globalThis.ExhibitionInventoryBackupModel.isLargeUnexpectedInventoryDrop(
+  return exhibitionDetailDependencies.inventoryBackupModel.isLargeUnexpectedInventoryDrop(
     previousExhibition,
     nextExhibition
   );
@@ -547,7 +671,7 @@ function getExhibitionLastTabStorageKey() {
 function loadLastViewedExhibitionTab() {
   const key = getExhibitionLastTabStorageKey();
   if (!key) return '';
-  const value = globalThis.ExhibitionDetailRepository.repository.loadPreference(key);
+  const value = exhibitionDetailDependencies.detailRepository.loadPreference(key);
   return value ? normalizeTabForAccess(value) : '';
 }
 
@@ -556,7 +680,7 @@ function saveLastViewedExhibitionTab(tabName) {
   if (!key) return;
   const normalized = normalizeTabForAccess(tabName);
   if (!normalized) return;
-  globalThis.ExhibitionDetailRepository.repository.savePreference(key, normalized);
+  exhibitionDetailDependencies.detailRepository.savePreference(key, normalized);
 }
 
 function goBack() {
@@ -564,6 +688,10 @@ function goBack() {
 }
 
 async function initDetailPage() {
+  if (!certificateController || !salesViewController) {
+    throw new Error('Exhibition detail controllers must be initialized before page startup.');
+  }
+
   const currentUser = getCurrentUser();
   if (!currentUser) {
     alert('로그인이 필요합니다.');
@@ -580,7 +708,7 @@ async function initDetailPage() {
 
   await waitForCloudSyncReady();
 
-  const exhibitions = globalThis.ExhibitionsRepository.repository.loadExhibitions();
+  const exhibitions = exhibitionDetailDependencies.repository.loadExhibitions();
   const exhibitionIndex = exhibitions.findIndex(e => e.id === exhibitionDetailState.exhibitionId);
   exhibitionDetailState.exhibition = exhibitionIndex !== -1 ? exhibitions[exhibitionIndex] : null;
 
@@ -646,7 +774,7 @@ function syncInventoryMode(mode) {
 }
 
 function switchTab(tabName) {
-  return globalThis.ExhibitionDetailTabsController.switchTab(tabName, {
+  return exhibitionDetailDependencies.tabsController.switchTab(tabName, {
     state: exhibitionDetailState,
     document,
     canAccessTab,
@@ -723,23 +851,25 @@ function editExhibitionInfoField(fieldName) {
   return infoController.editExhibitionInfoField(fieldName);
 }
 
-const filesController = globalThis.ExhibitionDetailFilesController.create({
-  state: exhibitionDetailState,
-  document,
-  URL,
-  Date,
-  Math,
-  getCurrentExhibition,
-  canCurrentUserModifyOwnedRow,
-  isArtistScopedUser,
-  getCurrentUserId,
-  escapeAccountingHtml,
-  buildCompactPhotoPreview,
-  readFileAsDataUrl,
-  saveExhibition,
-  switchTab,
-  alert
-});
+function createFilesController() {
+  return exhibitionDetailDependencies.filesControllerModule.create({
+    state: exhibitionDetailState,
+    document,
+    URL,
+    Date,
+    Math,
+    getCurrentExhibition,
+    canCurrentUserModifyOwnedRow,
+    isArtistScopedUser,
+    getCurrentUserId,
+    escapeAccountingHtml,
+    buildCompactPhotoPreview,
+    readFileAsDataUrl,
+    saveExhibition,
+    switchTab,
+    alert
+  });
+}
 
 function ensureExhibitionFilesData() {
   return filesController.ensureExhibitionFilesData();
@@ -994,19 +1124,19 @@ function getSalesMasterRecords() {
 }
 
 function normalizeSoldItemType(sold) {
-  return globalThis.ExhibitionSalesModel.normalizeSoldItemType(sold);
+  return exhibitionDetailDependencies.salesModel.normalizeSoldItemType(sold);
 }
 
 function parseSoldQuantity(value) {
-  return globalThis.ExhibitionSalesModel.parseSoldQuantity(value);
+  return exhibitionDetailDependencies.salesModel.parseSoldQuantity(value);
 }
 
 function parseStockQuantity(value) {
-  return globalThis.ExhibitionSalesModel.parseStockQuantity(value);
+  return exhibitionDetailDependencies.salesModel.parseStockQuantity(value);
 }
 
 function getGoodsSoldQuantity(goodsId) {
-  return globalThis.ExhibitionSalesModel.getGoodsSoldQuantity(getSalesMasterRecords(), goodsId);
+  return exhibitionDetailDependencies.salesModel.getGoodsSoldQuantity(getSalesMasterRecords(), goodsId);
 }
 
 function renderInventoryListManagement(container) {
@@ -1027,7 +1157,7 @@ function isArtistSalesSummaryEnabled() {
 }
 
 function parsePriceToNumber(value) {
-  return globalThis.ExhibitionSalesModel.parseSoldPriceAmount(value, isWorkNotForSale);
+  return exhibitionDetailDependencies.salesModel.parseSoldPriceAmount(value, isWorkNotForSale);
 }
 
 function formatCurrencyKrw(value) {
@@ -1036,7 +1166,7 @@ function formatCurrencyKrw(value) {
 }
 
 function getArtistSalesSummary() {
-  return globalThis.ExhibitionSalesModel.getArtistSalesSummary(ensureSoldWorksArray(), isWorkNotForSale);
+  return exhibitionDetailDependencies.salesModel.getArtistSalesSummary(ensureSoldWorksArray(), isWorkNotForSale);
 }
 
 function openArtistSalesSummaryModal() {
@@ -1155,12 +1285,12 @@ function renderSoldWorkRows() {
 }
 
 function getSoldQuantityForItemType(itemType, value) {
-  return globalThis.ExhibitionSalesModel.getSoldQuantityForItemType(itemType, value);
+  return exhibitionDetailDependencies.salesModel.getSoldQuantityForItemType(itemType, value);
 }
 
 function getSalesSearchResults(query) {
   const exhibition = getCurrentExhibition();
-  return globalThis.ExhibitionSalesModel.getSalesSearchResults({
+  return exhibitionDetailDependencies.salesModel.getSalesSearchResults({
     artWorks: exhibition.artWorks,
     works: exhibition.works,
     goods: exhibition.goods,
@@ -1168,30 +1298,32 @@ function getSalesSearchResults(query) {
   });
 }
 
-const salesAddController = globalThis.ExhibitionDetailSalesAddController.create({
-  state: exhibitionDetailState,
-  document,
-  setTimeout,
-  getSalesSearchResults,
-  getSalesPopupWorkDisabledReason,
-  getPhotoPreviewDataUrl,
-  formatKoreanPhone,
-  parseSoldQuantity,
-  normalizeSoldItemType,
-  parsePriceToNumber,
-  formatCurrencyKrw,
-  getCurrentExhibition,
-  ensureSoldWorksArray,
-  pushSalesUndoSnapshot,
-  getCurrentKstDateTimeString,
-  getCurrentUserId,
-  saveExhibition,
-  getCurrentTab: () => exhibitionDetailState.currentTab,
-  switchTab,
-  renderSoldWorkRows,
-  now: Date.now,
-  random: Math.random
-});
+function createSalesAddController() {
+  return exhibitionDetailDependencies.salesAddControllerModule.create({
+    state: exhibitionDetailState,
+    document,
+    setTimeout,
+    getSalesSearchResults,
+    getSalesPopupWorkDisabledReason,
+    getPhotoPreviewDataUrl,
+    formatKoreanPhone,
+    parseSoldQuantity,
+    normalizeSoldItemType,
+    parsePriceToNumber,
+    formatCurrencyKrw,
+    getCurrentExhibition,
+    ensureSoldWorksArray,
+    pushSalesUndoSnapshot,
+    getCurrentKstDateTimeString,
+    getCurrentUserId,
+    saveExhibition,
+    getCurrentTab: () => exhibitionDetailState.currentTab,
+    switchTab,
+    renderSoldWorkRows,
+    now: Date.now,
+    random: Math.random
+  });
+}
 
 function resetSalesAddCommonBuyerState() {
   return salesAddController.resetSalesAddCommonBuyerState();
@@ -1341,41 +1473,12 @@ function getCurrentKstDateTimeString() {
 }
 
 function getPhotoPreviewDataUrl(item) {
-  return globalThis.ExhibitionImageLifecycle.getPhotoPreviewSource(item);
+  return exhibitionDetailDependencies.imageLifecycle.getPhotoPreviewSource(item);
 }
 
 function getPhotoDataUrl(item) {
-  return globalThis.ExhibitionImageLifecycle.getPhotoSource(item);
+  return exhibitionDetailDependencies.imageLifecycle.getPhotoSource(item);
 }
-
-const certificateController = globalThis.ExhibitionDetailCertificateController.create({
-  ExhibitionCertificateModel: globalThis.ExhibitionCertificateModel,
-  ExhibitionImageLifecycle: globalThis.ExhibitionImageLifecycle,
-  getJSZip: () => globalThis.JSZip,
-  getXlsxPopulate: () => globalThis.XlsxPopulate,
-  document,
-  URL,
-  fetch: (...args) => globalThis.fetch(...args),
-  DOMParser: globalThis.DOMParser,
-  XMLSerializer: globalThis.XMLSerializer,
-  FileReader: globalThis.FileReader,
-  ArrayBuffer: globalThis.ArrayBuffer,
-  Uint8Array: globalThis.Uint8Array,
-  atob: (...args) => globalThis.atob(...args),
-  loadImageElement,
-  getCurrentExhibition,
-  ensureExhibitionInfoData,
-  ensureSoldWorksArray,
-  normalizeSoldItemType,
-  getSourceArtworkForSold: (sold) => globalThis.ExhibitionCertificateModel.getSourceArtwork(getCurrentExhibition(), sold),
-  saveExhibition,
-  renderSalesManagement: renderSoldWorkRows,
-  setStateSoldWorks(soldWorks) {
-    if (exhibitionDetailState.exhibition) exhibitionDetailState.exhibition.soldWorks = soldWorks;
-  },
-  alert,
-  console
-});
 
 function fetchCertificateTemplateArrayBuffer() { return certificateController.fetchCertificateTemplateArrayBuffer(); }
 function getCertificateTemplateArrayBuffer() { return certificateController.getCertificateTemplateArrayBuffer(); }
@@ -1652,7 +1755,7 @@ function handleWorkChange(workId, field, value) {
   return worksEditorController.handleWorkChange(workId, field, value);
 }
 
-const TRANSIENT_WORK_PHOTO_FIELDS = worksEditorController.TRANSIENT_WORK_PHOTO_FIELDS;
+let TRANSIENT_WORK_PHOTO_FIELDS = [];
 
 function canUseRemoteUploadApi() {
   return worksEditorController.canUseRemoteUploadApi();
@@ -1763,7 +1866,7 @@ function editSelectedWorks() {
 }
 
 function parseSoldPriceAmount(value) {
-  return globalThis.ExhibitionSalesModel.parseSoldPriceAmount(value, isWorkNotForSale);
+  return exhibitionDetailDependencies.salesModel.parseSoldPriceAmount(value, isWorkNotForSale);
 }
 
 function formatWonAmount(amount) {
@@ -1771,7 +1874,7 @@ function formatWonAmount(amount) {
 }
 
 function getSoldStatsForWorksTicker() {
-  return globalThis.ExhibitionSalesModel.getSoldStats({
+  return exhibitionDetailDependencies.salesModel.getSoldStats({
     records: ensureSoldWorksArray(),
     selectedIds: exhibitionDetailState.selectedWorkIds,
     idField: 'workId',
@@ -1782,7 +1885,7 @@ function getSoldStatsForWorksTicker() {
 }
 
 function getSoldStatsForSalesTicker() {
-  return globalThis.ExhibitionSalesModel.getSoldStats({
+  return exhibitionDetailDependencies.salesModel.getSoldStats({
     records: ensureSoldWorksArray(),
     selectedIds: exhibitionDetailState.selectedSalesIds,
     selectedLabel: '선택된 판매',
@@ -1823,7 +1926,7 @@ function getSortedWorks() {
       .filter((item) => normalizeSoldItemType(item) === '작품')
       .map((item) => item.workId)
   );
-  return globalThis.ExhibitionInventoryModel.getSortedWorks({
+  return exhibitionDetailDependencies.inventoryModel.getSortedWorks({
     works: exhibition.works || [],
     advanced: exhibitionDetailState.workAdvanced,
     filters: exhibitionDetailState.workFilters,
@@ -1843,7 +1946,7 @@ function getWorkSortValue(work, field) {
       .filter((item) => normalizeSoldItemType(item) === '작품')
       .map(item => item.workId)
   );
-  return globalThis.ExhibitionInventoryModel.getWorkSortValue(work, field, {
+  return exhibitionDetailDependencies.inventoryModel.getWorkSortValue(work, field, {
     parseStockQuantity,
     getGoodsSoldQuantity,
     soldWorkIdSet
@@ -1851,7 +1954,7 @@ function getWorkSortValue(work, field) {
 }
 
 function getSortedSoldWorks() {
-  return globalThis.ExhibitionSalesModel.getSortedSoldWorks({
+  return exhibitionDetailDependencies.salesModel.getSortedSoldWorks({
     records: ensureSoldWorksArray(),
     advanced: exhibitionDetailState.salesAdvanced,
     filters: exhibitionDetailState.salesFilters,
@@ -1864,7 +1967,7 @@ function getSortedSoldWorks() {
 }
 
 function exportSalesToExcel() {
-  const exportData = globalThis.ExhibitionExportModel.buildSalesExport({
+  const exportData = exhibitionDetailDependencies.exportModel.buildSalesExport({
     title: exhibitionDetailState.exhibition?.title,
     soldWorks: getSortedSoldWorks(),
     getPhotoPreviewDataUrl
@@ -1876,7 +1979,7 @@ function exportSalesToExcel() {
 }
 
 function getSoldSortValue(sold, field) {
-  return globalThis.ExhibitionSalesModel.getSoldSortValue(sold, field, isWorkNotForSale);
+  return exhibitionDetailDependencies.salesModel.getSoldSortValue(sold, field, isWorkNotForSale);
 }
 
 function getManualNumberSortGroup(value) {
@@ -1975,7 +2078,7 @@ function toggleSalesSort(field) {
 
 function exportAccountingToExcel() {
   const exhibition = getCurrentExhibition();
-  const exportData = globalThis.ExhibitionExportModel.buildAccountingExport({
+  const exportData = exhibitionDetailDependencies.exportModel.buildAccountingExport({
     exhibition,
     expenseItems: getExhibitionExpenseItems(),
     revenueItems: getExhibitionRevenueItems(),
@@ -1990,7 +2093,7 @@ function exportAccountingToExcel() {
 }
 
 function exportWorksToExcel() {
-  const exportData = globalThis.ExhibitionExportModel.buildWorksExport({
+  const exportData = exhibitionDetailDependencies.exportModel.buildWorksExport({
     title: exhibitionDetailState.exhibition?.title,
     works: getSortedWorks()
   });
@@ -2119,7 +2222,7 @@ function resetSalesFilters() {
 }
 
 function filterSoldWorks(soldWorks) {
-  return globalThis.ExhibitionSalesModel.filterSoldWorks(soldWorks, {
+  return exhibitionDetailDependencies.salesModel.filterSoldWorks(soldWorks, {
     advanced: exhibitionDetailState.salesAdvanced,
     filters: exhibitionDetailState.salesFilters,
     search: exhibitionDetailState.salesSearch
@@ -2127,7 +2230,7 @@ function filterSoldWorks(soldWorks) {
 }
 
 function filterWorks(works) {
-  return globalThis.ExhibitionInventoryModel.filterWorks(works, {
+  return exhibitionDetailDependencies.inventoryModel.filterWorks(works, {
     advanced: exhibitionDetailState.workAdvanced,
     filters: exhibitionDetailState.workFilters,
     search: exhibitionDetailState.workSearch
@@ -2153,7 +2256,7 @@ function stripTransientPhotoUploadFieldsFromExhibition(exhibition) {
 }
 
 function saveExhibition() {
-  const exhibitions = globalThis.ExhibitionsRepository.repository.loadExhibitions();
+  const exhibitions = exhibitionDetailDependencies.repository.loadExhibitions();
   const exhibition = exhibitionDetailState.exhibition || getCurrentExhibition();
   const targetId = Number.isFinite(exhibitionDetailState.exhibitionId) && exhibitionDetailState.exhibitionId > 0
     ? exhibitionDetailState.exhibitionId
@@ -2204,7 +2307,7 @@ function saveExhibition() {
     exhibitions.push(storageCopy);
   }
 
-  const saved = globalThis.ExhibitionsRepository.repository.saveExhibitionsSafely(exhibitions);
+  const saved = exhibitionDetailDependencies.repository.saveExhibitionsSafely(exhibitions);
   if (saved) {
     persistInventoryBackup(storageCopy);
     return true;
@@ -2294,11 +2397,13 @@ function isEditableTarget(target) {
   return Boolean(target.closest('input, textarea, select'));
 }
 
-const gridNavigationController = globalThis.ExhibitionDetailGridNavigation.create({
-  state: exhibitionDetailState,
-  document,
-  startCellEditFromEnter
-});
+function createGridNavigationController() {
+  return exhibitionDetailDependencies.gridNavigationModule.create({
+    state: exhibitionDetailState,
+    document,
+    startCellEditFromEnter
+  });
+}
 
 function isNavigableListTbodyId(tbodyId) {
   return gridNavigationController.isNavigableListTbodyId(tbodyId);
@@ -2423,7 +2528,39 @@ function handleGlobalUndoShortcut(event) {
   }
 }
 
-window.addEventListener('DOMContentLoaded', initDetailPage);
+function initializeExhibitionDetailControllers() {
+  if (certificateController) return;
+
+  exhibitionDetailDependencies = resolveExhibitionDetailDependencies();
+  certificateController = createCertificateController();
+  inventoryStateController = createInventoryStateController();
+  worksEditorController = createWorksEditorController();
+  TRANSIENT_WORK_PHOTO_FIELDS = worksEditorController.TRANSIENT_WORK_PHOTO_FIELDS;
+  worksView = createWorksView();
+  salesViewController = createSalesViewController();
+  accountingViewController = createAccountingViewController();
+  backupController = createBackupController();
+  infoController = createInfoController();
+  staffController = createStaffController();
+  filesController = createFilesController();
+  salesAddController = createSalesAddController();
+  gridNavigationController = createGridNavigationController();
+}
+
+let exhibitionDetailStartupStarted = false;
+
+window.exhibitionDetailReady = new Promise((resolve, reject) => {
+  function startExhibitionDetailPage() {
+    if (exhibitionDetailStartupStarted) return;
+    exhibitionDetailStartupStarted = true;
+    initializeExhibitionDetailControllers();
+    initDetailPage().then(resolve, reject);
+  }
+
+  if (document.getElementById('exhibition-title')) {
+    startExhibitionDetailPage();
+  }
+});
 window.addEventListener('keydown', handleGlobalUndoShortcut);
 window.addEventListener('keydown', handleGridKeyboardNavigation, true);
 window.addEventListener('click', handleGridCellClick, true);

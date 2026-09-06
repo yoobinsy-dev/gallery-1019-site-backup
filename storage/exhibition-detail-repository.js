@@ -36,10 +36,25 @@
     });
   }
 
-  const storage = root.BrowserStorageAdapter?.storage;
+  function createDeferredExhibitionDetailRepository(getStorage) {
+    function repository() {
+      const storage = getStorage();
+      if (!storage) throw new Error('Exhibition detail storage adapter is unavailable.');
+      return createExhibitionDetailRepository(storage);
+    }
+    return Object.freeze({
+      loadUsers: () => repository().loadUsers(),
+      loadInventoryBackup: (key) => repository().loadInventoryBackup(key),
+      saveInventoryBackupSafely: (key, backup) => repository().saveInventoryBackupSafely(key, backup),
+      loadPreference: (key) => repository().loadPreference(key),
+      savePreference: (key, value) => repository().savePreference(key, value)
+    });
+  }
+
   const api = Object.freeze({
     createExhibitionDetailRepository,
-    repository: storage ? createExhibitionDetailRepository(storage) : null
+    createDeferredExhibitionDetailRepository,
+    repository: createDeferredExhibitionDetailRepository(() => root.BrowserStorageAdapter?.storage)
   });
   root.ExhibitionDetailRepository = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

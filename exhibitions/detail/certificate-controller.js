@@ -16,9 +16,19 @@
   const CERTIFICATE_BLOCK_HEIGHT = CERTIFICATE_BLOCK_END_ROW - CERTIFICATE_BLOCK_START_ROW + 1;
 
   function create(options) {
-    const model = options.ExhibitionCertificateModel;
-    const imageLifecycle = options.ExhibitionImageLifecycle;
     let certTemplateArrayBufferPromise = null;
+
+    function getModel() {
+      const model = options.getExhibitionCertificateModel?.() || options.ExhibitionCertificateModel;
+      if (!model) throw new Error('ExhibitionCertificateModel is unavailable.');
+      return model;
+    }
+
+    function getImageLifecycle() {
+      const imageLifecycle = options.getExhibitionImageLifecycle?.() || options.ExhibitionImageLifecycle;
+      if (!imageLifecycle) throw new Error('ExhibitionImageLifecycle is unavailable.');
+      return imageLifecycle;
+    }
 
     function getJSZip() {
       return options.getJSZip();
@@ -26,6 +36,12 @@
 
     function getXlsxPopulate() {
       return options.getXlsxPopulate();
+    }
+
+    async function ensureCertificateLibraries() {
+      if (typeof options.ensureCertificateLibraries === 'function') {
+        await options.ensureCertificateLibraries();
+      }
     }
 
     async function fetchCertificateTemplateArrayBuffer() {
@@ -62,18 +78,19 @@
     }
 
     function hasGeneratedCertificate(sold) {
-      return model.hasGeneratedCertificate(sold);
+      return getModel().hasGeneratedCertificate(sold);
     }
 
     function normalizeCertificateDateText(soldAtKst) {
-      return model.normalizeCertificateDateText(soldAtKst);
+      return getModel().normalizeCertificateDateText(soldAtKst);
     }
 
     function safeCertificateFileName(baseTitle) {
-      return model.safeCertificateFileName(baseTitle);
+      return getModel().safeCertificateFileName(baseTitle);
     }
 
     function getCertificateImageDataUrl(sold, work) {
+      const imageLifecycle = getImageLifecycle();
       return imageLifecycle.getPhotoPreviewSource(work)
         || imageLifecycle.getPhotoSource(work)
         || imageLifecycle.getPhotoPreviewSource(sold)
@@ -190,11 +207,11 @@
     }
 
     function parseWorksheetMetrics(sheetXml) {
-      return model.parseWorksheetMetrics(sheetXml);
+      return getModel().parseWorksheetMetrics(sheetXml);
     }
 
     function computeContainedImageAnchor(metrics, imageWidthPx, imageHeightPx, rowOffset = 0) {
-      return model.computeContainedImageAnchor(metrics, imageWidthPx, imageHeightPx, rowOffset);
+      return getModel().computeContainedImageAnchor(metrics, imageWidthPx, imageHeightPx, rowOffset);
     }
 
     function removeXmlAttribute(tag, attrName) {
@@ -346,7 +363,7 @@
 
     function getArtistInstagramForCertificate(sold, work) {
       const exhibition = options.ensureExhibitionInfoData();
-      return model.getArtistInstagram(exhibition.artistInstagramMap, sold, work);
+      return getModel().getArtistInstagram(exhibition.artistInstagramMap, sold, work);
     }
 
     function escapeXmlText(value) {
@@ -424,12 +441,13 @@
     }
 
     async function buildCertificateWorkbookBlob(sold, work) {
+      await ensureCertificateLibraries();
       const XlsxPopulate = getXlsxPopulate();
       if (typeof XlsxPopulate === 'undefined') throw new Error('XlsxPopulate is unavailable');
       const templateBuffer = await getCertificateTemplateArrayBuffer();
       const workbook = await XlsxPopulate.fromDataAsync(templateBuffer);
       const sheet = workbook.sheet(0);
-      const fields = model.buildCertificateFields(sold, work, getArtistInstagramForCertificate(sold, work));
+      const fields = getModel().buildCertificateFields(sold, work, getArtistInstagramForCertificate(sold, work));
       sheet.cell('F24').value(fields.artist);
       sheet.cell('F26').value(fields.title);
       sheet.cell('F28').value(fields.materials);
@@ -446,7 +464,7 @@
     }
 
     function buildAllCertificatesDownloadFileName() {
-      return model.buildAllCertificatesFileName(options.getCurrentExhibition());
+      return getModel().buildAllCertificatesFileName(options.getCurrentExhibition());
     }
 
     function upsertWorksheetRowBreaksXml(sheetXml, breakRows) {
@@ -581,6 +599,7 @@
     }
 
     async function buildAllCertificatesWorkbookBlob(entries) {
+      await ensureCertificateLibraries();
       const JSZip = getJSZip();
       if (typeof JSZip === 'undefined') throw new Error('JSZip is unavailable');
       const certificateEntries = Array.isArray(entries) ? entries : [];
@@ -660,7 +679,7 @@
         const sold = entry.sold || {};
         const work = entry.work || {};
         const rowOffset = pageIndex * CERTIFICATE_BLOCK_HEIGHT;
-        const fields = model.buildCertificateFields(sold, work, getArtistInstagramForCertificate(sold, work));
+        const fields = getModel().buildCertificateFields(sold, work, getArtistInstagramForCertificate(sold, work));
         setInlineCellValueByRef(cellMap, `F${24 + rowOffset}`, fields.artist, sheetDoc);
         setInlineCellValueByRef(cellMap, `F${26 + rowOffset}`, fields.title, sheetDoc);
         setInlineCellValueByRef(cellMap, `F${28 + rowOffset}`, fields.materials, sheetDoc);
@@ -711,10 +730,6 @@
     }
 
     async function handleDownloadAllCertificatesAction() {
-      if (typeof getJSZip() === 'undefined') {
-        options.alert('보증서 생성 라이브러리를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
-        return;
-      }
       const soldWorks = options.ensureSoldWorksArray();
       const generatedSales = soldWorks.filter((sold) => options.normalizeSoldItemType(sold) === '작품' && hasGeneratedCertificate(sold));
       if (generatedSales.length === 0) {
@@ -752,10 +767,6 @@
       const work = getSourceArtworkForSold(sold);
       if (!work) {
         options.alert('작품 목록에서 해당 작품 정보를 찾을 수 없습니다. 작품 목록 데이터를 확인해주세요.');
-        return;
-      }
-      if (typeof getXlsxPopulate() === 'undefined' || typeof getJSZip() === 'undefined') {
-        options.alert('보증서 생성을 위한 라이브러리를 불러오지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.');
         return;
       }
       if (!getCertificateImageDataUrl(sold, work)) {
@@ -798,10 +809,6 @@
       const work = getSourceArtworkForSold(sold);
       if (!work) {
         options.alert('작품 목록에서 해당 작품 정보를 찾을 수 없습니다. 작품 목록 데이터를 확인해주세요.');
-        return;
-      }
-      if (typeof getXlsxPopulate() === 'undefined' || typeof getJSZip() === 'undefined') {
-        options.alert('보증서 생성을 위한 라이브러리를 불러오지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.');
         return;
       }
       if (!getCertificateImageDataUrl(sold, work)) {

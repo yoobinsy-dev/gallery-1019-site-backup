@@ -50,12 +50,26 @@
     });
   }
 
-  const storage = root.BrowserStorageAdapter?.storage;
+  function createDeferredStudentsRepository(getStorage) {
+    function repository() {
+      const storage = getStorage();
+      if (!storage) throw new Error('Students storage adapter is unavailable.');
+      return createStudentsRepository(storage);
+    }
+    return Object.freeze({
+      loadStudents: () => repository().loadStudents(),
+      loadCalendarState: () => repository().loadCalendarState(),
+      saveStudents: (students) => repository().saveStudents(students),
+      saveCalendarState: (calendar) => repository().saveCalendarState(calendar)
+    });
+  }
+
   const api = Object.freeze({
     CALENDAR_KEY,
     STUDENTS_KEY,
     createStudentsRepository,
-    repository: storage ? createStudentsRepository(storage) : null
+    createDeferredStudentsRepository,
+    repository: createDeferredStudentsRepository(() => root.BrowserStorageAdapter?.storage)
   });
   root.StudentsRepository = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

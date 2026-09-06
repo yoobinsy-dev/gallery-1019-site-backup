@@ -38,11 +38,25 @@
     });
   }
 
-  const storage = root.BrowserStorageAdapter?.storage;
+  function createDeferredPersonalWorkRepository(getStorage) {
+    function repository() {
+      const storage = getStorage();
+      if (!storage) throw new Error('Personal work storage adapter is unavailable.');
+      return createPersonalWorkRepository(storage);
+    }
+    return Object.freeze({
+      loadUsers: () => repository().loadUsers(),
+      loadCalendarEvents: () => repository().loadCalendarEvents(),
+      loadEntries: () => repository().loadEntries(),
+      saveEntries: (entries) => repository().saveEntries(entries)
+    });
+  }
+
   const api = Object.freeze({
     KEYS,
     createPersonalWorkRepository,
-    repository: storage ? createPersonalWorkRepository(storage) : null
+    createDeferredPersonalWorkRepository,
+    repository: createDeferredPersonalWorkRepository(() => root.BrowserStorageAdapter?.storage)
   });
   root.PersonalWorkRepository = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -38,11 +38,26 @@
     });
   }
 
-  const storage = root.BrowserStorageAdapter?.storage;
+  function createDeferredMasterCalendarRepository(getStorage) {
+    function repository() {
+      const storage = getStorage();
+      if (!storage) throw new Error('Master calendar storage adapter is unavailable.');
+      return createMasterCalendarRepository(storage);
+    }
+    return Object.freeze({
+      loadCalendarState: () => repository().loadCalendarState(),
+      loadStudents: () => repository().loadStudents(),
+      loadPersonalWorkEntries: () => repository().loadPersonalWorkEntries(),
+      loadUsers: () => repository().loadUsers(),
+      saveCalendarState: (state) => repository().saveCalendarState(state)
+    });
+  }
+
   const api = Object.freeze({
     KEYS,
     createMasterCalendarRepository,
-    repository: storage ? createMasterCalendarRepository(storage) : null
+    createDeferredMasterCalendarRepository,
+    repository: createDeferredMasterCalendarRepository(() => root.BrowserStorageAdapter?.storage)
   });
   root.MasterCalendarRepository = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
