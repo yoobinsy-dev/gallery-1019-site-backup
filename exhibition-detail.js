@@ -112,10 +112,10 @@ function ensureCertificateLibraries() {
     certificateLibrariesPromise = Promise.all([
       globalThis.XlsxPopulate
         ? Promise.resolve()
-        : loadClassicScript('node_modules/xlsx-populate/browser/xlsx-populate.min.js'),
+        : loadClassicScript('/vendor/xlsx-populate-1.21.0/xlsx-populate.min.js'),
       globalThis.JSZip
         ? Promise.resolve()
-        : loadClassicScript('node_modules/jszip/dist/jszip.min.js')
+        : loadClassicScript('/vendor/jszip-3.10.1/jszip.min.js')
     ]).then(() => {
       if (!globalThis.XlsxPopulate || !globalThis.JSZip) {
         throw new Error('Certificate dependencies did not initialize.');

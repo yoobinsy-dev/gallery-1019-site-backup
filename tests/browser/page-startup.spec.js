@@ -586,6 +586,57 @@ test('certificate builder preserves template cells, date, image, and source reco
   expect(result.sourceUnchanged).toBe(true);
 });
 
+test('certificate dependencies load once from deployable vendor paths', async ({ page }) => {
+  const dependencyRequests = [];
+  page.on('request', (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.startsWith('/vendor/')) dependencyRequests.push(pathname);
+  });
+
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
+  const result = await page.evaluate(async () => {
+    const [exhibition] = JSON.parse(localStorage.getItem('exhibitions') || '[]');
+    const sold = exhibition.soldWorks.find((item) => item.id === 1);
+    const work = exhibition.works.find((item) => item.id === 900101);
+    const blobs = await Promise.all([
+      window.buildCertificateWorkbookBlob(sold, work),
+      window.buildCertificateWorkbookBlob(sold, work)
+    ]);
+    await window.buildCertificateWorkbookBlob(sold, work);
+    return {
+      initialized: Boolean(window.XlsxPopulate && window.JSZip),
+      sizes: blobs.map((blob) => blob.size)
+    };
+  });
+
+  expect(result.initialized).toBe(true);
+  expect(result.sizes.every((size) => size > 1000)).toBe(true);
+  expect(dependencyRequests).toEqual([
+    '/vendor/xlsx-populate-1.21.0/xlsx-populate.min.js',
+    '/vendor/jszip-3.10.1/jszip.min.js'
+  ]);
+});
+
+test('missing certificate dependency preserves the loader failure', async ({ page }) => {
+  await page.route('**/vendor/xlsx-populate-1.21.0/xlsx-populate.min.js', (route) => route.abort());
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
+  const message = await page.evaluate(async () => {
+    const [exhibition] = JSON.parse(localStorage.getItem('exhibitions') || '[]');
+    const sold = exhibition.soldWorks.find((item) => item.id === 1);
+    const work = exhibition.works.find((item) => item.id === 900101);
+    try {
+      await window.buildCertificateWorkbookBlob(sold, work);
+      return '';
+    } catch (error) {
+      return error.message;
+    }
+  });
+
+  expect(message).toBe('Failed to load certificate dependency: /vendor/xlsx-populate-1.21.0/xlsx-populate.min.js');
+});
+
 test('certificate batch builder preserves page blocks, print area, images, and source records', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
   await page.evaluate(() => window.exhibitionDetailReady);
