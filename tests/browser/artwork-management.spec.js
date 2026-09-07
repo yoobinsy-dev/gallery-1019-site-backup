@@ -87,6 +87,13 @@ test('artwork management renders canonical collection and derived exhibition vie
   await expect(page.locator('#past-exhibition-table .artwork-status-owned')).toHaveCount(6);
   expect(await page.locator('#past-exhibition-table .artwork-status-sold').count()).toBeGreaterThan(0);
   await expect(page.locator('#artwork-resolution-note')).toContainText('1개');
+  await page.locator('#artwork-resolve-btn').click();
+  await expect(page.locator('#artwork-resolution-context')).toContainText('DEV_DUMMY_작가_모호');
+  await expect(page.locator('#artwork-resolution-context')).toContainText('DEV_DUMMY_모호한 작품');
+  await expect(page.locator('#artwork-resolution-form select[name="workId"] option')).toHaveCount(3);
+  await expect(page.locator('#artwork-resolution-form select[name="workId"]')).toContainText('20 × 20 cm');
+  await expect(page.locator('#artwork-resolution-form select[name="workId"]')).toContainText('30 × 30 cm');
+  await page.locator('#artwork-resolution-cancel').click();
   const tableHolder = page.locator('#past-exhibition-table .tabulator-tableholder');
   expect(await tableHolder.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   await tableHolder.evaluate((element) => { element.scrollTop = element.scrollHeight; });

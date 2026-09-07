@@ -60,6 +60,7 @@ body { color: var(--art-ink); }
 .artwork-dialog-actions button { padding: 9px 18px; border: 1px solid #bfc5be; border-radius: 4px; background: #fff; cursor: pointer; }
 .artwork-dialog-actions button[type="submit"] { border-color: var(--art-accent); background: var(--art-accent); color: #fff; }
 .artwork-editor-error { min-height: 18px; margin: 10px 0 0; color: var(--art-danger); font-size: 12px; }
+.artwork-resolution-context { margin: 0; padding: 10px 12px; border: 1px solid var(--art-line); background: var(--art-paper); color: var(--art-muted); font-size: 13px; line-height: 1.5; }
 
 @media (max-width: 760px) {
   .artwork-management-page > .user-info { position: static; width: calc(100% - 20px); margin: 10px 10px 0; box-sizing: border-box; }

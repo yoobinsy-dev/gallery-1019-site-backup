@@ -6,6 +6,7 @@ const path = require('node:path');
 const identity = require('../../artworks/identity');
 const index = require('../../artworks/exhibition-index');
 const sync = require('../../artworks/sync-service');
+const backfill = require('../../artworks/backfill');
 const rowEditorModule = require('../../artwork-management/row-editor-controller');
 const excelExport = require('../../artwork-management/excel-export');
 
@@ -122,6 +123,66 @@ test('ambiguous occurrence can be explicitly linked or created without guessing'
   const created = sync.resolveOccurrence({ artworks, exhibitions, exhibitionId: 1, occurrenceId: 1, workId: null, randomUUID: () => '00000000-0000-4000-8000-000000000002' });
   assert.equal(created.exhibitions[0].works[0].workId, 'work_00000000-0000-4000-8000-000000000002');
   assert.equal(created.artworks.length, 3);
+});
+
+test('legacy backfill conservatively links, creates, preserves, and uses latest metadata', () => {
+  const artworks = [
+    artwork('work_existing'),
+    artwork('work_twin_a', { title: 'Twin', size: '20x20', year: '2024' }),
+    artwork('work_twin_b', { title: 'Twin', size: '30x30', year: '2025' })
+  ];
+  const exhibitions = [
+    { id: 1, title: 'Earlier', endDate: '2025-01-01', works: [
+      occurrence(1, null, { title: 'New Work', author: 'Park', price: 100, customLegacyField: { keep: true } }),
+      occurrence(2, null, { title: 'Blue', author: 'Kim' }),
+      occurrence(3, null, { title: 'Shared Title', author: 'Lee' })
+    ] },
+    { id: 2, title: 'Latest', endDate: '2026-01-01', works: [
+      occurrence(4, null, { title: 'New Work', author: 'Park', materials: 'Ink', price: 250, photoUrl: 'https://blob.example/latest.png' }),
+      occurrence(5, null, { title: 'Shared Title', author: 'Choi' }),
+      occurrence(6, null, { title: 'Twin', author: 'Kim', size: '', year: '' })
+    ] }
+  ];
+  const analysis = backfill.analyzeBackfill({ artworks, exhibitions });
+  assert.deepEqual(analysis.summary, {
+    legacyOccurrences: 6,
+    UNIQUE: 4,
+    CLEAR_MATCH: 1,
+    AMBIGUOUS: 1,
+    canonicalArtworksToCreate: 3,
+    occurrencesToLink: 5,
+    existingArtworksToReuse: 1
+  });
+
+  let sequence = 0;
+  const result = backfill.applyBackfill({ artworks, exhibitions, now: '2026-09-07T00:00:00.000Z', randomUUID: () => `00000000-0000-4000-8000-${String(++sequence).padStart(12, '0')}` });
+  const earlierNew = result.exhibitions[0].works[0];
+  const latestNew = result.exhibitions[1].works[0];
+  assert.equal(earlierNew.workId, latestNew.workId);
+  assert.equal(result.exhibitions[0].works[1].workId, 'work_existing');
+  assert.notEqual(result.exhibitions[0].works[2].workId, result.exhibitions[1].works[1].workId);
+  assert.equal(result.exhibitions[1].works[2].workId, null);
+  assert.deepEqual(earlierNew.customLegacyField, { keep: true });
+  assert.deepEqual(result.exhibitions.flatMap((item) => item.works).map((item) => item.price), [100, 100, 100, 250, 100, 100]);
+  const canonical = result.artworks.find((item) => item.workId === earlierNew.workId);
+  assert.deepEqual({ size: canonical.size, medium: canonical.medium, year: canonical.year, currentPrice: canonical.currentPrice, photoUrl: canonical.imageRef.photoUrl }, {
+    size: '10x10', medium: 'Ink', year: '2025', currentPrice: 250, photoUrl: 'https://blob.example/latest.png'
+  });
+  assert.equal(index.buildExhibitionIndex(result.exhibitions, result.artworks).rows.find((row) => row.workId === earlierNew.workId).exhibitionHistory.length, 2);
+
+  const secondAnalysis = backfill.analyzeBackfill(result);
+  assert.deepEqual(secondAnalysis.summary, {
+    legacyOccurrences: 1,
+    UNIQUE: 0,
+    CLEAR_MATCH: 0,
+    AMBIGUOUS: 1,
+    canonicalArtworksToCreate: 0,
+    occurrencesToLink: 0,
+    existingArtworksToReuse: 0
+  });
+  const second = backfill.applyBackfill({ ...result, now: '2026-09-08T00:00:00.000Z', randomUUID: () => { throw new Error('must not create'); } });
+  assert.deepEqual(second.artworks, result.artworks);
+  assert.deepEqual(second.exhibitions, result.exhibitions);
 });
 
 test('vendored Tabulator 6.5.0 assets are deployable', () => {

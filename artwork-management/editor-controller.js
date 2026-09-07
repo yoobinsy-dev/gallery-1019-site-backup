@@ -8,8 +8,30 @@
     const resolutionDialog = document.getElementById('artwork-resolution-dialog');
     const resolutionForm = document.getElementById('artwork-resolution-form');
     let unresolved = [];
+    let resolutionArtworks = [];
     let active = null;
     let tab = 'collection';
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+    }
+
+    function updateResolutionContext() {
+      const occurrenceIndex = Number(resolutionForm.elements.namedItem('occurrence').value);
+      const selected = unresolved[occurrenceIndex];
+      if (!selected) return;
+      const candidates = selected.resolution?.candidates?.length ? selected.resolution.candidates : resolutionArtworks;
+      document.getElementById('artwork-resolution-context').textContent = [
+        `작가: ${selected.work.author || selected.work.artistName || '-'}`,
+        `작품명: ${selected.work.title || '-'}`,
+        `연도: ${selected.work.year || '-'}`,
+        `크기: ${selected.work.size || '-'}`,
+        `전시: ${selected.exhibition.title || selected.exhibition.name || '-'}`
+      ].join(' · ');
+      resolutionForm.elements.namedItem('workId').innerHTML = '<option value="">기존 작품 선택</option>' + candidates.map((artwork) => (
+        `<option value="${escapeHtml(artwork.workId)}">${escapeHtml(artwork.title)} · ${escapeHtml(artwork.artistName)} · ${escapeHtml(artwork.year || '-')} · ${escapeHtml(artwork.size || '-')}</option>`
+      )).join('');
+    }
 
     function field(name) {
       return form.elements.namedItem(name);
@@ -78,13 +100,15 @@
       resolutionDialog.close();
     });
     document.getElementById('artwork-resolution-cancel').addEventListener('click', () => resolutionDialog.close());
+    resolutionForm.elements.namedItem('occurrence').addEventListener('change', updateResolutionContext);
 
     return Object.freeze({
       openEdit: populate,
       openResolution(items, artworks) {
         unresolved = items;
-        resolutionForm.elements.namedItem('occurrence').innerHTML = items.map((item, index) => `<option value="${index}">${item.work.title} · ${item.work.author} · ${item.exhibition.title || item.exhibition.name}</option>`).join('');
-        resolutionForm.elements.namedItem('workId').innerHTML = '<option value="">기존 작품 선택</option>' + artworks.map((artwork) => `<option value="${artwork.workId}">${artwork.title} · ${artwork.artistName} · ${artwork.year || '-'}</option>`).join('');
+        resolutionArtworks = artworks;
+        resolutionForm.elements.namedItem('occurrence').innerHTML = items.map((item, index) => `<option value="${index}">${escapeHtml(item.work.title)} · ${escapeHtml(item.work.author || item.work.artistName)} · ${escapeHtml(item.work.year || '-')} · ${escapeHtml(item.work.size || '-')} · ${escapeHtml(item.exhibition.title || item.exhibition.name)}</option>`).join('');
+        updateResolutionContext();
         resolutionDialog.showModal();
       }
     });
