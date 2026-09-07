@@ -254,7 +254,7 @@ const pages = [
   ['landing', '/index.html'],
   ['exhibition list', '/exhibitions.html'],
   ['exhibition detail', `/exhibition-detail.html?id=${EXHIBITION_ID}`],
-  ['inventory', '/inventory.html'],
+  ['artwork management', '/artwork-management.html'],
   ['studio calendar', '/pottery-master-calendar.html'],
   ['students', '/pottery-students.html'],
   ['personal work', '/pottery-personal-work.html'],

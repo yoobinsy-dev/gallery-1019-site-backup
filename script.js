@@ -94,9 +94,9 @@ function setupMenuButtons(currentUser) {
   const accountType = getEffectiveGalleryRole(currentUser);
   let allowedPages = [];
   if (isAdminAccount(accountType)) {
-    allowedPages = ['exhibitions', 'accounting', 'inventory'];
+    allowedPages = ['exhibitions', 'accounting', 'artwork-management'];
   } else if (isStaffAccount(accountType)) {
-    allowedPages = ['exhibitions', 'inventory'];
+    allowedPages = ['exhibitions', 'artwork-management'];
   } else if (isExhibitionMemberAccount(accountType)) {
     allowedPages = ['exhibitions'];
   }
@@ -128,8 +128,8 @@ function handleMenuClick(page) {
     case 'accounting':
       alert('회계 페이지는 준비 중입니다.');
       break;
-    case 'inventory':
-      window.location.href = 'inventory.html';
+    case 'artwork-management':
+      window.location.href = 'artwork-management.html';
       break;
   }
 }

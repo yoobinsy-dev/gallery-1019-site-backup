@@ -1,0 +1,72 @@
+:root {
+  --art-ink: #20241f;
+  --art-muted: #6c746b;
+  --art-line: #d9ddd7;
+  --art-paper: #f7f8f5;
+  --art-accent: #176a4a;
+  --art-accent-dark: #104b35;
+  --art-danger: #a43e36;
+}
+
+body { background: linear-gradient(135deg, #f4f5f1 0%, #fff 48%, #eef2ed 100%); color: var(--art-ink); }
+.artwork-page { width: min(1680px, calc(100% - 40px)); min-height: 100vh; margin: 0 auto; padding: 24px 0 36px; box-sizing: border-box; }
+.artwork-header { display: grid; grid-template-columns: 180px 1fr 220px; align-items: center; margin-bottom: 20px; }
+.artwork-header h1 { margin: 3px 0 0; font-family: Georgia, 'Times New Roman', serif; font-size: 32px; letter-spacing: 0; }
+.artwork-header .section-label { margin: 0; color: var(--art-accent); font-size: 11px; font-weight: 800; letter-spacing: 1.6px; }
+.artwork-user { text-align: right; color: var(--art-muted); font-size: 13px; }
+.artwork-workspace { min-height: calc(100vh - 130px); border: 1px solid var(--art-line); background: rgba(255,255,255,.94); box-shadow: 0 16px 42px rgba(31,42,34,.08); }
+.artwork-tabs { display: flex; border-bottom: 1px solid var(--art-line); background: #f1f3ef; }
+.artwork-tab { min-width: 160px; padding: 15px 22px; border: 0; border-right: 1px solid var(--art-line); background: transparent; color: var(--art-muted); font-weight: 700; cursor: pointer; }
+.artwork-tab.active { background: #fff; color: var(--art-accent-dark); box-shadow: inset 0 -3px var(--art-accent); }
+.artwork-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 16px 18px; border-bottom: 1px solid var(--art-line); }
+.artwork-search { display: grid; gap: 5px; color: var(--art-muted); font-size: 12px; font-weight: 700; }
+.artwork-search input { width: min(420px, 48vw); padding: 10px 12px; border: 1px solid #bec5bd; border-radius: 4px; font: inherit; }
+.artwork-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+#artwork-selection-count { min-width: 58px; color: var(--art-muted); font-size: 12px; }
+.artwork-table { height: calc(100vh - 240px); min-height: 460px; }
+.artwork-table[hidden] { display: none; }
+.artwork-resolution-note { margin: 0; padding: 10px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #fff7dc; color: #695311; font-size: 13px; }
+.artwork-resolution-note[hidden] { display: none; }
+.artwork-resolution-note button { border: 1px solid #b49a45; border-radius: 4px; background: #fff; padding: 6px 10px; cursor: pointer; }
+.artwork-thumbnail { width: 58px; height: 58px; display: block; margin: 4px auto; object-fit: cover; border: 1px solid var(--art-line); }
+.artwork-thumbnail-empty { width: 58px; height: 44px; display: grid; place-items: center; margin: 4px auto; background: #eef0ec; color: #7d847c; font-size: 10px; }
+.collection-indicator { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: #1b8f58; box-shadow: 0 0 0 3px #dff1e7; }
+.history-chip { display: inline-block; margin: 2px 5px 2px 0; padding: 3px 7px; border: 1px solid #cad3ca; border-radius: 3px; background: #f5f7f4; font-size: 11px; }
+.history-empty { color: #929891; font-size: 12px; }
+.tabulator { border: 0; background: #fff; font-family: inherit; font-size: 13px; }
+.tabulator .tabulator-header { border-bottom: 2px solid var(--art-accent); background: #f1f3ef; color: #30362f; font-weight: 800; }
+.tabulator .tabulator-header .tabulator-col { background: #f1f3ef; border-right-color: var(--art-line); }
+.tabulator-row { min-height: 68px; border-bottom: 1px solid #e7e9e5; background: #fff; }
+.tabulator-row.tabulator-row-even { background: #fafbf9; }
+.tabulator-row.tabulator-selected { background: #e3f1e9; }
+.tabulator-row:hover { background: #eef5f0; }
+.tabulator .tabulator-cell { display: inline-flex; align-items: center; border-right-color: #eceeea; white-space: normal; }
+.tabulator-placeholder { color: var(--art-muted); }
+.artwork-dialog { width: min(720px, calc(100% - 32px)); border: 0; border-radius: 6px; padding: 0; box-shadow: 0 24px 80px rgba(20,31,24,.28); }
+.artwork-dialog::backdrop { background: rgba(25,31,27,.48); }
+.artwork-dialog form { padding: 22px; }
+.artwork-dialog-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--art-line); padding-bottom: 12px; }
+.artwork-dialog-header h2 { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 23px; }
+.artwork-dialog-header button { border: 0; background: transparent; font-size: 28px; cursor: pointer; }
+.artwork-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+.artwork-form-grid label { display: grid; gap: 6px; color: var(--art-muted); font-size: 12px; font-weight: 700; }
+.artwork-form-grid input { min-width: 0; padding: 10px; border: 1px solid #c8cdc7; border-radius: 4px; font: inherit; }
+.artwork-form-grid select { min-width: 0; padding: 10px; border: 1px solid #c8cdc7; border-radius: 4px; background: #fff; font: inherit; }
+.artwork-form-grid .wide { grid-column: 1 / -1; }
+.artwork-form-grid .checkbox-field { display: flex; align-items: center; }
+.artwork-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.artwork-dialog-actions button { padding: 9px 18px; border: 1px solid #bfc5be; border-radius: 4px; background: #fff; cursor: pointer; }
+.artwork-dialog-actions button[type="submit"] { border-color: var(--art-accent); background: var(--art-accent); color: #fff; }
+.artwork-editor-error { min-height: 18px; margin: 10px 0 0; color: var(--art-danger); font-size: 12px; }
+
+@media (max-width: 760px) {
+  .artwork-page { width: calc(100% - 20px); padding-top: 12px; }
+  .artwork-header { grid-template-columns: 1fr auto; }
+  .artwork-header .back-btn { grid-column: 1 / -1; justify-self: start; margin-bottom: 14px; }
+  .artwork-header h1 { font-size: 25px; }
+  .artwork-toolbar { align-items: stretch; flex-direction: column; }
+  .artwork-search input { width: 100%; box-sizing: border-box; }
+  .artwork-actions { justify-content: flex-start; }
+  .artwork-form-grid { grid-template-columns: 1fr; }
+  .artwork-form-grid .wide { grid-column: auto; }
+}
