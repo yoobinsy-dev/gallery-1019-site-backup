@@ -13,7 +13,7 @@ body { background: linear-gradient(135deg, #f4f5f1 0%, #fff 48%, #eef2ed 100%); 
 .artwork-header { display: grid; grid-template-columns: 180px 1fr 220px; align-items: center; margin-bottom: 20px; }
 .artwork-header h1 { margin: 3px 0 0; font-family: Georgia, 'Times New Roman', serif; font-size: 32px; letter-spacing: 0; }
 .artwork-header .section-label { margin: 0; color: var(--art-accent); font-size: 11px; font-weight: 800; letter-spacing: 1.6px; }
-.artwork-user { text-align: right; color: var(--art-muted); font-size: 13px; }
+.artwork-header .artwork-user { position: static; justify-self: end; padding: 10px 14px; text-align: right; color: var(--art-muted); font-size: 13px; }
 .artwork-workspace { min-height: calc(100vh - 130px); border: 1px solid var(--art-line); background: rgba(255,255,255,.94); box-shadow: 0 16px 42px rgba(31,42,34,.08); }
 .artwork-tabs { display: flex; border-bottom: 1px solid var(--art-line); background: #f1f3ef; }
 .artwork-tab { min-width: 160px; padding: 15px 22px; border: 0; border-right: 1px solid var(--art-line); background: transparent; color: var(--art-muted); font-weight: 700; cursor: pointer; }
@@ -61,8 +61,10 @@ body { background: linear-gradient(135deg, #f4f5f1 0%, #fff 48%, #eef2ed 100%); 
 
 @media (max-width: 760px) {
   .artwork-page { width: calc(100% - 20px); padding-top: 12px; }
-  .artwork-header { grid-template-columns: 1fr auto; }
-  .artwork-header .back-btn { grid-column: 1 / -1; justify-self: start; margin-bottom: 14px; }
+  .artwork-header { grid-template-areas: 'back' 'user' 'title'; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .artwork-header .back-btn { grid-area: back; justify-self: start; }
+  .artwork-header .artwork-user { grid-area: user; justify-self: stretch; max-width: 100%; box-sizing: border-box; }
+  .artwork-title { grid-area: title; }
   .artwork-header h1 { font-size: 25px; }
   .artwork-toolbar { align-items: stretch; flex-direction: column; }
   .artwork-search input { width: 100%; box-sizing: border-box; }
