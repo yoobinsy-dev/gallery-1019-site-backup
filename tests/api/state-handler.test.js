@@ -100,7 +100,8 @@ test('state handler characterizes rejected keys, malformed body, methods, and st
   assert.equal(invalidGet.statusCode, 200);
   assert.deepEqual(Object.keys(invalidGet.json().meta), [
     'users', 'exhibitions', 'pottery-students-v1', 'pottery-personal-work-v1',
-    'studio-calendar-state-v1', 'pottery-material-orders-v1', 'pottery-accounting-v1'
+    'studio-calendar-state-v1', 'pottery-material-orders-v1', 'pottery-accounting-v1',
+    'gallery-artworks-v1'
   ]);
   assert.equal((await invoke(harness, 'PUT', { body: { key: 'invalid', value: [] } })).statusCode, 400);
   assert.equal((await invoke(harness, 'POST')).statusCode, 405);

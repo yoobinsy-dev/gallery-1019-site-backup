@@ -8,7 +8,8 @@
     'pottery-personal-work-v1',
     'studio-calendar-state-v1',
     'pottery-material-orders-v1',
-    'pottery-accounting-v1'
+    'pottery-accounting-v1',
+    'gallery-artworks-v1'
   ]);
 
   function getPageName(pathname) {
@@ -40,11 +41,14 @@
     if (page === 'gallery-lounge.html' || page === 'inventory.html') {
       return [];
     }
+    if (page === 'artwork-management.html') {
+      return ['users', 'exhibitions', 'gallery-artworks-v1'];
+    }
     if (page === 'exhibitions.html') {
       return ['exhibitions'];
     }
     if (page === 'exhibition-detail.html') {
-      return ['users', 'exhibitions'];
+      return ['users', 'exhibitions', 'gallery-artworks-v1'];
     }
     return SYNCED_KEYS.slice();
   }
