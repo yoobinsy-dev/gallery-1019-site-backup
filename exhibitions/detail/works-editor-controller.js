@@ -55,6 +55,7 @@
       if (state.exhibition) {
         state.exhibition.works = exhibition.works;
       }
+
       options.saveExhibition();
       options.renderWorkRows();
       options.updateSaveAllButtonVisibility();
@@ -70,6 +71,25 @@
           }
         }
       });
+    }
+
+    function addWorkOccurrences(occurrences) {
+      const exhibition = options.getCurrentExhibition();
+      exhibition.works = exhibition.works || [];
+      const linked = new Set(exhibition.works.map((work) => work.workId).filter(Boolean));
+      const additions = (occurrences || []).filter((work) => {
+        if (!work?.workId || linked.has(work.workId)) return false;
+        linked.add(work.workId);
+        return true;
+      });
+      if (!additions.length) return 0;
+      options.pushWorkUndoSnapshot();
+      exhibition.works.push(...additions);
+      if (state.exhibition) state.exhibition.works = exhibition.works;
+      options.saveExhibition();
+      options.renderWorkRows();
+      options.updateSaveAllButtonVisibility();
+      return additions.length;
     }
 
     function duplicateWorkRow(workId) {
@@ -939,6 +959,7 @@
 
     return {
       addWorkRow,
+        addWorkOccurrences,
       duplicateWorkRow,
       saveWork,
       saveAllWorks,

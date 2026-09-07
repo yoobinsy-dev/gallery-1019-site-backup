@@ -143,6 +143,103 @@ test('artwork management mobile header and controls do not overlap', async ({ pa
   for (let index = 1; index < boxes.length; index += 1) {
     expect(boxes[index].y).toBeGreaterThanOrEqual(boxes[index - 1].y + boxes[index - 1].height);
   }
+  await page.locator('#artwork-add-existing-btn').click();
+  const pickerBox = await page.locator('.work-picker-dialog').boundingBox();
+  expect(pickerBox.x).toBeGreaterThanOrEqual(0);
+  expect(pickerBox.x + pickerBox.width).toBeLessThanOrEqual(390);
+  expect(pickerBox.y).toBeGreaterThanOrEqual(0);
+  expect(pickerBox.y + pickerBox.height).toBeLessThanOrEqual(844);
+  await expect(page.locator('.work-picker-search')).toBeVisible();
+  await expect(page.locator('.work-picker-confirm')).toBeVisible();
+});
+
+test('existing exhibited artworks can be searched and added to collection in one batch', async ({ page }) => {
+  const fixture = buildSeedData(new Date('2026-09-07T12:00:00.000Z'));
+  const serverState = { ...fixture, users: [user] };
+  const initialCount = fixture['gallery-artworks-v1'].length;
+  const exhibitedIds = new Set(fixture.exhibitions.flatMap((exhibition) => exhibition.works.map((work) => work.workId)));
+  const candidates = fixture['gallery-artworks-v1'].filter((artwork) => exhibitedIds.has(artwork.workId) && artwork.collection?.owned !== true);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  expect(candidates.length).toBeGreaterThanOrEqual(2);
+  await mockStateApi(page, serverState);
+  await page.addInitScript((activeUser) => localStorage.setItem('currentUser', JSON.stringify(activeUser)), user);
+
+  await page.goto('/artwork-management.html', { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => window.artworkManagementReady);
+  await page.locator('#artwork-add-existing-btn').click();
+  await expect.poll(() => pageErrors).toEqual([]);
+  await expect(page.locator('.work-picker-dialog')).toBeVisible();
+  await expect(page.locator('.work-picker-item')).toHaveCount(candidates.length);
+  await page.locator('.work-picker-close').click();
+  await page.locator('#artwork-add-existing-btn').click();
+  await page.locator('.work-picker-search').fill(candidates[0].artistName);
+  await expect(page.locator('.work-picker-item').filter({ hasText: candidates[0].title })).toBeVisible();
+  await page.locator('.work-picker-search').fill('');
+  const selected = candidates.slice(0, 2);
+  for (const candidate of selected) {
+    await page.locator(`.work-picker-item input[value="${candidate.workId}"]`).check();
+  }
+  await expect(page.locator('.work-picker-count')).toHaveText('2개 선택');
+  await page.locator('.work-picker-confirm').click();
+
+  await expect(page.locator('.work-picker-dialog')).toBeHidden();
+  await expect.poll(() => serverState['gallery-artworks-v1'].filter((artwork) => selected.some((candidate) => candidate.workId === artwork.workId) && artwork.collection?.owned).length).toBe(2);
+  expect(serverState['gallery-artworks-v1']).toHaveLength(initialCount);
+  const updated = serverState['gallery-artworks-v1'].filter((artwork) => selected.some((candidate) => candidate.workId === artwork.workId));
+  expect(new Set(updated.map((artwork) => artwork.collection.dateAdded)).size).toBe(1);
+  expect(new Set(updated.map((artwork) => artwork.collection.collectionNumber)).size).toBe(2);
+  expect(updated.every((artwork) => /^COL-2026-\d{3,}$/.test(artwork.collection.collectionNumber))).toBe(true);
+  await expect(page.locator('#collection-table .tabulator-row').filter({ hasText: selected[0].title })).toHaveCount(1);
+});
+
+test('collection artworks can be added to an exhibition with canonical links and no duplicates', async ({ page }) => {
+  const fixture = buildSeedData(new Date('2026-09-07T12:00:00.000Z'));
+  const serverState = { ...fixture, users: [user] };
+  const owned = fixture['gallery-artworks-v1'].filter((artwork) => artwork.collection?.owned === true);
+  const exhibition = fixture.exhibitions.find((item) => {
+    const linked = new Set(item.works.map((work) => work.workId));
+    return owned.filter((artwork) => !linked.has(artwork.workId)).length >= 2;
+  });
+  const linked = new Set(exhibition.works.map((work) => work.workId));
+  const candidates = owned.filter((artwork) => !linked.has(artwork.workId));
+  const selected = candidates.slice(0, 2);
+  const initialArtworkCount = fixture['gallery-artworks-v1'].length;
+  const initialOccurrenceCount = exhibition.works.length;
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await mockStateApi(page, serverState);
+  await page.addInitScript((activeUser) => localStorage.setItem('currentUser', JSON.stringify(activeUser)), user);
+
+  await page.goto(`/exhibition-detail.html?id=${exhibition.id}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
+  await page.evaluate(() => window.switchTab('inventory-list'));
+  await page.getByRole('button', { name: '소장품에서 추가', exact: true }).first().click();
+  await expect.poll(() => pageErrors).toEqual([]);
+  await expect(page.locator('.work-picker-item')).toHaveCount(candidates.length);
+  for (const candidate of selected) {
+    await page.locator(`.work-picker-item input[value="${candidate.workId}"]`).check();
+  }
+  await page.locator('.work-picker-confirm').click();
+
+  await expect.poll(() => serverState.exhibitions.find((item) => item.id === exhibition.id).works.length).toBe(initialOccurrenceCount + 2);
+  expect(serverState['gallery-artworks-v1']).toHaveLength(initialArtworkCount);
+  const persisted = serverState.exhibitions.find((item) => item.id === exhibition.id).works.filter((work) => selected.some((artwork) => artwork.workId === work.workId));
+  expect(persisted).toHaveLength(2);
+  expect(new Set(persisted.map((work) => work.workId)).size).toBe(2);
+  persisted.forEach((work) => {
+    const canonical = selected.find((artwork) => artwork.workId === work.workId);
+    expect(work.price).toBe(canonical.currentPrice);
+    expect(work.photoUrl).toBe(canonical.imageRef?.photoUrl || '');
+    expect(work.photoPreviewUrl).toBe(canonical.imageRef?.photoPreviewUrl || '');
+  });
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
+  await page.evaluate(() => window.switchTab('inventory-list'));
+  for (const work of persisted) await expect(page.locator(`tr[data-work-id="${work.id}"]`)).toHaveCount(1);
+  await page.getByRole('button', { name: '소장품에서 추가', exact: true }).first().click();
+  for (const canonical of selected) await expect(page.locator(`.work-picker-item input[value="${canonical.workId}"]`)).toHaveCount(0);
 });
 
 test('exhibition detail saves linked artwork identity and latest price to the canonical record', async ({ page }) => {

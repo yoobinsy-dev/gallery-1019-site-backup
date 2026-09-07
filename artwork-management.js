@@ -12,6 +12,8 @@
     selectionController: root.ArtworkSelectionController,
     filtersController: root.ArtworkFiltersController,
     toolbarController: root.ArtworkToolbarController,
+      workPickerController: root.ArtworkWorkPickerController,
+      collectionAddController: root.ArtworkCollectionAddController,
     editorController: root.ArtworkEditorController,
     rowEditorController: root.ArtworkRowEditorController,
     excelExport: root.ArtworkExcelExport,
@@ -23,6 +25,7 @@
   let toolbar;
   let editor;
   let rowEditor;
+    let collectionAdd;
   let unresolved = [];
 
   function getAuthorizedUser() {
@@ -169,9 +172,22 @@
     toolbar = modules.toolbarController.create({
       document,
       onAdd: () => rowEditor.addDraft(state.tables.collection),
+      onAddExisting: () => collectionAdd.open(),
       onEdit: () => editor.openEdit(state.selected[0], state.tab),
       onRemove: removeFromCollection,
       onExport: () => modules.excelExport.download(state.tables[state.tab], state.tab)
+    });
+    const picker = modules.workPickerController.create({ document });
+    collectionAdd = modules.collectionAddController.create({
+      picker,
+      getArtworks: () => state.artworks,
+      getExhibitionRows: () => modules.exhibitionIndex.buildExhibitionIndex(state.exhibitions, state.artworks).rows,
+      saveArtworks: (artworks) => modules.artworkRepository.repository.saveArtworksSafely(artworks),
+      now: () => new Date(),
+      onAdded(artworks) {
+        state.artworks = artworks;
+        refresh();
+      }
     });
     selection = modules.selectionController.create({ onChange: (rows) => { state.selected = rows; document.getElementById('artwork-selection-count').textContent = `${rows.length}개 선택`; toolbar.update({ tab: state.tab, selectedCount: rows.length }); } });
     filters = modules.filtersController.create({ input: document.getElementById('artwork-search') });

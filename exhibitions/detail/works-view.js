@@ -70,6 +70,14 @@
       addButton.onclick = () => options.addWorkRow();
       actionsRow.appendChild(addButton);
 
+      if (!isGoodsMode) {
+        const collectionButton = document.createElement('button');
+        collectionButton.className = 'works-action-btn';
+        collectionButton.textContent = '소장품에서 추가';
+        collectionButton.onclick = () => options.openCollectionPicker();
+        actionsRow.appendChild(collectionButton);
+      }
+
       const actionGroup = document.createElement('div');
       actionGroup.className = 'works-action-group';
 
@@ -234,6 +242,14 @@
       bottomAddButton.textContent = isGoodsMode ? '+ 굿즈 추가' : '+ 작품 추가';
       bottomAddButton.onclick = () => options.addWorkRow();
       bottomActionsRow.appendChild(bottomAddButton);
+
+      if (!isGoodsMode) {
+        const bottomCollectionButton = document.createElement('button');
+        bottomCollectionButton.className = 'works-action-btn';
+        bottomCollectionButton.textContent = '소장품에서 추가';
+        bottomCollectionButton.onclick = () => options.openCollectionPicker();
+        bottomActionsRow.appendChild(bottomCollectionButton);
+      }
 
       const bottomActionGroup = document.createElement('div');
       bottomActionGroup.className = 'works-action-group';

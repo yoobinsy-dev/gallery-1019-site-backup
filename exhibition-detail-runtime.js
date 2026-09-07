@@ -2866,6 +2866,150 @@ registerLocalPreviewAdminGuards();
   return Object.freeze({ IDENTITY_FIELDS, applyCanonicalFieldsToOccurrence, resolveOccurrence, synchronizeCanonicalEdit, synchronizeOccurrenceEdit, synchronizeSavedOccurrence, updateLatestOccurrence });
 });
 
+/* artworks/work-picker-controller.js */
+(function initializeArtworkWorkPickerController(root, factory) {
+  'use strict';
+
+  const api = factory();
+  root.ArtworkWorkPickerController = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function createArtworkWorkPickerControllerModule() {
+  'use strict';
+
+  function normalize(value) {
+    return String(value ?? '').trim().toLocaleLowerCase();
+  }
+
+  function filterCandidates(candidates, query) {
+    const needle = normalize(query);
+    if (!needle) return candidates;
+    return candidates.filter((candidate) => [candidate.title, candidate.artistName, candidate.year, candidate.medium]
+      .some((value) => normalize(value).includes(needle)));
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function create(options = {}) {
+    const document = options.document;
+    const dialog = document.createElement('dialog');
+    dialog.className = 'work-picker-dialog';
+    dialog.innerHTML = `
+      <form method="dialog" class="work-picker-form">
+        <div class="work-picker-header">
+          <h2></h2>
+          <button type="button" class="work-picker-close" aria-label="닫기">×</button>
+        </div>
+        <div class="work-picker-tools">
+          <input class="work-picker-search" type="search" placeholder="작품명, 작가, 연도, 재료 검색" aria-label="작품 검색">
+          <label class="work-picker-select-all"><input type="checkbox"> 현재 목록 전체 선택</label>
+        </div>
+        <div class="work-picker-list"></div>
+        <div class="work-picker-footer">
+          <span class="work-picker-count" aria-live="polite">0개 선택</span>
+          <div>
+            <button type="button" class="work-picker-cancel">취소</button>
+            <button type="submit" class="work-picker-confirm" disabled>선택 추가</button>
+          </div>
+        </div>
+      </form>`;
+    document.body.appendChild(dialog);
+
+    const title = dialog.querySelector('h2');
+    const search = dialog.querySelector('.work-picker-search');
+    const selectAll = dialog.querySelector('.work-picker-select-all input');
+    const list = dialog.querySelector('.work-picker-list');
+    const count = dialog.querySelector('.work-picker-count');
+    const confirm = dialog.querySelector('.work-picker-confirm');
+    let candidates = [];
+    let visible = [];
+    let selected = new Set();
+    let onConfirm = () => {};
+
+    function imageRef(candidate) {
+      return candidate.imageRef?.photoPreviewUrl || candidate.imageRef?.photoUrl || candidate.photoPreviewUrl || candidate.photoUrl || '';
+    }
+
+    function updateSelectionState() {
+      const visibleIds = visible.map((candidate) => candidate.workId);
+      const selectedVisible = visibleIds.filter((workId) => selected.has(workId)).length;
+      selectAll.checked = visibleIds.length > 0 && selectedVisible === visibleIds.length;
+      selectAll.indeterminate = selectedVisible > 0 && selectedVisible < visibleIds.length;
+      count.textContent = `${selected.size}개 선택`;
+      confirm.disabled = selected.size === 0;
+    }
+
+    function render() {
+      visible = filterCandidates(candidates, search.value);
+      if (!visible.length) {
+        list.innerHTML = '<p class="work-picker-empty">선택할 수 있는 작품이 없습니다.</p>';
+        updateSelectionState();
+        return;
+      }
+      list.innerHTML = visible.map((candidate) => {
+        const image = imageRef(candidate);
+        const history = candidate.exhibitionHistorySummary || candidate.exhibitionHistory?.map((item) => item.name).filter(Boolean).join(' · ') || '';
+        const detail = [candidate.artistName, candidate.year, candidate.medium, candidate.size].filter(Boolean).join(' · ');
+        const price = candidate.currentPrice ?? candidate.latestPrice ?? '';
+        return `<label class="work-picker-item">
+          <input type="checkbox" value="${escapeHtml(candidate.workId)}" ${selected.has(candidate.workId) ? 'checked' : ''}>
+          ${image ? `<img src="${escapeHtml(image)}" alt="">` : '<span class="work-picker-image-empty">사진 없음</span>'}
+          <span class="work-picker-identity"><strong>${escapeHtml(candidate.title || '제목 없음')}</strong><span>${escapeHtml(detail)}</span>${history ? `<small>${escapeHtml(history)}</small>` : ''}</span>
+          <span class="work-picker-price">${escapeHtml(price)}</span>
+        </label>`;
+      }).join('');
+      updateSelectionState();
+    }
+
+    search.addEventListener('input', render);
+    list.addEventListener('change', (event) => {
+      const checkbox = event.target.closest('input[type="checkbox"]');
+      if (!checkbox) return;
+      if (checkbox.checked) selected.add(checkbox.value);
+      else selected.delete(checkbox.value);
+      updateSelectionState();
+    });
+    selectAll.addEventListener('change', () => {
+      visible.forEach((candidate) => selectAll.checked ? selected.add(candidate.workId) : selected.delete(candidate.workId));
+      render();
+    });
+    dialog.querySelector('.work-picker-close').addEventListener('click', () => dialog.close());
+    dialog.querySelector('.work-picker-cancel').addEventListener('click', () => dialog.close());
+    dialog.querySelector('form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const workIds = [...selected];
+      if (!workIds.length) return;
+      onConfirm(workIds);
+    });
+
+    return Object.freeze({
+      open(config = {}) {
+        candidates = Array.isArray(config.candidates) ? config.candidates : [];
+        selected = new Set();
+        onConfirm = typeof config.onConfirm === 'function' ? config.onConfirm : () => {};
+        title.textContent = config.title || '기존 작품 선택';
+        confirm.textContent = config.confirmLabel || '선택 추가';
+        search.value = '';
+        render();
+        dialog.showModal();
+        search.focus();
+      },
+      close() {
+        dialog.close();
+      }
+    });
+  }
+
+  return Object.freeze({ create, filterCandidates, normalize });
+  return Object.freeze({ create, filterCandidates, normalize });
+});
+
 /* storage/exhibition-detail-repository.js */
 (function initializeExhibitionDetailRepository(root) {
   'use strict';
@@ -5302,6 +5446,7 @@ registerLocalPreviewAdminGuards();
       if (state.exhibition) {
         state.exhibition.works = exhibition.works;
       }
+
       options.saveExhibition();
       options.renderWorkRows();
       options.updateSaveAllButtonVisibility();
@@ -5317,6 +5462,25 @@ registerLocalPreviewAdminGuards();
           }
         }
       });
+    }
+
+    function addWorkOccurrences(occurrences) {
+      const exhibition = options.getCurrentExhibition();
+      exhibition.works = exhibition.works || [];
+      const linked = new Set(exhibition.works.map((work) => work.workId).filter(Boolean));
+      const additions = (occurrences || []).filter((work) => {
+        if (!work?.workId || linked.has(work.workId)) return false;
+        linked.add(work.workId);
+        return true;
+      });
+      if (!additions.length) return 0;
+      options.pushWorkUndoSnapshot();
+      exhibition.works.push(...additions);
+      if (state.exhibition) state.exhibition.works = exhibition.works;
+      options.saveExhibition();
+      options.renderWorkRows();
+      options.updateSaveAllButtonVisibility();
+      return additions.length;
     }
 
     function duplicateWorkRow(workId) {
@@ -6186,6 +6350,7 @@ registerLocalPreviewAdminGuards();
 
     return {
       addWorkRow,
+        addWorkOccurrences,
       duplicateWorkRow,
       saveWork,
       saveAllWorks,
@@ -6241,6 +6406,87 @@ registerLocalPreviewAdminGuards();
   }
 
   return { create };
+});
+
+/* exhibitions/detail/collection-picker-controller.js */
+(function initializeExhibitionCollectionPickerController(root, factory) {
+  'use strict';
+
+  const api = factory();
+  root.ExhibitionDetailCollectionPickerController = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function createExhibitionCollectionPickerControllerModule() {
+  'use strict';
+
+  function linkedWorkIds(exhibition) {
+    return new Set((exhibition?.works || []).map((work) => work.workId).filter(Boolean));
+  }
+
+  function buildCandidates(artworks, exhibition) {
+    const linked = linkedWorkIds(exhibition);
+    return (artworks || []).filter((artwork) => artwork.collection?.owned === true && !linked.has(artwork.workId));
+  }
+
+  function createOccurrence(artwork, options) {
+    const imageRef = artwork.imageRef || {};
+    return {
+      id: options.createOccurrenceId(),
+      workId: artwork.workId,
+      createdByUserId: options.getCurrentUserId(),
+      manualNumber: '',
+      photoName: '',
+      photoUrl: imageRef.photoUrl || '',
+      photoPreviewUrl: imageRef.photoPreviewUrl || '',
+      photoPath: imageRef.photoPath || '',
+      photoPreviewPath: imageRef.photoPreviewPath || '',
+      photoDataUrl: '',
+      photoPreviewDataUrl: '',
+      photoMimeType: '',
+      photoByteSize: 0,
+      title: artwork.title || '',
+      author: artwork.artistName || '',
+      price: artwork.currentPrice ?? '',
+      materials: artwork.medium || '',
+      size: artwork.size || '',
+      year: artwork.year || '',
+      category: '',
+      quantity: '',
+      wasSaved: false,
+      saved: false
+    };
+  }
+
+  function createOccurrences(artworks, exhibition, workIds, options) {
+    const selected = new Set(workIds);
+    const linked = linkedWorkIds(exhibition);
+    return (artworks || [])
+      .filter((artwork) => selected.has(artwork.workId) && artwork.collection?.owned === true && !linked.has(artwork.workId))
+      .map((artwork) => {
+        linked.add(artwork.workId);
+        return createOccurrence(artwork, options);
+      });
+  }
+
+  function create(options = {}) {
+    function open() {
+      const candidates = buildCandidates(options.getArtworks(), options.getCurrentExhibition());
+      options.picker.open({
+        title: '소장품에서 추가',
+        confirmLabel: '전시에 추가',
+        candidates,
+        onConfirm(workIds) {
+          const occurrences = createOccurrences(options.getArtworks(), options.getCurrentExhibition(), workIds, options);
+          if (!occurrences.length) return;
+          options.addOccurrences(occurrences);
+          options.picker.close();
+        }
+      });
+    }
+
+    return Object.freeze({ open });
+  }
+
+  return Object.freeze({ buildCandidates, create, createOccurrence, createOccurrences, linkedWorkIds });
 });
 
 /* exhibitions/inventory-renderer.js */
@@ -8353,6 +8599,14 @@ registerLocalPreviewAdminGuards();
       addButton.onclick = () => options.addWorkRow();
       actionsRow.appendChild(addButton);
 
+      if (!isGoodsMode) {
+        const collectionButton = document.createElement('button');
+        collectionButton.className = 'works-action-btn';
+        collectionButton.textContent = '소장품에서 추가';
+        collectionButton.onclick = () => options.openCollectionPicker();
+        actionsRow.appendChild(collectionButton);
+      }
+
       const actionGroup = document.createElement('div');
       actionGroup.className = 'works-action-group';
 
@@ -8517,6 +8771,14 @@ registerLocalPreviewAdminGuards();
       bottomAddButton.textContent = isGoodsMode ? '+ 굿즈 추가' : '+ 작품 추가';
       bottomAddButton.onclick = () => options.addWorkRow();
       bottomActionsRow.appendChild(bottomAddButton);
+
+      if (!isGoodsMode) {
+        const bottomCollectionButton = document.createElement('button');
+        bottomCollectionButton.className = 'works-action-btn';
+        bottomCollectionButton.textContent = '소장품에서 추가';
+        bottomCollectionButton.onclick = () => options.openCollectionPicker();
+        bottomActionsRow.appendChild(bottomCollectionButton);
+      }
 
       const bottomActionGroup = document.createElement('div');
       bottomActionGroup.className = 'works-action-group';
@@ -10525,6 +10787,7 @@ let certificateController = null;
 let inventoryStateController = null;
 let worksEditorController = null;
 let worksView = null;
+let collectionPickerController = null;
 let salesViewController = null;
 let accountingViewController = null;
 let backupController = null;
@@ -10584,6 +10847,7 @@ function resolveExhibitionDetailDependencies() {
     artworkIdentity: globalThis.ArtworkIdentity,
     artworkRepository: globalThis.GalleryArtworksRepository?.repository,
     artworkSyncService: globalThis.ArtworkSyncService,
+    workPickerControllerModule: globalThis.ArtworkWorkPickerController,
     repository: globalThis.ExhibitionsRepository?.repository,
     salesAddControllerModule: globalThis.ExhibitionDetailSalesAddController,
     salesModel: globalThis.ExhibitionSalesModel,
@@ -10592,10 +10856,11 @@ function resolveExhibitionDetailDependencies() {
     staffControllerModule: globalThis.ExhibitionDetailStaffController,
     tabsController: globalThis.ExhibitionDetailTabsController,
     worksEditorControllerModule: globalThis.ExhibitionDetailWorksEditorController,
+    collectionPickerControllerModule: globalThis.ExhibitionDetailCollectionPickerController,
     worksViewModule: globalThis.ExhibitionDetailWorksView,
     accountingViewControllerModule: globalThis.ExhibitionDetailAccountingViewController
   };
-  const optionalDependencies = new Set(['artworkIdentity', 'artworkRepository', 'artworkSyncService']);
+  const optionalDependencies = new Set(['artworkIdentity', 'artworkRepository', 'artworkSyncService', 'workPickerControllerModule', 'collectionPickerControllerModule']);
   const missing = Object.entries(dependencies).find(([name, dependency]) => !dependency && !optionalDependencies.has(name));
   if (missing) throw new Error(`Exhibition detail dependency is unavailable: ${missing[0]}`);
   return Object.freeze(dependencies);
@@ -10722,6 +10987,7 @@ function createWorksView() {
     refreshGridKeyboardNavigation,
     getSortIndicator,
     addWorkRow,
+    openCollectionPicker: () => collectionPickerController.open(),
     toggleSelectAllVisibleWorks,
     deleteAllWorks,
     deleteSelectedWorks,
@@ -10729,6 +10995,19 @@ function createWorksView() {
     exportWorksToExcel,
     saveAllWorks,
     undoWorkChanges
+  });
+}
+
+function createCollectionPickerController() {
+  const picker = exhibitionDetailDependencies.workPickerControllerModule.create({ document });
+  let occurrenceSequence = 0;
+  return exhibitionDetailDependencies.collectionPickerControllerModule.create({
+    picker,
+    getArtworks: () => exhibitionDetailDependencies.artworkRepository.loadArtworks(),
+    getCurrentExhibition,
+    getCurrentUserId,
+    createOccurrenceId: () => Date.now() * 100 + occurrenceSequence++,
+    addOccurrences: (occurrences) => worksEditorController.addWorkOccurrences(occurrences)
   });
 }
 
@@ -13000,6 +13279,11 @@ function initializeExhibitionDetailControllers() {
   inventoryStateController = createInventoryStateController();
   worksEditorController = createWorksEditorController();
   TRANSIENT_WORK_PHOTO_FIELDS = worksEditorController.TRANSIENT_WORK_PHOTO_FIELDS;
+  collectionPickerController = exhibitionDetailDependencies.artworkRepository
+    && exhibitionDetailDependencies.workPickerControllerModule
+    && exhibitionDetailDependencies.collectionPickerControllerModule
+    ? createCollectionPickerController()
+    : Object.freeze({ open() {} });
   worksView = createWorksView();
   salesViewController = createSalesViewController();
   accountingViewController = createAccountingViewController();

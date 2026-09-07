@@ -85,6 +85,7 @@ let certificateController = null;
 let inventoryStateController = null;
 let worksEditorController = null;
 let worksView = null;
+let collectionPickerController = null;
 let salesViewController = null;
 let accountingViewController = null;
 let backupController = null;
@@ -144,6 +145,7 @@ function resolveExhibitionDetailDependencies() {
     artworkIdentity: globalThis.ArtworkIdentity,
     artworkRepository: globalThis.GalleryArtworksRepository?.repository,
     artworkSyncService: globalThis.ArtworkSyncService,
+    workPickerControllerModule: globalThis.ArtworkWorkPickerController,
     repository: globalThis.ExhibitionsRepository?.repository,
     salesAddControllerModule: globalThis.ExhibitionDetailSalesAddController,
     salesModel: globalThis.ExhibitionSalesModel,
@@ -152,10 +154,11 @@ function resolveExhibitionDetailDependencies() {
     staffControllerModule: globalThis.ExhibitionDetailStaffController,
     tabsController: globalThis.ExhibitionDetailTabsController,
     worksEditorControllerModule: globalThis.ExhibitionDetailWorksEditorController,
+    collectionPickerControllerModule: globalThis.ExhibitionDetailCollectionPickerController,
     worksViewModule: globalThis.ExhibitionDetailWorksView,
     accountingViewControllerModule: globalThis.ExhibitionDetailAccountingViewController
   };
-  const optionalDependencies = new Set(['artworkIdentity', 'artworkRepository', 'artworkSyncService']);
+  const optionalDependencies = new Set(['artworkIdentity', 'artworkRepository', 'artworkSyncService', 'workPickerControllerModule', 'collectionPickerControllerModule']);
   const missing = Object.entries(dependencies).find(([name, dependency]) => !dependency && !optionalDependencies.has(name));
   if (missing) throw new Error(`Exhibition detail dependency is unavailable: ${missing[0]}`);
   return Object.freeze(dependencies);
@@ -282,6 +285,7 @@ function createWorksView() {
     refreshGridKeyboardNavigation,
     getSortIndicator,
     addWorkRow,
+    openCollectionPicker: () => collectionPickerController.open(),
     toggleSelectAllVisibleWorks,
     deleteAllWorks,
     deleteSelectedWorks,
@@ -289,6 +293,19 @@ function createWorksView() {
     exportWorksToExcel,
     saveAllWorks,
     undoWorkChanges
+  });
+}
+
+function createCollectionPickerController() {
+  const picker = exhibitionDetailDependencies.workPickerControllerModule.create({ document });
+  let occurrenceSequence = 0;
+  return exhibitionDetailDependencies.collectionPickerControllerModule.create({
+    picker,
+    getArtworks: () => exhibitionDetailDependencies.artworkRepository.loadArtworks(),
+    getCurrentExhibition,
+    getCurrentUserId,
+    createOccurrenceId: () => Date.now() * 100 + occurrenceSequence++,
+    addOccurrences: (occurrences) => worksEditorController.addWorkOccurrences(occurrences)
   });
 }
 
@@ -2560,6 +2577,11 @@ function initializeExhibitionDetailControllers() {
   inventoryStateController = createInventoryStateController();
   worksEditorController = createWorksEditorController();
   TRANSIENT_WORK_PHOTO_FIELDS = worksEditorController.TRANSIENT_WORK_PHOTO_FIELDS;
+  collectionPickerController = exhibitionDetailDependencies.artworkRepository
+    && exhibitionDetailDependencies.workPickerControllerModule
+    && exhibitionDetailDependencies.collectionPickerControllerModule
+    ? createCollectionPickerController()
+    : Object.freeze({ open() {} });
   worksView = createWorksView();
   salesViewController = createSalesViewController();
   accountingViewController = createAccountingViewController();
