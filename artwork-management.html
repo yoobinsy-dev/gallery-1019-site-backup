@@ -8,12 +8,12 @@
   <link rel="stylesheet" href="vendor/tabulator-6.5.0/tabulator.min.css">
   <link rel="stylesheet" href="artwork-management.css">
 </head>
-<body>
-  <main class="artwork-page">
-    <header class="artwork-header">
+<body class="artwork-management-page">
+  <main class="page-container artwork-page">
+    <header class="page-header artwork-header">
       <button class="back-btn" type="button" onclick="location.href='gallery-lounge.html'">← 돌아가기</button>
-      <div class="artwork-title"><p class="section-label">GALLERY COLLECTION</p><h1>작품 관리</h1></div>
-      <div class="user-info artwork-user"><span id="user-display"></span></div>
+      <h1>작품 관리</h1>
+      <div class="header-spacer"></div>
     </header>
 
     <section class="artwork-workspace" aria-label="작품 관리 도구">
@@ -25,8 +25,9 @@
         <label class="artwork-search"><span>검색</span><input id="artwork-search" type="search" placeholder="작품명, 작가, 재료, 전시명"></label>
         <div class="artwork-actions">
           <span id="artwork-selection-count" aria-live="polite">0개 선택</span>
-          <button id="artwork-add-btn" class="works-action-btn" type="button">+ 소장품 추가</button>
+          <button id="artwork-add-btn" class="works-action-btn" type="button">+ 행 추가</button>
           <button id="artwork-exhibition-btn" class="works-action-btn" type="button" hidden>전시에서 작품 추가</button>
+          <button id="artwork-export-btn" class="works-action-btn works-action-btn-secondary" type="button">Excel 다운로드</button>
           <button id="artwork-edit-btn" class="works-action-btn works-action-btn-secondary" type="button" disabled>수정</button>
           <button id="artwork-remove-btn" class="works-action-btn works-action-btn-danger" type="button" disabled>소장 해제</button>
         </div>
@@ -47,7 +48,6 @@
         <label>크기<input name="size"></label>
         <label>재료<input name="medium"></label>
         <label>연도<input name="year" inputmode="numeric"></label>
-        <label class="wide">사진 URL<input name="photoUrl" type="url" placeholder="Blob-backed URL"></label>
         <label data-collection-field>소장 번호<input name="collectionNumber" placeholder="COL-2026-001"></label>
         <label data-collection-field>등록일<input name="dateAdded" type="date"></label>
         <label class="checkbox-field" data-collection-field><input name="owned" type="checkbox"> 소장품</label>
@@ -80,6 +80,8 @@
   <script src="artworks/identity.js?v=20260907-1"></script>
   <script src="artworks/exhibition-index.js?v=20260907-1"></script>
   <script src="artworks/sync-service.js?v=20260907-1"></script>
+  <script src="exhibitions/image-lifecycle.js?v=20260907-1"></script>
+  <script src="vendor/sheetjs-0.20.3/xlsx.full.min.js"></script>
   <script src="vendor/tabulator-6.5.0/tabulator.min.js"></script>
   <script src="artwork-management/collection-table.js?v=20260907-1"></script>
   <script src="artwork-management/past-exhibition-table.js?v=20260907-1"></script>
@@ -87,6 +89,8 @@
   <script src="artwork-management/filters-controller.js?v=20260907-1"></script>
   <script src="artwork-management/toolbar-controller.js?v=20260907-1"></script>
   <script src="artwork-management/editor-controller.js?v=20260907-1"></script>
+  <script src="artwork-management/row-editor-controller.js?v=20260907-1"></script>
+  <script src="artwork-management/excel-export.js?v=20260907-1"></script>
   <script src="artwork-management.js?v=20260907-1"></script>
 </body>
 </html>

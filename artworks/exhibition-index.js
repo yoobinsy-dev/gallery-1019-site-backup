@@ -22,6 +22,18 @@
     return String(left.exhibition?.id || '').localeCompare(String(right.exhibition?.id || ''), 'en', { numeric: true });
   }
 
+  function isOccurrenceSold(exhibition, work) {
+    const soldRecords = [exhibition?.soldWorks, exhibition?.artSoldWorks]
+      .filter(Array.isArray)
+      .flat();
+    return soldRecords.some((sold) => {
+      const itemType = String(sold?.itemType || '작품').trim();
+      if (itemType && itemType !== '작품') return false;
+      return String(sold?.workId ?? '') === String(work?.id ?? '')
+        || (work?.workId && String(sold?.workId ?? '') === String(work.workId));
+    });
+  }
+
   function buildExhibitionIndex(exhibitions, artworks) {
     const canonical = Array.isArray(artworks) ? artworks : [];
     const groups = new Map();
@@ -48,6 +60,9 @@
       rows.push({
         ...artwork,
         workId,
+        ownershipSaleStatus: artwork?.collection?.owned === true
+          ? 'collection'
+          : (occurrences.some(({ exhibition, work }) => isOccurrenceSold(exhibition, work)) ? 'sold' : ''),
         latestPrice: latest.work.price ?? '',
         latestExhibitionDate: getExhibitionDate(latest.exhibition),
         latestExhibitionName: latest.exhibition.title || latest.exhibition.name || '',
@@ -74,5 +89,5 @@
       .map((artwork) => ({ ...artwork, exhibitionHistory: historyById.get(artwork.workId) || [] }));
   }
 
-  return Object.freeze({ buildCollectionRows, buildExhibitionIndex, compareOccurrences, getExhibitionDate, getExhibitionWorks });
+  return Object.freeze({ buildCollectionRows, buildExhibitionIndex, compareOccurrences, getExhibitionDate, getExhibitionWorks, isOccurrenceSold });
 });

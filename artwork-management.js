@@ -12,13 +12,17 @@
     selectionController: root.ArtworkSelectionController,
     filtersController: root.ArtworkFiltersController,
     toolbarController: root.ArtworkToolbarController,
-    editorController: root.ArtworkEditorController
+    editorController: root.ArtworkEditorController,
+    rowEditorController: root.ArtworkRowEditorController,
+    excelExport: root.ArtworkExcelExport,
+    imageLifecycle: root.ExhibitionImageLifecycle
   };
   const state = { tab: 'collection', artworks: [], exhibitions: [], tables: {}, selected: [] };
   let selection;
   let filters;
   let toolbar;
   let editor;
+  let rowEditor;
   let unresolved = [];
 
   function getAuthorizedUser() {
@@ -31,7 +35,10 @@
 
   function persist(next) {
     if (!modules.artworkRepository.repository.saveArtworksSafely(next.artworks)) return false;
-    if (next.exhibitions && !modules.exhibitionsRepository.repository.saveExhibitionsSafely(next.exhibitions)) return false;
+    if (next.exhibitions && !modules.exhibitionsRepository.repository.saveExhibitionsSafely(next.exhibitions)) {
+      modules.artworkRepository.repository.saveArtworksSafely(state.artworks);
+      return false;
+    }
     state.artworks = next.artworks;
     if (next.exhibitions) state.exhibitions = next.exhibitions;
     refresh();
@@ -47,7 +54,12 @@
   function createArtwork(values) {
     if (!validateCollectionNumber(null, values.collection)) return showEditorError('소장 번호는 중복될 수 없습니다.');
     const now = new Date().toISOString();
-    return persist({ artworks: [...state.artworks, { workId: modules.identity.createWorkId(), ...values, artistId: null, createdAt: now, updatedAt: now }] });
+    const artwork = { workId: modules.identity.createWorkId(), ...values, artistId: null, createdAt: now, updatedAt: now };
+    const artworks = [...state.artworks, artwork];
+    if (!modules.artworkRepository.repository.saveArtworksSafely(artworks)) return false;
+    state.artworks = artworks;
+    state.tables.past.replaceData(modules.exhibitionIndex.buildExhibitionIndex(state.exhibitions, state.artworks).rows);
+    return artwork;
   }
 
   function updateArtwork(row, values, tab) {
@@ -61,6 +73,33 @@
       workId: row.workId,
       changes: { title: values.title, author: values.artistName, price: values.currentPrice, size: values.size, materials: values.medium, year: values.year, photoUrl: values.imageRef.photoUrl, photoPreviewUrl: values.imageRef.photoPreviewUrl }
     }));
+  }
+
+  function updateInlineArtwork(row, values, tab) {
+    if (tab === 'collection' && !validateCollectionNumber(row.workId, values.collection)) {
+      root.alert('소장 번호는 중복될 수 없습니다.');
+      return false;
+    }
+    const next = tab === 'collection'
+      ? modules.syncService.synchronizeCanonicalEdit({ artworks: state.artworks, exhibitions: state.exhibitions, workId: row.workId, changes: values })
+      : modules.syncService.updateLatestOccurrence({
+        artworks: state.artworks,
+        exhibitions: state.exhibitions,
+        workId: row.workId,
+        changes: { title: values.title, author: values.artistName, price: values.currentPrice, size: values.size, materials: values.medium, year: values.year, photoUrl: values.imageRef.photoUrl, photoPreviewUrl: values.imageRef.photoPreviewUrl, photoPath: values.imageRef.photoPath, photoPreviewPath: values.imageRef.photoPreviewPath }
+      });
+    if (!modules.artworkRepository.repository.saveArtworksSafely(next.artworks)) return false;
+    if (next.exhibitions && !modules.exhibitionsRepository.repository.saveExhibitionsSafely(next.exhibitions)) {
+      modules.artworkRepository.repository.saveArtworksSafely(state.artworks);
+      return false;
+    }
+    state.artworks = next.artworks;
+    if (next.exhibitions) state.exhibitions = next.exhibitions;
+    const collectionRows = modules.exhibitionIndex.buildCollectionRows(state.artworks, state.exhibitions);
+    const pastRows = modules.exhibitionIndex.buildExhibitionIndex(state.exhibitions, state.artworks).rows;
+    if (tab === 'collection') state.tables.past.replaceData(pastRows);
+    else state.tables.collection.replaceData(collectionRows);
+    return (tab === 'collection' ? collectionRows : pastRows).find((item) => item.workId === row.workId) || false;
   }
 
   function showEditorError(message) {
@@ -105,21 +144,39 @@
   async function start() {
     const user = getAuthorizedUser();
     if (!user) return;
-    document.getElementById('user-display').textContent = user.name || user.username || '';
     await root.cloudSyncReady;
     state.artworks = modules.artworkRepository.repository.loadArtworks();
     state.exhibitions = modules.exhibitionsRepository.repository.loadExhibitions();
     const collectionRows = modules.exhibitionIndex.buildCollectionRows(state.artworks, state.exhibitions);
     const past = modules.exhibitionIndex.buildExhibitionIndex(state.exhibitions, state.artworks);
     unresolved = past.unresolved;
-    state.tables.collection = modules.collectionTable.create('#collection-table', { data: collectionRows });
-    state.tables.past = modules.pastExhibitionTable.create('#past-exhibition-table', { data: past.rows });
-    toolbar = modules.toolbarController.create({ document, onAdd: () => editor.openCreate(), onEdit: () => editor.openEdit(state.selected[0], state.tab), onRemove: removeFromCollection });
+    rowEditor = modules.rowEditorController.create({
+      imageLifecycle: modules.imageLifecycle,
+      onCreate: createArtwork,
+      onUpdate: updateInlineArtwork,
+      onError: (message) => root.alert(message)
+    });
+    state.tables.collection = modules.collectionTable.create('#collection-table', {
+      data: collectionRows,
+      onCellEdited: (cell) => rowEditor.commitRow(cell.getRow(), 'collection'),
+      onPhotoSelected: (row, file) => rowEditor.selectPhoto(row, file, 'collection')
+    });
+    state.tables.past = modules.pastExhibitionTable.create('#past-exhibition-table', {
+      data: past.rows,
+      onCellEdited: (cell) => rowEditor.commitRow(cell.getRow(), 'past'),
+      onPhotoSelected: (row, file) => rowEditor.selectPhoto(row, file, 'past')
+    });
+    toolbar = modules.toolbarController.create({
+      document,
+      onAdd: () => rowEditor.addDraft(state.tables.collection),
+      onEdit: () => editor.openEdit(state.selected[0], state.tab),
+      onRemove: removeFromCollection,
+      onExport: () => modules.excelExport.download(state.tables[state.tab], state.tab)
+    });
     selection = modules.selectionController.create({ onChange: (rows) => { state.selected = rows; document.getElementById('artwork-selection-count').textContent = `${rows.length}개 선택`; toolbar.update({ tab: state.tab, selectedCount: rows.length }); } });
     filters = modules.filtersController.create({ input: document.getElementById('artwork-search') });
     editor = modules.editorController.create({
       document,
-      onCreate: createArtwork,
       onUpdate: updateArtwork,
       onResolve: (item, workId) => persist(modules.syncService.resolveOccurrence({ artworks: state.artworks, exhibitions: state.exhibitions, exhibitionId: item.exhibition.id, occurrenceId: item.work.id, workId }))
     });

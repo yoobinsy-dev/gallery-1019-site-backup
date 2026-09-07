@@ -18,14 +18,13 @@
     function populate(artwork, activeTab) {
       active = artwork || null;
       tab = activeTab;
-      document.getElementById('artwork-editor-title').textContent = artwork ? '작품 수정' : '소장품 추가';
+      document.getElementById('artwork-editor-title').textContent = '작품 수정';
       field('title').value = artwork?.title || '';
       field('artistName').value = artwork?.artistName || '';
       field('currentPrice').value = activeTab === 'past' ? artwork?.latestPrice ?? '' : artwork?.currentPrice ?? '';
       field('size').value = artwork?.size || '';
       field('medium').value = artwork?.medium || '';
       field('year').value = artwork?.year || '';
-      field('photoUrl').value = artwork?.imageRef?.photoUrl || '';
       field('collectionNumber').value = artwork?.collection?.collectionNumber || '';
       field('dateAdded').value = artwork?.collection?.dateAdded || '';
       field('owned').checked = artwork?.collection?.owned === true || !artwork;
@@ -48,7 +47,7 @@
         size: field('size').value.trim(),
         medium: field('medium').value.trim(),
         year: field('year').value.trim(),
-        imageRef: { photoUrl: field('photoUrl').value.trim(), photoPreviewUrl: field('photoUrl').value.trim() }
+        imageRef: { ...(active?.imageRef || {}) }
       };
       if (tab === 'collection') {
         values.collection = {
@@ -57,7 +56,7 @@
           dateAdded: field('dateAdded').value
         };
       }
-      const accepted = active ? options.onUpdate(active, values, tab) : options.onCreate(values);
+      const accepted = options.onUpdate(active, values, tab);
       if (accepted !== false) close();
     });
     document.getElementById('artwork-editor-cancel').addEventListener('click', close);
@@ -81,7 +80,6 @@
     document.getElementById('artwork-resolution-cancel').addEventListener('click', () => resolutionDialog.close());
 
     return Object.freeze({
-      openCreate: () => populate(null, 'collection'),
       openEdit: populate,
       openResolution(items, artworks) {
         unresolved = items;

@@ -6,11 +6,13 @@
     const editButton = options.document.getElementById('artwork-edit-btn');
     const removeButton = options.document.getElementById('artwork-remove-btn');
     const exhibitionButton = options.document.getElementById('artwork-exhibition-btn');
+    const exportButton = options.document.getElementById('artwork-export-btn');
 
     addButton.addEventListener('click', () => options.onAdd());
     editButton.addEventListener('click', () => options.onEdit());
     removeButton.addEventListener('click', () => options.onRemove());
     exhibitionButton.addEventListener('click', () => { root.location.href = 'exhibitions.html'; });
+    exportButton.addEventListener('click', () => options.onExport());
 
     return Object.freeze({
       update({ tab, selectedCount }) {

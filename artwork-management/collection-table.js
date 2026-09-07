@@ -6,12 +6,27 @@
     return Number.isFinite(number) ? `${number.toLocaleString('ko-KR')}원` : '';
   }
 
-  function thumbnail(cell) {
+  function thumbnail(cell, _formatterParams, onRendered) {
     const image = cell.getValue() || {};
-    const source = image.photoPreviewUrl || image.photoUrl || '';
-    return source
-      ? `<img class="artwork-thumbnail" src="${source}" alt="">`
-      : '<span class="artwork-thumbnail-empty" aria-label="사진 없음">사진 없음</span>';
+    const source = cell.getRow().getData()._previewUrl || image.photoPreviewUrl || image.photoUrl || '';
+    const control = document.createElement('label');
+    control.className = 'artwork-photo-control';
+    control.innerHTML = source
+      ? `<img class="artwork-thumbnail" src="${source}" alt=""><span>변경</span>`
+      : '<span class="artwork-thumbnail-empty" aria-label="사진 없음">사진 선택</span>';
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.setAttribute('aria-label', '작품 사진 선택');
+    control.appendChild(input);
+    onRendered(() => input.addEventListener('change', () => optionsForCell(cell)?.onPhotoSelected?.(cell.getRow(), input.files?.[0])));
+    return control;
+  }
+
+  const tableOptions = new WeakMap();
+
+  function optionsForCell(cell) {
+    return tableOptions.get(cell.getTable());
   }
 
   function history(cell) {
@@ -21,28 +36,30 @@
   }
 
   function create(element, options = {}) {
-    return new root.Tabulator(element, {
+    const table = new root.Tabulator(element, {
       index: 'workId',
       data: options.data || [],
       layout: 'fitDataStretch',
       responsiveLayout: false,
       selectableRows: true,
       placeholder: '등록된 소장품이 없습니다.',
-      height: '100%',
       columns: [
-        { formatter: 'rowSelection', titleFormatter: 'rowSelection', hozAlign: 'center', headerSort: false, width: 48 },
-        { title: '번호', field: 'collection.collectionNumber', sorter: 'string', minWidth: 130 },
-        { title: '사진', field: 'imageRef', formatter: thumbnail, headerSort: false, width: 96 },
-        { title: '작품명', field: 'title', sorter: 'string', minWidth: 180 },
-        { title: '작가', field: 'artistName', sorter: 'string', minWidth: 130 },
-        { title: '가격', field: 'currentPrice', sorter: 'number', formatter: (cell) => formatPrice(cell.getValue()), hozAlign: 'right', minWidth: 120 },
-        { title: '크기', field: 'size', sorter: 'string', minWidth: 120 },
-        { title: '재료', field: 'medium', sorter: 'string', minWidth: 140 },
-        { title: '연도', field: 'year', sorter: 'number', minWidth: 88 },
-        { title: '등록일', field: 'collection.dateAdded', sorter: 'date', minWidth: 120 },
-        { title: '전시 이력', field: 'exhibitionHistory', formatter: history, headerSort: false, minWidth: 240 }
+        { formatter: 'rowSelection', titleFormatter: 'rowSelection', download: false, hozAlign: 'center', headerSort: false, width: 48 },
+        { title: '번호', field: 'collection.collectionNumber', editor: 'input', sorter: 'string', minWidth: 130 },
+        { title: '사진', field: 'imageRef', formatter: thumbnail, download: false, headerSort: false, width: 96 },
+        { title: '작품명', field: 'title', editor: 'input', sorter: 'string', minWidth: 180 },
+        { title: '작가', field: 'artistName', editor: 'input', sorter: 'string', minWidth: 130 },
+        { title: '가격', field: 'currentPrice', editor: 'input', sorter: 'number', formatter: (cell) => formatPrice(cell.getValue()), hozAlign: 'right', minWidth: 120 },
+        { title: '크기', field: 'size', editor: 'input', sorter: 'string', minWidth: 120 },
+        { title: '재료', field: 'medium', editor: 'input', sorter: 'string', minWidth: 140 },
+        { title: '연도', field: 'year', editor: 'input', sorter: 'number', minWidth: 88 },
+        { title: '등록일', field: 'collection.dateAdded', editor: 'date', sorter: 'date', minWidth: 120 },
+        { title: '전시 이력', field: 'exhibitionHistory', formatter: history, accessorDownload: (value) => (value || []).map((entry) => entry.name).join(', '), headerSort: false, minWidth: 240 }
       ]
     });
+    tableOptions.set(table, options);
+    if (options.onCellEdited) table.on('cellEdited', options.onCellEdited);
+    return table;
   }
 
   root.ArtworkCollectionTable = Object.freeze({ create, formatPrice });
