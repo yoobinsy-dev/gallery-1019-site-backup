@@ -168,6 +168,7 @@
       delete work.editOriginalManualNumber;
       delete work.editOriginalTitle;
       state.workEditSnapshotIds = state.workEditSnapshotIds.filter((id) => id !== workId);
+      options.synchronizeArtwork?.(work);
       syncWorkToSalesRecords(work);
       if (state.exhibition) {
         state.exhibition.works = exhibition.works;
@@ -225,6 +226,7 @@
           delete work.editOriginalManualNumber;
           delete work.editOriginalTitle;
           state.workEditSnapshotIds = state.workEditSnapshotIds.filter((id) => id !== work.id);
+          options.synchronizeArtwork?.(work);
           syncWorkToSalesRecords(work);
           saveCount++;
         }
@@ -511,6 +513,7 @@
       if (state.exhibition) {
         state.exhibition.works = latestExhibition.works;
       }
+      options.synchronizeArtwork?.(latestWork);
       options.saveExhibition();
       options.renderWorkRows();
 

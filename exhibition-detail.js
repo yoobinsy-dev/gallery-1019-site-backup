@@ -141,6 +141,9 @@ function resolveExhibitionDetailDependencies() {
     inventoryModel: globalThis.ExhibitionInventoryModel,
     inventoryRenderer: globalThis.ExhibitionInventoryRenderer,
     inventoryStateControllerModule: globalThis.ExhibitionDetailInventoryStateController,
+    artworkIdentity: globalThis.ArtworkIdentity,
+    artworkRepository: globalThis.GalleryArtworksRepository?.repository,
+    artworkSyncService: globalThis.ArtworkSyncService,
     repository: globalThis.ExhibitionsRepository?.repository,
     salesAddControllerModule: globalThis.ExhibitionDetailSalesAddController,
     salesModel: globalThis.ExhibitionSalesModel,
@@ -152,7 +155,8 @@ function resolveExhibitionDetailDependencies() {
     worksViewModule: globalThis.ExhibitionDetailWorksView,
     accountingViewControllerModule: globalThis.ExhibitionDetailAccountingViewController
   };
-  const missing = Object.entries(dependencies).find(([, dependency]) => !dependency);
+  const optionalDependencies = new Set(['artworkIdentity', 'artworkRepository', 'artworkSyncService']);
+  const missing = Object.entries(dependencies).find(([name, dependency]) => !dependency && !optionalDependencies.has(name));
   if (missing) throw new Error(`Exhibition detail dependency is unavailable: ${missing[0]}`);
   return Object.freeze(dependencies);
 }
@@ -230,8 +234,28 @@ function createWorksEditorController() {
     setTimeoutImpl: (callback, delay) => setTimeout(callback, delay),
     nowImpl: () => Date.now(),
     randomImpl: () => Math.random(),
+    synchronizeArtwork: synchronizeArtworkOccurrence,
     consoleImpl: console
   });
+}
+
+function synchronizeArtworkOccurrence(work) {
+  if (exhibitionDetailState.inventoryMode === 'goods') return true;
+  if (!exhibitionDetailDependencies.artworkRepository || !exhibitionDetailDependencies.artworkSyncService) return true;
+  const exhibition = getCurrentExhibition();
+  const artworks = exhibitionDetailDependencies.artworkRepository.loadArtworks();
+  const exhibitions = exhibitionDetailDependencies.repository.loadExhibitions();
+  const result = exhibitionDetailDependencies.artworkSyncService.synchronizeSavedOccurrence({
+    artworks,
+    exhibitions,
+    exhibition,
+    occurrence: work
+  });
+  if (result.status === 'ambiguous') {
+    console.warn('Artwork identity requires explicit resolution.', { occurrenceId: work.id, candidateCount: result.candidates.length });
+    return true;
+  }
+  return exhibitionDetailDependencies.artworkRepository.saveArtworksSafely(result.artworks);
 }
 
 function createWorksView() {

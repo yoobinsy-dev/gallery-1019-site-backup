@@ -9,7 +9,8 @@
     'pottery-personal-work-v1',
     'studio-calendar-state-v1',
     'pottery-material-orders-v1',
-    'pottery-accounting-v1'
+    'pottery-accounting-v1',
+    'gallery-artworks-v1'
   ]);
 
   function getPageName(pathname) {
@@ -41,11 +42,14 @@
     if (page === 'gallery-lounge.html' || page === 'inventory.html') {
       return [];
     }
+    if (page === 'artwork-management.html') {
+      return ['users', 'exhibitions', 'gallery-artworks-v1'];
+    }
     if (page === 'exhibitions.html') {
       return ['exhibitions'];
     }
     if (page === 'exhibition-detail.html') {
-      return ['users', 'exhibitions'];
+      return ['users', 'exhibitions', 'gallery-artworks-v1'];
     }
     return SYNCED_KEYS.slice();
   }
@@ -2456,6 +2460,396 @@ registerLocalPreviewAdminGuards();
   root.ExhibitionsRepository = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* artworks/repository.js */
+(function initializeGalleryArtworksRepository(root) {
+  'use strict';
+
+  const KEY = 'gallery-artworks-v1';
+
+  function createRepository(storage) {
+    return Object.freeze({
+      loadArtworks() {
+        const value = JSON.parse(storage.read(KEY) || 'null');
+        return Array.isArray(value) ? value : [];
+      },
+      saveArtworksSafely(artworks) {
+        if (!Array.isArray(artworks)) return false;
+        return storage.writeSafely(KEY, JSON.stringify(artworks));
+      }
+    });
+  }
+
+  function createDeferredRepository(getStorage) {
+    function requireStorage() {
+      const storage = getStorage();
+      if (!storage) throw new Error('Gallery artworks storage adapter is unavailable.');
+      return storage;
+    }
+
+    return Object.freeze({
+      loadArtworks() {
+        return createRepository(requireStorage()).loadArtworks();
+      },
+      saveArtworksSafely(artworks) {
+        return createRepository(requireStorage()).saveArtworksSafely(artworks);
+      }
+    });
+  }
+
+  const api = Object.freeze({
+    KEY,
+    createRepository,
+    createDeferredRepository,
+    repository: createDeferredRepository(() => root.BrowserStorageAdapter?.storage)
+  });
+  root.GalleryArtworksRepository = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* artworks/identity.js */
+(function initializeArtworkIdentity(root, factory) {
+  'use strict';
+
+  const api = factory();
+  root.ArtworkIdentity = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function createArtworkIdentity() {
+  'use strict';
+
+  function normalizeText(value) {
+    return String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  }
+
+  function getArtist(value) {
+    return value?.artistName ?? value?.author ?? '';
+  }
+
+  function getMedium(value) {
+    return value?.medium ?? value?.materials ?? '';
+  }
+
+  function getImageRef(value) {
+    if (value?.imageRef && typeof value.imageRef === 'object') return { ...value.imageRef };
+    return {
+      photoUrl: value?.photoUrl || '',
+      photoPreviewUrl: value?.photoPreviewUrl || value?.photoUrl || '',
+      photoPath: value?.photoPath || '',
+      photoPreviewPath: value?.photoPreviewPath || ''
+    };
+  }
+
+  function findArtworkMatch(occurrence, artworks) {
+    const candidates = Array.isArray(artworks) ? artworks : [];
+    if (occurrence?.workId) {
+      const exact = candidates.find((artwork) => artwork.workId === occurrence.workId);
+      return exact
+        ? { status: 'matched', artwork: exact, reason: 'workId' }
+        : { status: 'unmatched', artwork: null, reason: 'unknown-workId' };
+    }
+
+    const title = normalizeText(occurrence?.title);
+    const artist = normalizeText(getArtist(occurrence));
+    if (!title || !artist) return { status: 'unmatched', artwork: null, reason: 'missing-identity' };
+
+    const identityMatches = candidates.filter((artwork) => (
+      normalizeText(artwork.title) === title && normalizeText(getArtist(artwork)) === artist
+    ));
+    if (identityMatches.length === 0) return { status: 'unmatched', artwork: null, reason: 'no-match' };
+    if (identityMatches.length === 1) return { status: 'matched', artwork: identityMatches[0], reason: 'artist-title' };
+
+    const year = normalizeText(occurrence?.year);
+    const size = normalizeText(occurrence?.size);
+    const narrowed = identityMatches.filter((artwork) => (
+      (!year || normalizeText(artwork.year) === year)
+      && (!size || normalizeText(artwork.size) === size)
+    ));
+    if ((year || size) && narrowed.length === 1) {
+      return { status: 'matched', artwork: narrowed[0], reason: 'artist-title-signals' };
+    }
+    return { status: 'ambiguous', artwork: null, candidates: narrowed.length > 1 ? narrowed : identityMatches, reason: 'multiple-matches' };
+  }
+
+  function createWorkId(randomUUID) {
+    const createUuid = randomUUID || globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
+    if (typeof createUuid !== 'function') throw new Error('A UUID generator is required.');
+    return `work_${createUuid()}`;
+  }
+
+  function createArtworkFromOccurrence(occurrence, options = {}) {
+    const timestamp = options.now || new Date().toISOString();
+    return {
+      workId: occurrence.workId || createWorkId(options.randomUUID),
+      title: String(occurrence.title || '').trim(),
+      artistName: String(getArtist(occurrence) || '').trim(),
+      artistId: occurrence.artistId ?? null,
+      size: String(occurrence.size || '').trim(),
+      medium: String(getMedium(occurrence) || '').trim(),
+      year: String(occurrence.year || '').trim(),
+      imageRef: getImageRef(occurrence),
+      currentPrice: occurrence.price ?? '',
+      collection: { owned: false, collectionNumber: '', dateAdded: '' },
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+  }
+
+  return Object.freeze({ createArtworkFromOccurrence, createWorkId, findArtworkMatch, getArtist, getImageRef, getMedium, normalizeText });
+});
+
+/* artworks/exhibition-index.js */
+(function initializeArtworkExhibitionIndex(root, factory) {
+  'use strict';
+
+  const api = factory(root.ArtworkIdentity || (typeof require === 'function' ? require('./identity') : null));
+  root.ArtworkExhibitionIndex = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function createArtworkExhibitionIndex(identity) {
+  'use strict';
+
+  function getExhibitionWorks(exhibition) {
+    if (Array.isArray(exhibition?.works)) return exhibition.works;
+    return Array.isArray(exhibition?.artWorks) ? exhibition.artWorks : [];
+  }
+
+  function getExhibitionDate(exhibition) {
+    return String(exhibition?.endDate || exhibition?.startDate || '');
+  }
+
+  function compareOccurrences(left, right) {
+    const dateResult = getExhibitionDate(left.exhibition).localeCompare(getExhibitionDate(right.exhibition));
+    if (dateResult !== 0) return dateResult;
+    return String(left.exhibition?.id || '').localeCompare(String(right.exhibition?.id || ''), 'en', { numeric: true });
+  }
+
+  function buildExhibitionIndex(exhibitions, artworks) {
+    const canonical = Array.isArray(artworks) ? artworks : [];
+    const groups = new Map();
+    const unresolved = [];
+
+    (Array.isArray(exhibitions) ? exhibitions : []).forEach((exhibition) => {
+      getExhibitionWorks(exhibition).forEach((work) => {
+        const match = identity.findArtworkMatch(work, canonical);
+        if (match.status !== 'matched') {
+          unresolved.push({ exhibition, work, resolution: match });
+          return;
+        }
+        const workId = match.artwork.workId;
+        if (!groups.has(workId)) groups.set(workId, []);
+        groups.get(workId).push({ exhibition, work });
+      });
+    });
+
+    const rows = [];
+    groups.forEach((occurrences, workId) => {
+      occurrences.sort(compareOccurrences);
+      const artwork = canonical.find((candidate) => candidate.workId === workId);
+      const latest = occurrences[occurrences.length - 1];
+      rows.push({
+        ...artwork,
+        workId,
+        latestPrice: latest.work.price ?? '',
+        latestExhibitionDate: getExhibitionDate(latest.exhibition),
+        latestExhibitionName: latest.exhibition.title || latest.exhibition.name || '',
+        latestExhibitionId: latest.exhibition.id,
+        latestOccurrenceId: latest.work.id,
+        exhibitionHistory: occurrences.map(({ exhibition }) => ({
+          exhibitionId: exhibition.id,
+          name: exhibition.title || exhibition.name || '',
+          startDate: exhibition.startDate || '',
+          endDate: exhibition.endDate || ''
+        })),
+        occurrences
+      });
+    });
+
+    return { rows, unresolved };
+  }
+
+  function buildCollectionRows(artworks, exhibitions) {
+    const index = buildExhibitionIndex(exhibitions, artworks);
+    const historyById = new Map(index.rows.map((row) => [row.workId, row.exhibitionHistory]));
+    return (Array.isArray(artworks) ? artworks : [])
+      .filter((artwork) => artwork.collection?.owned === true)
+      .map((artwork) => ({ ...artwork, exhibitionHistory: historyById.get(artwork.workId) || [] }));
+  }
+
+  return Object.freeze({ buildCollectionRows, buildExhibitionIndex, compareOccurrences, getExhibitionDate, getExhibitionWorks });
+});
+
+/* artworks/sync-service.js */
+(function initializeArtworkSyncService(root, factory) {
+  'use strict';
+
+  const api = factory(
+    root.ArtworkExhibitionIndex || (typeof require === 'function' ? require('./exhibition-index') : null),
+    root.ArtworkIdentity || (typeof require === 'function' ? require('./identity') : null)
+  );
+  root.ArtworkSyncService = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  })(typeof globalThis !== 'undefined' ? globalThis : this, function createArtworkSyncService(exhibitionIndex, identity) {
+  'use strict';
+
+  const IDENTITY_FIELDS = Object.freeze(['title', 'artistName', 'size', 'medium', 'year', 'imageRef']);
+
+  function applyCanonicalFieldsToOccurrence(occurrence, artwork) {
+    const imageRef = artwork.imageRef || {};
+    return {
+      ...occurrence,
+      workId: artwork.workId,
+      title: artwork.title,
+      author: artwork.artistName,
+      artistId: artwork.artistId ?? occurrence.artistId ?? null,
+      size: artwork.size,
+      materials: artwork.medium,
+      year: artwork.year,
+      photoUrl: imageRef.photoUrl || '',
+      photoPreviewUrl: imageRef.photoPreviewUrl || imageRef.photoUrl || '',
+      photoPath: imageRef.photoPath || '',
+      photoPreviewPath: imageRef.photoPreviewPath || ''
+    };
+  }
+
+  function updateOccurrenceCollections(exhibition, workId, updater) {
+    let changed = false;
+    const update = (items) => (Array.isArray(items) ? items.map((item) => {
+      if (item.workId !== workId) return item;
+      changed = true;
+      return updater(item);
+    }) : items);
+    const works = update(exhibition.works);
+    const artWorks = update(exhibition.artWorks);
+    return changed ? { ...exhibition, works, artWorks, updatedAt: new Date().toISOString() } : exhibition;
+  }
+
+  function synchronizeCanonicalEdit({ artworks, exhibitions, workId, changes, now = new Date().toISOString() }) {
+    const nextArtworks = artworks.map((artwork) => artwork.workId === workId
+      ? { ...artwork, ...changes, workId, updatedAt: now }
+      : artwork);
+    const updatedArtwork = nextArtworks.find((artwork) => artwork.workId === workId);
+    if (!updatedArtwork) return { artworks, exhibitions };
+    const identityChanged = IDENTITY_FIELDS.some((field) => Object.hasOwn(changes, field));
+    const nextExhibitions = identityChanged
+      ? exhibitions.map((exhibition) => updateOccurrenceCollections(exhibition, workId, (occurrence) => applyCanonicalFieldsToOccurrence(occurrence, updatedArtwork)))
+      : exhibitions;
+    return { artworks: nextArtworks, exhibitions: nextExhibitions };
+  }
+
+  function synchronizeOccurrenceEdit({ artworks, exhibitions, exhibitionId, occurrenceId, changes, now = new Date().toISOString() }) {
+    let editedWork = null;
+    const nextExhibitions = exhibitions.map((exhibition) => {
+      if (String(exhibition.id) !== String(exhibitionId)) return exhibition;
+      const update = (items) => (Array.isArray(items) ? items.map((item) => {
+        if (String(item.id) !== String(occurrenceId)) return item;
+        editedWork = { ...item, ...changes };
+        return editedWork;
+      }) : items);
+      return { ...exhibition, works: update(exhibition.works), artWorks: update(exhibition.artWorks), updatedAt: now };
+    });
+    if (!editedWork?.workId) return { artworks, exhibitions: nextExhibitions };
+
+    const identityChanges = {};
+    if (Object.hasOwn(changes, 'title')) identityChanges.title = changes.title;
+    if (Object.hasOwn(changes, 'author')) identityChanges.artistName = changes.author;
+    if (Object.hasOwn(changes, 'artistId')) identityChanges.artistId = changes.artistId;
+    if (Object.hasOwn(changes, 'size')) identityChanges.size = changes.size;
+    if (Object.hasOwn(changes, 'materials')) identityChanges.medium = changes.materials;
+    if (Object.hasOwn(changes, 'year')) identityChanges.year = changes.year;
+    if (['photoUrl', 'photoPreviewUrl', 'photoPath', 'photoPreviewPath'].some((field) => Object.hasOwn(changes, field))) {
+      const artwork = artworks.find((candidate) => candidate.workId === editedWork.workId);
+      identityChanges.imageRef = {
+        ...(artwork?.imageRef || {}),
+        photoUrl: editedWork.photoUrl || '',
+        photoPreviewUrl: editedWork.photoPreviewUrl || editedWork.photoUrl || '',
+        photoPath: editedWork.photoPath || '',
+        photoPreviewPath: editedWork.photoPreviewPath || ''
+      };
+    }
+
+    const index = exhibitionIndex.buildExhibitionIndex(nextExhibitions, artworks);
+    const row = index.rows.find((candidate) => candidate.workId === editedWork.workId);
+    if (Object.hasOwn(changes, 'price') && String(row?.latestExhibitionId) === String(exhibitionId)) {
+      identityChanges.currentPrice = changes.price;
+    }
+    const nextArtworks = artworks.map((artwork) => artwork.workId === editedWork.workId
+      ? { ...artwork, ...identityChanges, updatedAt: now }
+      : artwork);
+    return { artworks: nextArtworks, exhibitions: nextExhibitions };
+  }
+
+  function updateLatestOccurrence({ artworks, exhibitions, workId, changes, now }) {
+    const row = exhibitionIndex.buildExhibitionIndex(exhibitions, artworks).rows.find((candidate) => candidate.workId === workId);
+    if (!row) return { artworks, exhibitions };
+    return synchronizeOccurrenceEdit({ artworks, exhibitions, exhibitionId: row.latestExhibitionId, occurrenceId: row.latestOccurrenceId, changes, now });
+  }
+
+  function synchronizeSavedOccurrence({ artworks, exhibitions, exhibition, occurrence, now = new Date().toISOString(), randomUUID }) {
+    const currentArtworks = Array.isArray(artworks) ? artworks.slice() : [];
+    let match = identity.findArtworkMatch(occurrence, currentArtworks);
+    if (match.status === 'ambiguous') return { artworks, status: 'ambiguous', candidates: match.candidates };
+    if (match.status === 'unmatched' && occurrence.workId) return { artworks, status: 'unknown-workId' };
+    if (match.status === 'unmatched') {
+      const created = identity.createArtworkFromOccurrence(occurrence, { now, randomUUID });
+      currentArtworks.push(created);
+      match = { status: 'matched', artwork: created };
+    }
+
+    occurrence.workId = match.artwork.workId;
+    const mergedExhibitions = (Array.isArray(exhibitions) ? exhibitions : []).map((item) => (
+      String(item.id) === String(exhibition.id) ? exhibition : item
+    ));
+    if (!mergedExhibitions.some((item) => String(item.id) === String(exhibition.id))) mergedExhibitions.push(exhibition);
+    const indexed = exhibitionIndex.buildExhibitionIndex(mergedExhibitions, currentArtworks);
+    const latest = indexed.rows.find((row) => row.workId === occurrence.workId);
+    const changes = {
+      title: occurrence.title || '',
+      artistName: occurrence.author || '',
+      artistId: occurrence.artistId ?? match.artwork.artistId ?? null,
+      size: occurrence.size || '',
+      medium: occurrence.materials || '',
+      year: occurrence.year || '',
+      imageRef: identity.getImageRef(occurrence)
+    };
+    if (String(latest?.latestExhibitionId) === String(exhibition.id)
+      && String(latest?.latestOccurrenceId) === String(occurrence.id)) {
+      changes.currentPrice = occurrence.price ?? '';
+    }
+    return {
+      artworks: currentArtworks.map((artwork) => artwork.workId === occurrence.workId ? { ...artwork, ...changes, updatedAt: now } : artwork),
+      status: match.reason === 'artist-title' || match.reason === 'artist-title-signals' ? 'linked' : 'synchronized',
+      workId: occurrence.workId
+    };
+  }
+
+  function resolveOccurrence({ artworks, exhibitions, exhibitionId, occurrenceId, workId, now = new Date().toISOString(), randomUUID }) {
+    const exhibition = exhibitions.find((item) => String(item.id) === String(exhibitionId));
+    const occurrence = exhibitionIndex.getExhibitionWorks(exhibition).find((item) => String(item.id) === String(occurrenceId));
+    if (!exhibition || !occurrence) return { artworks, exhibitions, status: 'not-found' };
+    let targetWorkId = workId;
+    let nextArtworks = artworks.slice();
+    if (!targetWorkId) {
+      const created = identity.createArtworkFromOccurrence(occurrence, { now, randomUUID });
+      targetWorkId = created.workId;
+      nextArtworks.push(created);
+    }
+    if (!nextArtworks.some((artwork) => artwork.workId === targetWorkId)) return { artworks, exhibitions, status: 'unknown-workId' };
+    const nextExhibitions = exhibitions.map((item) => {
+      if (String(item.id) !== String(exhibitionId)) return item;
+      return updateOccurrenceCollections({ ...item, works: item.works || item.artWorks }, occurrence.workId, (value) => value);
+    });
+    const linkedExhibitions = nextExhibitions.map((item) => {
+      if (String(item.id) !== String(exhibitionId)) return item;
+      const update = (items) => (Array.isArray(items) ? items.map((entry) => String(entry.id) === String(occurrenceId) ? { ...entry, workId: targetWorkId } : entry) : items);
+      return { ...item, works: update(item.works), artWorks: update(item.artWorks), updatedAt: now };
+    });
+    const linkedExhibition = linkedExhibitions.find((item) => String(item.id) === String(exhibitionId));
+    const linkedOccurrence = exhibitionIndex.getExhibitionWorks(linkedExhibition).find((item) => String(item.id) === String(occurrenceId));
+    const synchronized = synchronizeSavedOccurrence({ artworks: nextArtworks, exhibitions: linkedExhibitions, exhibition: linkedExhibition, occurrence: linkedOccurrence, now, randomUUID });
+    return { artworks: synchronized.artworks, exhibitions: linkedExhibitions, status: 'resolved', workId: targetWorkId };
+  }
+
+  return Object.freeze({ IDENTITY_FIELDS, applyCanonicalFieldsToOccurrence, resolveOccurrence, synchronizeCanonicalEdit, synchronizeOccurrenceEdit, synchronizeSavedOccurrence, updateLatestOccurrence });
+});
 
 /* storage/exhibition-detail-repository.js */
 (function initializeExhibitionDetailRepository(root) {
@@ -5006,6 +5400,7 @@ registerLocalPreviewAdminGuards();
       delete work.editOriginalManualNumber;
       delete work.editOriginalTitle;
       state.workEditSnapshotIds = state.workEditSnapshotIds.filter((id) => id !== workId);
+      options.synchronizeArtwork?.(work);
       syncWorkToSalesRecords(work);
       if (state.exhibition) {
         state.exhibition.works = exhibition.works;
@@ -5063,6 +5458,7 @@ registerLocalPreviewAdminGuards();
           delete work.editOriginalManualNumber;
           delete work.editOriginalTitle;
           state.workEditSnapshotIds = state.workEditSnapshotIds.filter((id) => id !== work.id);
+          options.synchronizeArtwork?.(work);
           syncWorkToSalesRecords(work);
           saveCount++;
         }
@@ -5349,6 +5745,7 @@ registerLocalPreviewAdminGuards();
       if (state.exhibition) {
         state.exhibition.works = latestExhibition.works;
       }
+      options.synchronizeArtwork?.(latestWork);
       options.saveExhibition();
       options.renderWorkRows();
 
@@ -10169,6 +10566,9 @@ function resolveExhibitionDetailDependencies() {
     inventoryModel: globalThis.ExhibitionInventoryModel,
     inventoryRenderer: globalThis.ExhibitionInventoryRenderer,
     inventoryStateControllerModule: globalThis.ExhibitionDetailInventoryStateController,
+    artworkIdentity: globalThis.ArtworkIdentity,
+    artworkRepository: globalThis.GalleryArtworksRepository?.repository,
+    artworkSyncService: globalThis.ArtworkSyncService,
     repository: globalThis.ExhibitionsRepository?.repository,
     salesAddControllerModule: globalThis.ExhibitionDetailSalesAddController,
     salesModel: globalThis.ExhibitionSalesModel,
@@ -10180,7 +10580,8 @@ function resolveExhibitionDetailDependencies() {
     worksViewModule: globalThis.ExhibitionDetailWorksView,
     accountingViewControllerModule: globalThis.ExhibitionDetailAccountingViewController
   };
-  const missing = Object.entries(dependencies).find(([, dependency]) => !dependency);
+  const optionalDependencies = new Set(['artworkIdentity', 'artworkRepository', 'artworkSyncService']);
+  const missing = Object.entries(dependencies).find(([name, dependency]) => !dependency && !optionalDependencies.has(name));
   if (missing) throw new Error(`Exhibition detail dependency is unavailable: ${missing[0]}`);
   return Object.freeze(dependencies);
 }
@@ -10258,8 +10659,28 @@ function createWorksEditorController() {
     setTimeoutImpl: (callback, delay) => setTimeout(callback, delay),
     nowImpl: () => Date.now(),
     randomImpl: () => Math.random(),
+    synchronizeArtwork: synchronizeArtworkOccurrence,
     consoleImpl: console
   });
+}
+
+function synchronizeArtworkOccurrence(work) {
+  if (exhibitionDetailState.inventoryMode === 'goods') return true;
+  if (!exhibitionDetailDependencies.artworkRepository || !exhibitionDetailDependencies.artworkSyncService) return true;
+  const exhibition = getCurrentExhibition();
+  const artworks = exhibitionDetailDependencies.artworkRepository.loadArtworks();
+  const exhibitions = exhibitionDetailDependencies.repository.loadExhibitions();
+  const result = exhibitionDetailDependencies.artworkSyncService.synchronizeSavedOccurrence({
+    artworks,
+    exhibitions,
+    exhibition,
+    occurrence: work
+  });
+  if (result.status === 'ambiguous') {
+    console.warn('Artwork identity requires explicit resolution.', { occurrenceId: work.id, candidateCount: result.candidates.length });
+    return true;
+  }
+  return exhibitionDetailDependencies.artworkRepository.saveArtworksSafely(result.artworks);
 }
 
 function createWorksView() {
