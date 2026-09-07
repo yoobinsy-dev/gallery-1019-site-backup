@@ -6,6 +6,8 @@ const path = require('node:path');
 const identity = require('../../artworks/identity');
 const index = require('../../artworks/exhibition-index');
 const sync = require('../../artworks/sync-service');
+const rowEditorModule = require('../../artwork-management/row-editor-controller');
+const excelExport = require('../../artwork-management/excel-export');
 
 function artwork(workId, overrides = {}) {
   return { workId, title: 'Blue', artistName: 'Kim', size: '10x10', medium: 'Oil', year: '2025', imageRef: {}, currentPrice: 100, collection: { owned: false }, ...overrides };
@@ -34,6 +36,23 @@ test('collection-only is excluded while exhibited non-collection is included', (
   const result = index.buildExhibitionIndex([{ id: 1, title: 'Show', endDate: '2026-01-01', works: [occurrence(1, 'work_exhibited')] }], artworks);
   assert.deepEqual(result.rows.map((row) => row.workId), ['work_exhibited']);
   assert.deepEqual(index.buildCollectionRows(artworks, []).map((row) => row.workId), ['work_collection']);
+});
+
+test('past exhibition status prefers collection and derives sold from occurrence sales', () => {
+  const artworks = [
+    artwork('work_owned', { collection: { owned: true } }),
+    artwork('work_sold'),
+    artwork('work_blank')
+  ];
+  const exhibitions = [{
+    id: 1,
+    title: 'Show',
+    endDate: '2026-01-01',
+    works: [occurrence(11, 'work_owned'), occurrence(12, 'work_sold'), occurrence(13, 'work_blank')],
+    soldWorks: [{ workId: 11, itemType: '작품' }, { workId: 'work_sold', itemType: '작품' }]
+  }];
+  const statuses = Object.fromEntries(index.buildExhibitionIndex(exhibitions, artworks).rows.map((row) => [row.workId, row.ownershipSaleStatus]));
+  assert.deepEqual(statuses, { work_owned: 'collection', work_sold: 'sold', work_blank: '' });
 });
 
 test('identity matching never merges title-only and reports ambiguous artist-title candidates', () => {
@@ -111,4 +130,73 @@ test('vendored Tabulator 6.5.0 assets are deployable', () => {
     assert.ok(fs.statSync(path.join(root, 'vendor', 'tabulator-6.5.0', name)).size > 0, name);
   });
   assert.equal(require('../../node_modules/tabulator-tables/package.json').version, '6.5.0');
+});
+
+test('row editor adds consecutive drafts and never persists empty rows', async () => {
+  const rows = [];
+  let creates = 0;
+  const table = {
+    async addRow(data) {
+      const row = { getData: () => data, getCell: () => ({ edit() {} }), update: async (changes) => Object.assign(data, changes) };
+      rows.push(row);
+      return row;
+    }
+  };
+  const controller = rowEditorModule.create({ onCreate: () => { creates += 1; } });
+  await controller.addDraft(table);
+  await controller.addDraft(table);
+  assert.equal(rows.length, 2);
+  assert.notEqual(rows[0].getData().workId, rows[1].getData().workId);
+  assert.equal((await controller.commitRow(rows[0], 'collection')).status, 'draft');
+  assert.equal(creates, 0);
+});
+
+test('valid draft persists once and adopts its permanent workId', async () => {
+  const data = { workId: 'draft_1', _draft: true, title: 'New Work', artistName: 'Artist', collection: { owned: true } };
+  const row = { getData: () => data, update: async (changes) => Object.assign(data, changes) };
+  const controller = rowEditorModule.create({ onCreate: (values) => ({ workId: 'work_stable', ...values }) });
+  const result = await controller.commitRow(row, 'collection');
+  assert.equal(result.status, 'created');
+  assert.equal(data.workId, 'work_stable');
+  assert.equal(data._draft, false);
+});
+
+test('photo upload persists Blob references without base64 and failed replacement keeps old reference', async () => {
+  class FileReaderStub {
+    readAsDataURL() {
+      this.result = 'data:image/png;base64,AAAA';
+      this.onload();
+    }
+  }
+  const original = { photoUrl: 'https://blob.example/old.png', photoPath: 'old.png' };
+  const data = { workId: 'work_a', title: 'Blue', artistName: 'Kim', imageRef: original, _pendingPhotoFile: { name: 'new.png', type: 'image/png' } };
+  const row = { getData: () => data, update: async (changes) => Object.assign(data, changes) };
+  let receivedValues;
+  const lifecycle = {
+    buildPhotoUploadFileName: () => 'new-full.png',
+    uploadImageDataUrl: async () => ({ url: 'https://blob.example/new.png', pathname: 'new.png' })
+  };
+  const success = rowEditorModule.create({ FileReaderImpl: FileReaderStub, imageLifecycle: lifecycle, onUpdate: (_row, values) => { receivedValues = values; return { ...data, ...values }; } });
+  assert.equal((await success.commitRow(row, 'collection')).status, 'updated');
+  assert.equal(receivedValues.imageRef.photoUrl, 'https://blob.example/new.png');
+  assert.equal(JSON.stringify(receivedValues).includes('base64'), false);
+
+  data.imageRef = original;
+  data._pendingPhotoFile = { name: 'new.png', type: 'image/png' };
+  const failed = rowEditorModule.create({ FileReaderImpl: FileReaderStub, imageLifecycle: lifecycle, onUpdate: () => false });
+  assert.equal((await failed.commitRow(row, 'collection')).status, 'save-failed');
+  assert.deepEqual(data.imageRef, original);
+});
+
+test('Excel export uses Tabulator XLSX for the active filtered and sorted rows', () => {
+  const calls = [];
+  const table = { download: (...args) => calls.push(args) };
+  assert.equal(excelExport.download(table, 'collection'), true);
+  assert.deepEqual(calls[0], ['xlsx', '소장품.xlsx', { sheetName: '소장품' }, 'active']);
+});
+
+test('vendored SheetJS 0.20.3 browser asset is deployable', () => {
+  const root = path.join(__dirname, '..', '..');
+  ['xlsx.full.min.js', 'LICENSE'].forEach((name) => assert.ok(fs.statSync(path.join(root, 'vendor', 'sheetjs-0.20.3', name)).size > 0, name));
+  assert.equal(require('../../node_modules/xlsx/package.json').version, '0.20.3');
 });
