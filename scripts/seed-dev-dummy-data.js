@@ -18,7 +18,8 @@ const STATE_KEYS = [
   'pottery-personal-work-v1',
   'studio-calendar-state-v1',
   'pottery-material-orders-v1',
-  'pottery-accounting-v1'
+  'pottery-accounting-v1',
+  'gallery-artworks-v1'
 ];
 
 function formatDate(date) {
@@ -112,6 +113,78 @@ function makeExhibition(id, title, startDate, endDate, exhibitionIndex, artists,
   };
 }
 
+function dummyWorkId(number) {
+  return `work_10190000-0000-4000-8000-${String(number).padStart(12, '0')}`;
+}
+
+function buildArtworkSeed(exhibitions, now) {
+  const links = [
+    [[0, 0], [1, 0], [2, 0]],
+    [[0, 1], [1, 1]],
+    [[1, 2], [2, 2]]
+  ];
+  let nextIdentity = 1;
+  links.forEach((locations) => {
+    const workId = dummyWorkId(nextIdentity++);
+    locations.forEach(([exhibitionIndex, workIndex], occurrenceIndex) => {
+      const work = exhibitions[exhibitionIndex].works[workIndex];
+      work.workId = workId;
+      work.title = `${PREFIX}순환하는 풍경_${nextIdentity - 1}`;
+      work.author = `${PREFIX}작가_연결${nextIdentity - 1}`;
+      work.price = String(420000 + occurrenceIndex * 180000 + exhibitionIndex * 10000);
+    });
+  });
+
+  exhibitions[0].works[3].title = `${PREFIX}같은 제목`;
+  exhibitions[0].works[3].author = `${PREFIX}작가_서로다름_A`;
+  exhibitions[1].works[3].title = `${PREFIX}같은 제목`;
+  exhibitions[1].works[3].author = `${PREFIX}작가_서로다름_B`;
+
+  exhibitions.forEach((exhibition, exhibitionIndex) => {
+    exhibition.works.forEach((work, workIndex) => {
+      if (exhibitionIndex === 2 && workIndex === 7) return;
+      if (!work.workId) work.workId = dummyWorkId(nextIdentity++);
+    });
+  });
+
+  const ambiguousOccurrence = exhibitions[2].works[7];
+  ambiguousOccurrence.title = `${PREFIX}모호한 작품`;
+  ambiguousOccurrence.author = `${PREFIX}작가_모호`;
+  ambiguousOccurrence.year = '';
+  ambiguousOccurrence.size = '';
+  delete ambiguousOccurrence.workId;
+  exhibitions.forEach((exhibition) => { exhibition.artWorks = JSON.parse(JSON.stringify(exhibition.works)); });
+
+  const occurrences = exhibitions.flatMap((exhibition) => exhibition.works.map((work) => ({ exhibition, work }))).filter(({ work }) => work.workId);
+  const latestById = new Map();
+  occurrences.forEach((entry) => {
+    const existing = latestById.get(entry.work.workId);
+    if (!existing || String(entry.exhibition.endDate) > String(existing.exhibition.endDate)) latestById.set(entry.work.workId, entry);
+  });
+  const createdAt = now.toISOString();
+  const artworks = Array.from(latestById.values()).map(({ work }, index) => ({
+    workId: work.workId,
+    title: work.title,
+    artistName: work.author,
+    artistId: null,
+    size: work.size,
+    medium: work.materials,
+    year: work.year,
+    imageRef: { photoUrl: '', photoPreviewUrl: '', photoPath: '', photoPreviewPath: '' },
+    currentPrice: work.price,
+    collection: index < 6 ? { owned: true, collectionNumber: `COL-2026-${String(index + 1).padStart(3, '0')}`, dateAdded: shiftDate(now, -index * 9) } : { owned: false, collectionNumber: '', dateAdded: '' },
+    createdAt,
+    updatedAt: createdAt
+  }));
+  artworks.push(
+    { workId: dummyWorkId(90), title: `${PREFIX}소장전용_달항아리`, artistName: `${PREFIX}작가_소장A`, artistId: null, size: '28 × 28 × 31 cm', medium: '백자', year: '2026', imageRef: {}, currentPrice: '780000', collection: { owned: true, collectionNumber: 'COL-2026-090', dateAdded: shiftDate(now, -3) }, createdAt, updatedAt: createdAt },
+    { workId: dummyWorkId(91), title: `${PREFIX}소장전용_낮은 파동`, artistName: `${PREFIX}작가_소장B`, artistId: null, size: '40 × 30 cm', medium: '캔버스에 유채', year: '2025', imageRef: {}, currentPrice: '920000', collection: { owned: true, collectionNumber: 'COL-2026-091', dateAdded: shiftDate(now, -1) }, createdAt, updatedAt: createdAt },
+    { workId: dummyWorkId(92), title: ambiguousOccurrence.title, artistName: ambiguousOccurrence.author, artistId: null, size: '20 × 20 cm', medium: '혼합재료', year: '2024', imageRef: {}, currentPrice: '310000', collection: { owned: false, collectionNumber: '', dateAdded: '' }, createdAt, updatedAt: createdAt },
+    { workId: dummyWorkId(93), title: ambiguousOccurrence.title, artistName: ambiguousOccurrence.author, artistId: null, size: '30 × 30 cm', medium: '혼합재료', year: '2025', imageRef: {}, currentPrice: '350000', collection: { owned: false, collectionNumber: '', dateAdded: '' }, createdAt, updatedAt: createdAt }
+  );
+  return artworks;
+}
+
 function buildSeedData(now = new Date()) {
   const artists = [`${PREFIX}작가_김하늘`, `${PREFIX}작가_이로운`, `${PREFIX}작가_박여름`, `${PREFIX}작가_최새벽`];
   const owner = { id: 91019000, name: `${PREFIX}운영자` };
@@ -133,6 +206,7 @@ function buildSeedData(now = new Date()) {
     makeExhibition(91019002, '예정전_흙과_빛의_대화', shiftDate(now, 25), shiftDate(now, 50), 1, artists, owner),
     makeExhibition(91019003, '종료전_기억의_표면', shiftDate(now, -55), shiftDate(now, -25), 2, artists, owner)
   ];
+  const galleryArtworks = buildArtworkSeed(exhibitions, now);
   const students = Array.from({ length: 10 }, (_, index) => {
     const number = index + 1;
     const paymentDate = shiftDate(now, -(index % 3) * 14);
@@ -214,7 +288,8 @@ function buildSeedData(now = new Date()) {
     'pottery-personal-work-v1': personalWork,
     'studio-calendar-state-v1': { events: calendarEvents, baseRules: [], baseRuleTimeline: [], baseWeekOverrides: {}, studioUsers: students.map(({ id, name }) => ({ id, name })), instructors: [`${PREFIX}강사1`, `${PREFIX}강사2`, `${PREFIX}강사3`], classTeachingLog: [] },
     'pottery-material-orders-v1': materialOrders,
-    'pottery-accounting-v1': []
+    'pottery-accounting-v1': [],
+    'gallery-artworks-v1': galleryArtworks
   };
 }
 
@@ -225,8 +300,9 @@ function hasDummyIdentity(value) {
 }
 
 function mergeById(existing, additions) {
-  const additionIds = new Set(additions.map((item) => String(item.id)));
-  return [...existing.filter((item) => !additionIds.has(String(item?.id))), ...additions];
+  const getIdentity = (item) => String(item?.workId ?? item?.id);
+  const additionIds = new Set(additions.map(getIdentity));
+  return [...existing.filter((item) => !additionIds.has(getIdentity(item))), ...additions];
 }
 
 function mergeSeedState(current, seed) {
@@ -238,6 +314,7 @@ function mergeSeedState(current, seed) {
     'pottery-personal-work-v1': mergeById(Array.isArray(current['pottery-personal-work-v1']) ? current['pottery-personal-work-v1'] : [], seed['pottery-personal-work-v1']),
     'pottery-material-orders-v1': mergeById(Array.isArray(current['pottery-material-orders-v1']) ? current['pottery-material-orders-v1'] : [], seed['pottery-material-orders-v1']),
     'pottery-accounting-v1': Array.isArray(current['pottery-accounting-v1']) ? current['pottery-accounting-v1'] : [],
+    'gallery-artworks-v1': mergeById(Array.isArray(current['gallery-artworks-v1']) ? current['gallery-artworks-v1'] : [], seed['gallery-artworks-v1']),
     'studio-calendar-state-v1': {
       ...(current['studio-calendar-state-v1'] || {}),
       events: mergeById(Array.isArray(current['studio-calendar-state-v1']?.events) ? current['studio-calendar-state-v1'].events : [], seed['studio-calendar-state-v1'].events),
@@ -257,6 +334,7 @@ function cleanupSeedState(current) {
     'pottery-personal-work-v1': (current['pottery-personal-work-v1'] || []).filter((item) => !hasDummyIdentity(item)),
     'pottery-material-orders-v1': (current['pottery-material-orders-v1'] || []).filter((item) => !hasDummyIdentity(item)),
     'pottery-accounting-v1': (current['pottery-accounting-v1'] || []).filter((item) => !hasDummyIdentity(item)),
+    'gallery-artworks-v1': (current['gallery-artworks-v1'] || []).filter((item) => !MANIFEST.artworkIds.includes(item?.workId) && !hasDummyIdentity(item)),
     'studio-calendar-state-v1': {
       ...calendar,
       events: (calendar.events || []).filter((item) => !hasDummyIdentity(item)),
@@ -322,6 +400,10 @@ function summarize(data) {
     calendarEvents: data['studio-calendar-state-v1'].events.filter(hasDummyIdentity).length,
     materialOrders: data['pottery-material-orders-v1'].filter(hasDummyIdentity).length,
     accounting: data['pottery-accounting-v1'].filter(hasDummyIdentity).length,
+    canonicalArtworks: data['gallery-artworks-v1'].filter(hasDummyIdentity).length,
+    collectionWorks: data['gallery-artworks-v1'].filter((item) => hasDummyIdentity(item) && item.collection?.owned).length,
+    collectionOnlyWorks: data['gallery-artworks-v1'].filter((item) => hasDummyIdentity(item) && item.collection?.owned && !data.exhibitions.some((exhibition) => (exhibition.works || []).some((work) => work.workId === item.workId))).length,
+    exhibitedUniqueWorks: new Set(data.exhibitions.flatMap((exhibition) => (exhibition.works || []).map((work) => work.workId).filter(Boolean))).size,
     blobObjects: 0
   };
 }

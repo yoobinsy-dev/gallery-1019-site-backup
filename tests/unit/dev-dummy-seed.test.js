@@ -18,7 +18,8 @@ test('DEV dummy seed is deterministic, idempotent, and preserves unrelated state
     'pottery-personal-work-v1': [{ id: 'existing-personal', userName: 'existing' }],
     'studio-calendar-state-v1': { events: [{ id: 'existing-event', title: 'existing' }], studioUsers: [], instructors: ['existing'], baseRules: [{ id: 'existing-rule' }] },
     'pottery-material-orders-v1': [{ id: 'existing-order', items: [{ id: 'existing-item' }] }],
-    'pottery-accounting-v1': [{ id: 'existing-accounting', title: 'existing' }]
+    'pottery-accounting-v1': [{ id: 'existing-accounting', title: 'existing' }],
+    'gallery-artworks-v1': [{ workId: 'work_existing', title: 'existing' }]
   };
 
   const once = mergeSeedState(unrelated, seed);
@@ -33,6 +34,9 @@ test('DEV dummy seed is deterministic, idempotent, and preserves unrelated state
 test('DEV dummy seed covers supported exhibition and studio states', () => {
   const seed = buildSeedData(new Date('2026-09-07T12:00:00.000Z'));
   assert.deepEqual(seed.users.map((item) => item.id), manifest.userIds);
+  assert.deepEqual(sorted(seed['gallery-artworks-v1'].map((item) => item.workId)), sorted(manifest.artworkIds));
+  assert.equal(seed['gallery-artworks-v1'].filter((item) => item.collection.owned).length, 8);
+  assert.equal(seed.exhibitions.flatMap((item) => item.works).filter((work) => !work.workId).length, 1);
   assert.equal(seed.users[0].username, 'DEV_DUMMY_ADMIN');
   assert.equal(seed.users[0].approved, true);
   assert.deepEqual(seed.exhibitions.map((item) => item.id), manifest.exhibitionIds);
