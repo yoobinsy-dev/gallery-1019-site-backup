@@ -1,13 +1,13 @@
 (function initializeStudentPaymentCredits(root) {
   'use strict';
 
-  function getRemainingClassCount({ student, completedSincePayment, basisCount }) {
+  function getRemainingClassCount({ student, completedSincePayment, basisCount, cycleCredits }) {
     const carry = Number(student?.carryOverBeforePayment || 0);
-    const cycleCredits = Number(student?.paymentCycleCredits ?? basisCount ?? 0);
+    const resolvedCycleCredits = Number(cycleCredits ?? student?.paymentCycleCredits ?? basisCount ?? 0);
     const used = Number(completedSincePayment || 0);
 
     const safeCarry = Number.isFinite(carry) ? carry : 0;
-    const safeCycle = Number.isFinite(cycleCredits) ? cycleCredits : 0;
+    const safeCycle = Number.isFinite(resolvedCycleCredits) ? resolvedCycleCredits : 0;
     const safeUsed = Number.isFinite(used) ? used : 0;
     return safeCarry + safeCycle - safeUsed - getManualUsedAdjustment(student);
   }
@@ -149,6 +149,7 @@
       groupsAsc.push({
         paymentDate,
         paymentRecord,
+        cycleSize,
         classRecords: assigned.sort((a, b) => `${b.date} ${b.start}`.localeCompare(`${a.date} ${a.start}`))
       });
     });
@@ -166,7 +167,8 @@
       remainingCount: getRemainingClassCount({
         student,
         completedSincePayment: (currentGroup?.classRecords.length || 0) + priorUsageSinceLatestPayment,
-        basisCount: options?.paymentCycleSize
+        basisCount: options?.paymentCycleSize,
+        cycleCredits: currentGroup?.cycleSize
       })
     };
   }

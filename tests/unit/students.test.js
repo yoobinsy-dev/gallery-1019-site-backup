@@ -234,19 +234,17 @@ test('student payment cycles assign late-entered payment overflow and preserve r
   const students = loadStudents();
   const student = {
     tuitionBasis: '4회',
-    paymentCycleCredits: 4,
+    paymentCycleCredits: 2,
     mostRecentPaymentDate: '2026-09-02',
     paymentHistory: ['2026-08-04', '2026-09-02'],
     paymentRecords: [
-      { id: 'august', date: '2026-08-04', basis: '4회', credits: 4 },
+      { id: 'august', date: '2026-08-04', basis: '4회', credits: 2 },
       { id: 'september', date: '2026-09-02', basis: '4회', credits: 4 }
     ]
   };
   const classRecords = [
     { id: 'aug-04', date: '2026-08-04', start: '10:00' },
     { id: 'aug-11', date: '2026-08-11', start: '10:00' },
-    { id: 'aug-25', date: '2026-08-25', start: '10:00' },
-    { id: 'aug-28', date: '2026-08-28', start: '10:00' },
     { id: 'sep-01', date: '2026-09-01', start: '10:00' },
     { id: 'sep-08', date: '2026-09-08', start: '10:00' }
   ];
@@ -259,10 +257,11 @@ test('student payment cycles assign late-entered payment overflow and preserve r
 
   assert.deepEqual(grouped.groups.map((group) => [
     group.paymentDate,
+    group.cycleSize,
     group.classRecords.map((record) => record.id)
   ]), [
-    ['2026-09-02', ['sep-08', 'sep-01']],
-    ['2026-08-04', ['aug-28', 'aug-25', 'aug-11', 'aug-04']]
+    ['2026-09-02', 4, ['sep-08', 'sep-01']],
+    ['2026-08-04', 2, ['aug-11', 'aug-04']]
   ]);
   assert.equal(grouped.remainingCount, 2);
   assert.deepEqual(grouped.unassigned, []);
@@ -296,6 +295,7 @@ test('exhausted reduced legacy cycle leaves later class pending until the next p
   };
 
   const exhausted = students.buildPaymentClassGroups(legacyStudent, ['2026-08-04'], classRecords);
+  assert.equal(exhausted.groups[0].cycleSize, 2);
   assert.deepEqual(exhausted.groups[0].classRecords.map((record) => record.id), ['class-b', 'class-a']);
   assert.deepEqual(exhausted.unassigned.map((record) => record.id), ['class-c']);
   assert.equal(exhausted.remainingCount, 0);
@@ -325,10 +325,11 @@ test('exhausted reduced legacy cycle leaves later class pending until the next p
   );
   assert.deepEqual(renewed.groups.map((group) => [
     group.paymentDate,
+    group.cycleSize,
     group.classRecords.map((record) => record.id)
   ]), [
-    ['2026-09-05', ['class-c']],
-    ['2026-08-04', ['class-b', 'class-a']]
+    ['2026-09-05', 4, ['class-c']],
+    ['2026-08-04', 2, ['class-b', 'class-a']]
   ]);
   assert.equal(renewed.remainingCount, 3);
   assert.deepEqual(renewed.unassigned, []);

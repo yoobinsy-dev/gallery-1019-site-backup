@@ -109,12 +109,12 @@ const studentFixtures = [{
   mostRecentPaymentDate: '2026-09-02',
   paymentHistory: ['2026-08-04', '2026-09-02'],
   paymentRecords: [
-    { id: 'PAYMENT_CYCLE_AUGUST', date: '2026-08-04', tuition: 250000, basis: '4회', credits: 4 },
+    { id: 'PAYMENT_CYCLE_AUGUST', date: '2026-08-04', tuition: 250000, basis: '4회', credits: 2 },
     { id: 'PAYMENT_CYCLE_SEPTEMBER', date: '2026-09-02', tuition: 250000, basis: '4회', credits: 4 }
   ],
   creditTrackingStartDate: '2026-08-04',
   carryOverBeforePayment: 0,
-  paymentCycleCredits: 4,
+  paymentCycleCredits: 2,
   manualUsedAdjustment: 0
 }, {
   id: 'PAYMENT_CYCLE_REDUCED_STUDENT_ID',
@@ -191,8 +191,6 @@ const calendarFixture = {
   }, ...[
     ['PAYMENT_CYCLE_CLASS_1', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-04', '10:00'],
     ['PAYMENT_CYCLE_CLASS_2', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-11', '10:00'],
-    ['PAYMENT_CYCLE_CLASS_3', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-25', '10:00'],
-    ['PAYMENT_CYCLE_CLASS_4', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-28', '10:00'],
     ['PAYMENT_CYCLE_CLASS_5', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-09-01', '10:00'],
     ['PAYMENT_CYCLE_CLASS_6', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-09-08', '10:00'],
     ['PAYMENT_CYCLE_REDUCED_CLASS_A', 'PAYMENT_CYCLE_REDUCED_STUDENT', '2026-08-11', '12:00'],
@@ -1519,6 +1517,9 @@ test('student payment cycles render late payment overflow consistently and prese
   const detailText = await page.locator('#student-detail-payment-class-body').innerText();
   expect(detailText.indexOf('2026-09-08')).toBeLessThan(detailText.indexOf('2026-09-01'));
   expect(detailText.indexOf('2026-09-01')).toBeLessThan(detailText.indexOf('2026-08-04'));
+  const laterPaymentRows = page.locator('#student-detail-payment-class-body tr').filter({ hasText: '2026-09-02' });
+  await expect(laterPaymentRows).toContainText('4회');
+  await expect(laterPaymentRows).toContainText('4');
   expect(detailText).not.toContain('이전 결제 사이클');
   await page.locator('#student-detail-close-btn').click();
 

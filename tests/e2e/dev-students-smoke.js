@@ -45,12 +45,12 @@ const students = [{
   mostRecentPaymentDate: '2026-09-02',
   paymentHistory: ['2026-08-04', '2026-09-02'],
   paymentRecords: [
-    { id: 'PAYMENT_CYCLE_AUGUST', date: '2026-08-04', tuition: 250000, basis: '4회', credits: 4 },
+    { id: 'PAYMENT_CYCLE_AUGUST', date: '2026-08-04', tuition: 250000, basis: '4회', credits: 2 },
     { id: 'PAYMENT_CYCLE_SEPTEMBER', date: '2026-09-02', tuition: 250000, basis: '4회', credits: 4 }
   ],
   creditTrackingStartDate: '2026-08-04',
   carryOverBeforePayment: 0,
-  paymentCycleCredits: 4,
+  paymentCycleCredits: 2,
   manualUsedAdjustment: 0
 }, {
   id: 'PAYMENT_CYCLE_REDUCED_STUDENT_ID',
@@ -60,6 +60,25 @@ const students = [{
   tuitionBasis: '4회',
   mostRecentPaymentDate: '2026-08-04',
   paymentHistory: ['2026-08-04'],
+  paymentRecords: [
+    { id: 'PAYMENT_CYCLE_REDUCED_LEGACY', date: '2026-08-04', tuition: 250000, basis: '4회', credits: 2 }
+  ],
+  creditTrackingStartDate: '2026-08-04',
+  carryOverBeforePayment: 0,
+  paymentCycleCredits: 2,
+  manualUsedAdjustment: 0
+}, {
+  id: 'PAYMENT_CYCLE_RENEWED_STUDENT_ID',
+  name: 'PAYMENT_CYCLE_RENEWED_STUDENT',
+  studentGroup: '정규반',
+  instructor: currentUser.name,
+  tuitionBasis: '4회',
+  mostRecentPaymentDate: '2026-09-05',
+  paymentHistory: ['2026-08-04', '2026-09-05'],
+  paymentRecords: [
+    { id: 'PAYMENT_CYCLE_RENEWED_LEGACY', date: '2026-08-04', tuition: 250000, basis: '4회', credits: 2 },
+    { id: 'PAYMENT_CYCLE_RENEWAL', date: '2026-09-05', tuition: 250000, basis: '4회', credits: 4 }
+  ],
   creditTrackingStartDate: '2026-08-04',
   carryOverBeforePayment: 0,
   paymentCycleCredits: 2,
@@ -80,10 +99,14 @@ const calendar = {
   }, ...[
     ['PAYMENT_CYCLE_CLASS_1', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-04'],
     ['PAYMENT_CYCLE_CLASS_2', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-11'],
-    ['PAYMENT_CYCLE_CLASS_3', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-25'],
-    ['PAYMENT_CYCLE_CLASS_4', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-28'],
     ['PAYMENT_CYCLE_CLASS_5', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-09-01'],
-    ['PAYMENT_CYCLE_CLASS_6', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-09-08']
+    ['PAYMENT_CYCLE_CLASS_6', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-09-08'],
+    ['PAYMENT_CYCLE_REDUCED_CLASS_A', 'PAYMENT_CYCLE_REDUCED_STUDENT', '2026-08-11'],
+    ['PAYMENT_CYCLE_REDUCED_CLASS_B', 'PAYMENT_CYCLE_REDUCED_STUDENT', '2026-08-28'],
+    ['PAYMENT_CYCLE_REDUCED_CLASS_C', 'PAYMENT_CYCLE_REDUCED_STUDENT', '2026-09-04'],
+    ['PAYMENT_CYCLE_RENEWED_CLASS_A', 'PAYMENT_CYCLE_RENEWED_STUDENT', '2026-08-11'],
+    ['PAYMENT_CYCLE_RENEWED_CLASS_B', 'PAYMENT_CYCLE_RENEWED_STUDENT', '2026-08-28'],
+    ['PAYMENT_CYCLE_RENEWED_CLASS_C', 'PAYMENT_CYCLE_RENEWED_STUDENT', '2026-09-04']
   ].map(([id, title, date]) => ({
     id,
     kind: '수강',
@@ -92,15 +115,7 @@ const calendar = {
     date,
     start: '10:00',
     end: '11:00'
-  })), {
-    id: 'PAYMENT_CYCLE_REDUCED_CLASS',
-    kind: '수강',
-    title: 'PAYMENT_CYCLE_REDUCED_STUDENT',
-    instructor: currentUser.name,
-    date: '2026-08-04',
-    start: '12:00',
-    end: '13:00'
-  }],
+  }))],
   baseRules: [],
   baseRuleTimeline: [],
   baseWeekOverrides: {},
@@ -203,12 +218,22 @@ async function main() {
     await cycleRow.locator('.row-action-btn.detail').click();
     const cycleDetail = await page.locator('#student-detail-payment-class-body').innerText();
     assert.ok(cycleDetail.indexOf('2026-09-08') < cycleDetail.indexOf('2026-09-01'));
-    assert.ok(cycleDetail.indexOf('2026-09-01') < cycleDetail.indexOf('2026-08-28'));
+    assert.ok(cycleDetail.indexOf('2026-09-01') < cycleDetail.indexOf('2026-08-11'));
     assert.doesNotMatch(cycleDetail, /이전 결제 사이클/);
     await page.locator('#student-detail-close-btn').click();
 
     const reducedRow = page.locator('#students-tbody tr').filter({ hasText: students[2].name });
-    assert.equal((await reducedRow.locator('.remaining-badge').textContent()).trim(), '1');
+    assert.equal((await reducedRow.locator('.remaining-badge').textContent()).trim(), '0');
+    await reducedRow.locator('.row-action-btn.detail').click();
+    assert.match(await page.locator('#student-detail-payment-class-body').innerText(), /다음 결제 대기[\s\S]*2026-09-04/);
+    await page.locator('#student-detail-close-btn').click();
+
+    const renewedRow = page.locator('#students-tbody tr').filter({ hasText: students[3].name });
+    assert.equal((await renewedRow.locator('.remaining-badge').textContent()).trim(), '3');
+    await renewedRow.locator('.row-action-btn.detail').click();
+    const renewedDetail = await page.locator('#student-detail-payment-class-body').innerText();
+    assert.match(renewedDetail, /2026-09-05[\s\S]*4회[\s\S]*4[\s\S]*2026-09-04/);
+    await page.locator('#student-detail-close-btn').click();
 
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     assert.equal((await studentRow.locator('.remaining-badge').textContent()).trim(), '2');
@@ -219,7 +244,9 @@ async function main() {
     assert.equal((await page.locator('#students-tbody tr').filter({ hasText: students[1].name })
       .locator('.remaining-badge').textContent()).trim(), '2');
     assert.equal((await page.locator('#students-tbody tr').filter({ hasText: students[2].name })
-      .locator('.remaining-badge').textContent()).trim(), '1');
+      .locator('.remaining-badge').textContent()).trim(), '0');
+    assert.equal((await page.locator('#students-tbody tr').filter({ hasText: students[3].name })
+      .locator('.remaining-badge').textContent()).trim(), '3');
     assert.deepEqual(await readBusinessState(page), stateBefore);
 
     await gotoReady(page, '/pottery-master-calendar.html', 'body');
@@ -232,7 +259,11 @@ async function main() {
       ok: true,
       remainingCredits: 2,
       latePaymentRemainingCredits: 2,
-      reducedStartingBalanceRemainingCredits: 1,
+      laterPaymentCapacity: 4,
+      reducedStartingBalanceRemainingCredits: 0,
+      exhaustedLegacyPending: true,
+      renewedPaymentCapacity: 4,
+      renewedRemainingCredits: 3,
       latePaymentDetailOrdered: true,
       recentClassDate: '2026-07-15',
       cancelledOccurrenceAbsent: true,
