@@ -131,6 +131,44 @@ const studentFixtures = [{
   carryOverBeforePayment: 0,
   paymentCycleCredits: 2,
   manualUsedAdjustment: 0
+}, {
+  id: 'CREDIT_LEDGER_V2_SIGNED_STUDENT_ID',
+  name: 'CREDIT_LEDGER_V2_SIGNED_STUDENT',
+  studentGroup: '정규반',
+  classTime: '일 10:00~11:00',
+  classType: '정규 수강',
+  instructor: currentUser.name,
+  tuition: 250000,
+  tuitionBasis: '4회',
+  mostRecentPaymentDate: '2026-08-02',
+  paymentHistory: ['2026-08-02'],
+  paymentRecords: [{ id: 'CREDIT_LEDGER_V2_PAYMENT', date: '2026-08-02', tuition: 250000, basis: '4회', credits: 4 }],
+  paymentCycleCredits: 99,
+  manualUsedAdjustment: -17,
+  carryOverBeforePayment: 23,
+  creditLedgerV2: {
+    version: 2,
+    openingDate: '2026-07-26',
+    openingBalance: -2,
+    openingConfirmed: true,
+    openingConfirmedAt: '2026-09-08T00:00:00.000Z',
+    adjustments: []
+  }
+}, {
+  id: 'CREDIT_LEDGER_V2_UNCONFIRMED_STUDENT_ID',
+  name: 'CREDIT_LEDGER_V2_UNCONFIRMED_STUDENT',
+  studentGroup: '정규반',
+  classTime: '월 10:00~11:00',
+  classType: '정규 수강',
+  instructor: currentUser.name,
+  tuition: 250000,
+  tuitionBasis: '4회',
+  mostRecentPaymentDate: '',
+  paymentHistory: [],
+  paymentRecords: [],
+  paymentCycleCredits: 88,
+  manualUsedAdjustment: 12,
+  carryOverBeforePayment: -9
 }];
 const personalWorkFixtures = [{
   id: 'CHARACTERIZATION_TEST_PERSONAL_ACTIVE',
@@ -195,7 +233,10 @@ const calendarFixture = {
     ['PAYMENT_CYCLE_CLASS_6', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-09-08', '10:00'],
     ['PAYMENT_CYCLE_REDUCED_CLASS_A', 'PAYMENT_CYCLE_REDUCED_STUDENT', '2026-08-11', '12:00'],
     ['PAYMENT_CYCLE_REDUCED_CLASS_B', 'PAYMENT_CYCLE_REDUCED_STUDENT', '2026-08-28', '12:00'],
-    ['PAYMENT_CYCLE_REDUCED_CLASS_C', 'PAYMENT_CYCLE_REDUCED_STUDENT', '2026-09-04', '12:00']
+    ['PAYMENT_CYCLE_REDUCED_CLASS_C', 'PAYMENT_CYCLE_REDUCED_STUDENT', '2026-09-04', '12:00'],
+    ['CREDIT_LEDGER_V2_CLASS_SAME_DAY', 'CREDIT_LEDGER_V2_SIGNED_STUDENT', '2026-08-02', '10:00'],
+    ['CREDIT_LEDGER_V2_CLASS_2', 'CREDIT_LEDGER_V2_SIGNED_STUDENT', '2026-08-28', '10:00'],
+    ['CREDIT_LEDGER_V2_CLASS_3', 'CREDIT_LEDGER_V2_SIGNED_STUDENT', '2026-09-04', '10:00']
   ].map(([id, title, date, start]) => ({
     id,
     kind: '수강',
@@ -205,6 +246,23 @@ const calendarFixture = {
     start,
     end: start === '12:00' ? '13:00' : '11:00'
   })), {
+    id: 'CREDIT_LEDGER_V2_SKIPPED_CLASS',
+    kind: '수강',
+    title: 'CREDIT_LEDGER_V2_SIGNED_STUDENT',
+    date: '2026-08-15',
+    start: '10:00',
+    end: '11:00',
+    repeatWeekly: true,
+    repeatEndDate: '2026-08-15',
+    repeatSkipDates: ['2026-08-15']
+  }, {
+    id: 'CREDIT_LEDGER_V2_PERSONAL_WORK',
+    kind: '개인작업',
+    title: 'CREDIT_LEDGER_V2_SIGNED_STUDENT',
+    date: '2026-08-15',
+    start: '12:00',
+    end: '13:00'
+  }, {
     id: 'CHARACTERIZATION_TEST_PERSONAL_ACTIVE_USAGE',
     kind: '개인작업',
     title: 'CHARACTERIZATION_TEST_ACTIVE_ARTIST',
@@ -1538,6 +1596,65 @@ test('student payment cycles render late payment overflow consistently and prese
   await expect(page.locator('#students-tbody tr').filter({ hasText: 'PAYMENT_CYCLE_REDUCED_STUDENT' })
     .locator('.remaining-badge')).toHaveText('0');
   expect(pageErrors).toEqual([]);
+});
+
+test('student V2 setup keeps V1 non-authoritative and previews a stable signed ledger', async ({ page }) => {
+  await page.goto('/pottery-students.html', { waitUntil: 'networkidle' });
+
+  const setupRows = page.locator('#credit-ledger-v2-setup-body tr');
+  const expectedCreditStudents = studentFixtures.filter((student) => student.tuitionBasis !== '월초').length;
+  await expect(setupRows).toHaveCount(expectedCreditStudents);
+  await expect(page.locator('#credit-ledger-v2-setup-body')).not.toContainText('이소정');
+
+  const unconfirmedRow = setupRows.filter({ hasText: 'CREDIT_LEDGER_V2_UNCONFIRMED_STUDENT' });
+  const openingInput = unconfirmedRow.locator('.credit-ledger-v2-opening-input');
+  await expect(openingInput).toHaveValue('');
+  await expect(unconfirmedRow).toContainText('미확인');
+  await expect(page.locator('#credit-ledger-v2-progress')).toContainText(`1 / ${expectedCreditStudents}`);
+
+  for (const value of ['3', '0', '-2']) {
+    await openingInput.fill(value);
+    await unconfirmedRow.locator('.credit-ledger-v2-confirm').click();
+    await expect(openingInput).toHaveValue(value);
+  }
+  await expect(unconfirmedRow.locator('.credit-ledger-v2-balance')).toHaveText('-2');
+  await expect(unconfirmedRow.locator('.credit-ledger-v2-balance')).toHaveClass(/negative/);
+  await expect(page.locator('#credit-ledger-v2-progress')).toContainText(`2 / ${expectedCreditStudents}`);
+
+  const signedRow = setupRows.filter({ hasText: 'CREDIT_LEDGER_V2_SIGNED_STUDENT' });
+  await expect(signedRow.locator('.credit-ledger-v2-balance')).toHaveText('-1');
+  await signedRow.locator('.credit-ledger-v2-preview').click();
+  await expect(page.locator('#credit-ledger-v2-current-balance')).toHaveText('현재 -1');
+  const historyRows = page.locator('#credit-ledger-v2-history-body tr');
+  await expect(historyRows).toHaveCount(5);
+  await expect(historyRows.nth(0)).toContainText('2026-07-26');
+  await expect(historyRows.nth(0)).toContainText('기초 잔액');
+  await expect(historyRows.nth(1)).toContainText('2026-08-02');
+  await expect(historyRows.nth(1)).toContainText('결제 4회');
+  await expect(historyRows.nth(2)).toContainText('2026-08-02');
+  await expect(historyRows.nth(2)).toContainText('수업');
+  await expect(page.locator('#credit-ledger-v2-history-body')).not.toContainText('대기');
+  await expect(page.locator('#credit-ledger-v2-history-body')).not.toContainText('2026-08-15');
+
+  await page.locator('#credit-ledger-v2-adjustment-date').fill('2026-09-08');
+  await page.locator('#credit-ledger-v2-adjustment-delta').fill('1');
+  await page.locator('#credit-ledger-v2-adjustment-reason').fill('서비스 크레딧');
+  await page.locator('#credit-ledger-v2-adjustment-form').getByRole('button', { name: '조정 추가' }).click();
+  await expect(page.locator('#credit-ledger-v2-current-balance')).toHaveText('현재 0');
+  await expect(page.locator('#credit-ledger-v2-history-body')).toContainText('서비스 크레딧');
+  await page.locator('#credit-ledger-v2-close-btn').click();
+
+  await expect(page.locator('#students-tbody .remaining-badge').first()).toBeVisible();
+  const persistedBeforeReload = await page.evaluate(() => localStorage.getItem('pottery-students-v1'));
+  await page.addInitScript((persistedStudents) => {
+    localStorage.setItem('pottery-students-v1', persistedStudents);
+  }, persistedBeforeReload);
+  await page.reload({ waitUntil: 'networkidle' });
+  const reloadedUnconfirmed = page.locator('#credit-ledger-v2-setup-body tr').filter({ hasText: 'CREDIT_LEDGER_V2_UNCONFIRMED_STUDENT' });
+  await expect(reloadedUnconfirmed.locator('.credit-ledger-v2-opening-input')).toHaveValue('-2');
+  await expect(page.locator('#credit-ledger-v2-setup-body tr').filter({ hasText: 'CREDIT_LEDGER_V2_SIGNED_STUDENT' })
+    .locator('.credit-ledger-v2-balance')).toHaveText('0');
+  expect(await page.evaluate(() => localStorage.getItem('pottery-students-v1'))).toBe(persistedBeforeReload);
 });
 
 test('personal work cycles preserve active, dormant, payment, usage, edit, detail, and reload behavior', async ({ page }) => {

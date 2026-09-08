@@ -34,7 +34,15 @@ const students = [{
   creditTrackingStartDate: '2026-07-01',
   carryOverBeforePayment: 1,
   paymentCycleCredits: 4,
-  manualUsedAdjustment: 1
+  manualUsedAdjustment: 1,
+  creditLedgerV2: {
+    version: 2,
+    openingDate: '2026-07-26',
+    openingBalance: 3,
+    openingConfirmed: true,
+    openingConfirmedAt: '2026-09-08T00:00:00.000Z',
+    adjustments: []
+  }
 }, {
   id: 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT_ID',
   name: 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT',
@@ -51,7 +59,15 @@ const students = [{
   creditTrackingStartDate: '2026-08-04',
   carryOverBeforePayment: 0,
   paymentCycleCredits: 2,
-  manualUsedAdjustment: 0
+  manualUsedAdjustment: 0,
+  creditLedgerV2: {
+    version: 2,
+    openingDate: '2026-07-26',
+    openingBalance: 0,
+    openingConfirmed: true,
+    openingConfirmedAt: '2026-09-08T00:00:00.000Z',
+    adjustments: []
+  }
 }, {
   id: 'PAYMENT_CYCLE_REDUCED_STUDENT_ID',
   name: 'PAYMENT_CYCLE_REDUCED_STUDENT',
@@ -66,7 +82,15 @@ const students = [{
   creditTrackingStartDate: '2026-08-04',
   carryOverBeforePayment: 0,
   paymentCycleCredits: 2,
-  manualUsedAdjustment: 0
+  manualUsedAdjustment: 0,
+  creditLedgerV2: {
+    version: 2,
+    openingDate: '2026-07-26',
+    openingBalance: -2,
+    openingConfirmed: true,
+    openingConfirmedAt: '2026-09-08T00:00:00.000Z',
+    adjustments: []
+  }
 }, {
   id: 'PAYMENT_CYCLE_RENEWED_STUDENT_ID',
   name: 'PAYMENT_CYCLE_RENEWED_STUDENT',
@@ -83,6 +107,14 @@ const students = [{
   carryOverBeforePayment: 0,
   paymentCycleCredits: 2,
   manualUsedAdjustment: 0
+}, {
+  id: 'CREDIT_LEDGER_V2_MONTHLY_STUDENT_ID',
+  name: 'CREDIT_LEDGER_V2_MONTHLY_STUDENT',
+  studentGroup: '정규반',
+  instructor: currentUser.name,
+  tuitionBasis: '월초',
+  paymentHistory: [],
+  paymentRecords: []
 }];
 const calendar = {
   events: [{
@@ -235,6 +267,30 @@ async function main() {
     assert.match(renewedDetail, /2026-09-05[\s\S]*4회[\s\S]*4[\s\S]*2026-09-04/);
     await page.locator('#student-detail-close-btn').click();
 
+    const v2SetupRows = page.locator('#credit-ledger-v2-setup-body tr');
+    assert.equal(await v2SetupRows.count(), 4);
+    assert.doesNotMatch(await page.locator('#credit-ledger-v2-setup-body').innerText(), /CREDIT_LEDGER_V2_MONTHLY_STUDENT/);
+    assert.match(await page.locator('#credit-ledger-v2-progress').innerText(), /3 \/ 4/);
+    assert.equal((await v2SetupRows.filter({ hasText: students[0].name })
+      .locator('.credit-ledger-v2-opening-input').inputValue()), '3');
+    assert.equal((await v2SetupRows.filter({ hasText: students[1].name })
+      .locator('.credit-ledger-v2-opening-input').inputValue()), '0');
+    assert.equal((await v2SetupRows.filter({ hasText: students[2].name })
+      .locator('.credit-ledger-v2-opening-input').inputValue()), '-2');
+    const signedV2Row = v2SetupRows.filter({ hasText: students[1].name });
+    assert.equal((await signedV2Row.locator('.credit-ledger-v2-balance').textContent()).trim(), '+2');
+    assert.equal((await v2SetupRows.filter({ hasText: students[2].name })
+      .locator('.credit-ledger-v2-balance').textContent()).trim(), '-3');
+    await signedV2Row.locator('.credit-ledger-v2-preview').click();
+    const v2History = await page.locator('#credit-ledger-v2-history-body').innerText();
+    const sameDayV2Rows = page.locator('#credit-ledger-v2-history-body tr').filter({ hasText: '2026-08-04' });
+    assert.equal(await sameDayV2Rows.count(), 2);
+    assert.match(await sameDayV2Rows.nth(0).innerText(), /결제 2회/);
+    assert.match(await sameDayV2Rows.nth(1).innerText(), /수업/);
+    assert.match(v2History, /기초 잔액/);
+    assert.doesNotMatch(v2History, /대기|사이클/);
+    await page.locator('#credit-ledger-v2-close-btn').click();
+
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     assert.equal((await studentRow.locator('.remaining-badge').textContent()).trim(), '2');
     assert.deepEqual(await readBusinessState(page), stateBefore);
@@ -247,6 +303,12 @@ async function main() {
       .locator('.remaining-badge').textContent()).trim(), '0');
     assert.equal((await page.locator('#students-tbody tr').filter({ hasText: students[3].name })
       .locator('.remaining-badge').textContent()).trim(), '3');
+    assert.equal((await page.locator('#credit-ledger-v2-setup-body tr').filter({ hasText: students[0].name })
+      .locator('.credit-ledger-v2-opening-input').inputValue()), '3');
+    assert.equal((await page.locator('#credit-ledger-v2-setup-body tr').filter({ hasText: students[1].name })
+      .locator('.credit-ledger-v2-opening-input').inputValue()), '0');
+    assert.equal((await page.locator('#credit-ledger-v2-setup-body tr').filter({ hasText: students[2].name })
+      .locator('.credit-ledger-v2-opening-input').inputValue()), '-2');
     assert.deepEqual(await readBusinessState(page), stateBefore);
 
     await gotoReady(page, '/pottery-master-calendar.html', 'body');
@@ -271,6 +333,10 @@ async function main() {
       roleActionsVisible: true,
       recomputeStable: true,
       reloadStable: true,
+      v2SignedOpenings: [3, 0, -2],
+      v2MonthlyExcluded: true,
+      v2SameDayPaymentFirst: true,
+      v2NegativeCurrentBalance: -3,
       businessStateUnchanged: true,
       calendarSmoke: true,
       personalWorkSmoke: true,

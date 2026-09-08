@@ -79,6 +79,31 @@
         </table>
       </div>
     </section>
+
+    <section class="students-panel credit-ledger-v2-panel" aria-labelledby="credit-ledger-v2-heading">
+      <div class="credit-ledger-v2-heading-row">
+        <div>
+          <h2 id="credit-ledger-v2-heading">V2 회차 원장 설정</h2>
+          <p>2026-07-26 시작 시점의 수기 확인 잔액을 입력합니다. V1 값은 자동 적용되지 않습니다.</p>
+        </div>
+        <strong id="credit-ledger-v2-progress">0 / 0 확인</strong>
+      </div>
+      <div class="students-table-wrap">
+        <table class="students-table credit-ledger-v2-table">
+          <thead>
+            <tr>
+              <th>학생</th>
+              <th>정상 결제 기준</th>
+              <th>기초 잔액</th>
+              <th>상태</th>
+              <th>현재 V2 잔액</th>
+              <th>원장</th>
+            </tr>
+          </thead>
+          <tbody id="credit-ledger-v2-setup-body"></tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <div class="students-modal" id="student-class-slot-modal" aria-hidden="true">
@@ -253,6 +278,28 @@
     </div>
   </div>
 
+  <div class="students-modal" id="credit-ledger-v2-modal" aria-hidden="true">
+    <div class="students-modal-content students-modal-wide">
+      <div class="students-detail-header-row">
+        <h2 id="credit-ledger-v2-modal-title">V2 회차 원장</h2>
+        <strong id="credit-ledger-v2-current-balance">-</strong>
+      </div>
+      <div class="students-detail-table-scroll">
+        <table class="students-detail-table credit-ledger-v2-history-table">
+          <thead><tr><th>날짜</th><th>구분</th><th>증감</th><th>잔액</th></tr></thead>
+          <tbody id="credit-ledger-v2-history-body"></tbody>
+        </table>
+      </div>
+      <form id="credit-ledger-v2-adjustment-form" class="credit-ledger-v2-adjustment-form" autocomplete="off">
+        <div class="students-form-field"><label for="credit-ledger-v2-adjustment-date">조정일</label><input id="credit-ledger-v2-adjustment-date" type="date" min="2026-07-26" required></div>
+        <div class="students-form-field"><label for="credit-ledger-v2-adjustment-delta">증감</label><input id="credit-ledger-v2-adjustment-delta" type="number" step="1" inputmode="numeric" placeholder="+1 또는 -1" required></div>
+        <div class="students-form-field"><label for="credit-ledger-v2-adjustment-reason">사유</label><input id="credit-ledger-v2-adjustment-reason" type="text" required></div>
+        <button type="submit" class="students-primary-btn">조정 추가</button>
+      </form>
+      <div class="modal-actions"><button type="button" class="students-secondary-btn" id="credit-ledger-v2-close-btn">닫기</button></div>
+    </div>
+  </div>
+
   <script src="sync/cloud-sync-protocol.js?v=20260903-1"></script>
   <script src="sync/cloud-sync-model.js?v=20260903-1"></script>
   <script src="sync/cloud-sync-reconciliation.js?v=20260903-1"></script>
@@ -263,6 +310,9 @@
   <script src="pottery-landing.js?v=20260812-2"></script>
   <script src="master-calendar/occurrences.js?v=20260829-1"></script>
   <script src="students/payment-credits.js?v=20260908-3"></script>
-  <script src="pottery-students.js?v=20260908-1"></script>
+  <script src="student-credits-v2/event-sources.js?v=20260908-1"></script>
+  <script src="student-credits-v2/projection.js?v=20260908-1"></script>
+  <script src="student-credits-v2/commands.js?v=20260908-1"></script>
+  <script src="pottery-students.js?v=20260908-2"></script>
 </body>
 </html>

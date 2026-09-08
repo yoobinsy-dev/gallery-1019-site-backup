@@ -21,6 +21,7 @@
     editingStudentId: '',
     paymentStudentId: '',
     detailStudentId: '',
+    creditLedgerV2StudentId: '',
     activeStudentGroup: STUDENT_GROUP_REGULAR,
     slotPicker: {
       weekStart: getWeekStart(new Date()),
@@ -212,6 +213,8 @@
     document.getElementById('student-payment-save-btn')?.addEventListener('click', saveStudentPayment);
     document.getElementById('student-payment-cancel-btn')?.addEventListener('click', closePaymentModal);
     document.getElementById('student-detail-close-btn')?.addEventListener('click', closeDetailModal);
+    document.getElementById('credit-ledger-v2-close-btn')?.addEventListener('click', closeCreditLedgerV2Modal);
+    document.getElementById('credit-ledger-v2-adjustment-form')?.addEventListener('submit', saveCreditLedgerV2Adjustment);
 
     const addTuitionInput = document.getElementById('student-tuition');
     if (addTuitionInput) {
@@ -579,6 +582,7 @@
 
     const visibleStudents = getVisibleStudents();
     renderStudentGroupTabs();
+    renderCreditLedgerV2Setup();
 
     if (!visibleStudents.length) {
       tbody.innerHTML = '<tr class="empty-row"><td colspan="11">수강생을 추가하면 여기에 표시됩니다.</td></tr>';
@@ -664,6 +668,177 @@
 
       tbody.appendChild(tr);
     });
+  }
+
+  function getCreditLedgerV2Students() {
+    return state.students.filter((student) => !isMonthlyStartBasis(student?.tuitionBasis) && canManageStudent(student));
+  }
+
+  function getCreditLedgerV2Projection(student) {
+    const paymentDates = Array.isArray(student?.paymentHistory) ? student.paymentHistory.slice() : [];
+    const recentPaymentDate = String(student?.mostRecentPaymentDate || '').trim();
+    if (recentPaymentDate && !paymentDates.includes(recentPaymentDate)) paymentDates.push(recentPaymentDate);
+    return globalThis.StudentCreditLedgerV2.projectStudentCreditLedgerV2({
+      student,
+      paymentRecords: Array.isArray(student?.paymentRecords) ? student.paymentRecords : [],
+      paymentDates,
+      classRecords: collectStudentEventOccurrences(student?.name, ['수강'], { pastOnly: true })
+    });
+  }
+
+  function renderCreditLedgerV2Setup() {
+    const tbody = document.getElementById('credit-ledger-v2-setup-body');
+    const progress = document.getElementById('credit-ledger-v2-progress');
+    if (!tbody || !progress) return;
+    const students = getCreditLedgerV2Students();
+    const confirmedCount = students.filter((student) => student?.creditLedgerV2?.openingConfirmed === true).length;
+    progress.textContent = `${confirmedCount} / ${students.length} 확인`;
+    tbody.innerHTML = '';
+
+    students.forEach((student) => {
+      const ledger = student?.creditLedgerV2;
+      const projection = getCreditLedgerV2Projection(student);
+      const row = document.createElement('tr');
+      row.dataset.studentId = String(student.id || '');
+      row.appendChild(buildTextCell(student.name || '-'));
+      row.appendChild(buildTextCell(student.tuitionBasis || '-'));
+
+      const openingCell = document.createElement('td');
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = '1';
+      input.inputMode = 'numeric';
+      input.className = 'credit-ledger-v2-opening-input';
+      input.setAttribute('aria-label', `${student.name || '수강생'} V2 기초 잔액`);
+      input.placeholder = '직접 입력';
+      if (ledger?.openingConfirmed === true && Number.isInteger(Number(ledger.openingBalance))) {
+        input.value = String(ledger.openingBalance);
+      }
+      const confirmButton = document.createElement('button');
+      confirmButton.type = 'button';
+      confirmButton.className = 'row-action-btn credit-ledger-v2-confirm';
+      confirmButton.textContent = ledger?.openingConfirmed === true ? '재확인' : '확인';
+      confirmButton.addEventListener('click', () => confirmCreditLedgerV2Opening(student.id, input.value));
+      openingCell.append(input, confirmButton);
+      row.appendChild(openingCell);
+      row.appendChild(buildTextCell(ledger?.openingConfirmed === true ? (projection.isReady ? '확인됨' : '확인 필요') : '미확인'));
+
+      const balanceCell = document.createElement('td');
+      const balance = document.createElement('strong');
+      balance.className = 'credit-ledger-v2-balance';
+      if (projection.isReady && projection.currentBalance < 0) balance.classList.add('negative');
+      balance.textContent = projection.isReady ? formatSignedInteger(projection.currentBalance) : '-';
+      balanceCell.appendChild(balance);
+      row.appendChild(balanceCell);
+
+      const actionCell = document.createElement('td');
+      const previewButton = document.createElement('button');
+      previewButton.type = 'button';
+      previewButton.className = 'row-action-btn credit-ledger-v2-preview';
+      previewButton.textContent = '원장 보기';
+      previewButton.disabled = ledger?.openingConfirmed !== true;
+      previewButton.addEventListener('click', () => openCreditLedgerV2Modal(student.id));
+      actionCell.appendChild(previewButton);
+      row.appendChild(actionCell);
+      tbody.appendChild(row);
+    });
+  }
+
+  function confirmCreditLedgerV2Opening(studentId, rawValue) {
+    const student = state.students.find((item) => String(item?.id || '') === String(studentId || ''));
+    if (!student || !canManageStudent(student)) return;
+    try {
+      student.creditLedgerV2 = globalThis.StudentCreditLedgerV2Commands.confirmOpeningBalance(
+        student.creditLedgerV2,
+        rawValue
+      );
+      saveStudents();
+      renderStudents();
+    } catch (error) {
+      alert('기초 잔액은 양수, 0, 음수를 포함한 정수로 입력해주세요.');
+    }
+  }
+
+  function openCreditLedgerV2Modal(studentId) {
+    const student = state.students.find((item) => String(item?.id || '') === String(studentId || ''));
+    if (!student || !canManageStudent(student) || student?.creditLedgerV2?.openingConfirmed !== true) return;
+    state.creditLedgerV2StudentId = String(studentId || '');
+    renderCreditLedgerV2Modal(student);
+    const modal = document.getElementById('credit-ledger-v2-modal');
+    modal?.classList.add('open');
+    modal?.setAttribute('aria-hidden', 'false');
+  }
+
+  function renderCreditLedgerV2Modal(student) {
+    const projection = getCreditLedgerV2Projection(student);
+    const title = document.getElementById('credit-ledger-v2-modal-title');
+    const balance = document.getElementById('credit-ledger-v2-current-balance');
+    const tbody = document.getElementById('credit-ledger-v2-history-body');
+    if (title) title.textContent = `${student?.name || '-'} V2 회차 원장`;
+    if (balance) {
+      balance.textContent = projection.isReady ? `현재 ${formatSignedInteger(projection.currentBalance)}` : '확인 필요';
+      balance.classList.toggle('negative', projection.isReady && projection.currentBalance < 0);
+    }
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    projection.events.forEach((event) => {
+      const row = document.createElement('tr');
+      [event.date, event.label, formatSignedInteger(event.delta), formatSignedInteger(event.runningBalance)].forEach((value) => {
+        const cell = document.createElement('td');
+        cell.textContent = value;
+        row.appendChild(cell);
+      });
+      tbody.appendChild(row);
+    });
+    projection.issues.forEach((issue) => {
+      const row = document.createElement('tr');
+      row.className = 'students-detail-row-empty';
+      const cell = document.createElement('td');
+      cell.colSpan = 4;
+      cell.textContent = issue.type === 'payment-record-missing'
+        ? `${issue.date}: 결제 횟수 확인 필요`
+        : '원장 데이터 확인 필요';
+      row.appendChild(cell);
+      tbody.appendChild(row);
+    });
+  }
+
+  function closeCreditLedgerV2Modal() {
+    const modal = document.getElementById('credit-ledger-v2-modal');
+    modal?.classList.remove('open');
+    modal?.setAttribute('aria-hidden', 'true');
+    state.creditLedgerV2StudentId = '';
+  }
+
+  function saveCreditLedgerV2Adjustment(event) {
+    event.preventDefault();
+    const student = state.students.find((item) => String(item?.id || '') === state.creditLedgerV2StudentId);
+    if (!student || !canManageStudent(student)) return;
+    const date = String(document.getElementById('credit-ledger-v2-adjustment-date')?.value || '').trim();
+    const delta = Number(document.getElementById('credit-ledger-v2-adjustment-delta')?.value || '');
+    const reason = String(document.getElementById('credit-ledger-v2-adjustment-reason')?.value || '').trim();
+    const createdAt = new Date().toISOString();
+    try {
+      student.creditLedgerV2 = globalThis.StudentCreditLedgerV2Commands.addAdjustment(student.creditLedgerV2, {
+        id: `credit-adjustment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        date,
+        delta,
+        reason,
+        createdAt
+      });
+      saveStudents();
+      renderStudents();
+      renderCreditLedgerV2Modal(student);
+      event.currentTarget.reset();
+    } catch (error) {
+      alert('조정일, 0이 아닌 정수 증감, 사유를 확인해주세요.');
+    }
+  }
+
+  function formatSignedInteger(value) {
+    const number = Number(value);
+    if (!Number.isInteger(number)) return '-';
+    return number > 0 ? `+${number}` : String(number);
   }
 
   function setActiveStudentGroup(group) {
@@ -1209,6 +1384,7 @@
       if (pastOnly && endAt > now) return;
 
       records.push({
+        sourceId: `${String(event.id || 'event')}:${String(dateKey || '')}:${String(event.start || '')}`,
         date: String(dateKey || ''),
         start: String(event.start || ''),
         end: String(event.end || ''),

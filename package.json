@@ -16,6 +16,7 @@
     "test:dev:clean": "node tests/e2e/verify-dev-clean.js",
     "test:dev:calendar": "node tests/e2e/dev-calendar-smoke.js",
     "test:dev:accounting": "node tests/e2e/dev-accounting-smoke.js",
+    "test:dev:students": "node tests/e2e/dev-students-smoke.js",
     "dev:seed-dummy": "node scripts/seed-dev-dummy-data.js seed",
     "dev:verify-dummy": "node scripts/seed-dev-dummy-data.js verify",
     "dev:cleanup-dummy": "node scripts/seed-dev-dummy-data.js cleanup",
