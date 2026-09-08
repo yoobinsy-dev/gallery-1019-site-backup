@@ -97,6 +97,40 @@ const studentFixtures = [{
   carryOverBeforePayment: 1,
   paymentCycleCredits: 4,
   manualUsedAdjustment: 1
+}, {
+  id: 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT_ID',
+  name: 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT',
+  studentGroup: '정규반',
+  classTime: '화 10:00~11:00',
+  classType: '정규 수강',
+  instructor: currentUser.name,
+  tuition: 250000,
+  tuitionBasis: '4회',
+  mostRecentPaymentDate: '2026-09-02',
+  paymentHistory: ['2026-08-04', '2026-09-02'],
+  paymentRecords: [
+    { id: 'PAYMENT_CYCLE_AUGUST', date: '2026-08-04', tuition: 250000, basis: '4회', credits: 4 },
+    { id: 'PAYMENT_CYCLE_SEPTEMBER', date: '2026-09-02', tuition: 250000, basis: '4회', credits: 4 }
+  ],
+  creditTrackingStartDate: '2026-08-04',
+  carryOverBeforePayment: 0,
+  paymentCycleCredits: 4,
+  manualUsedAdjustment: 0
+}, {
+  id: 'PAYMENT_CYCLE_REDUCED_STUDENT_ID',
+  name: 'PAYMENT_CYCLE_REDUCED_STUDENT',
+  studentGroup: '정규반',
+  classTime: '화 12:00~13:00',
+  classType: '정규 수강',
+  instructor: currentUser.name,
+  tuition: 250000,
+  tuitionBasis: '4회',
+  mostRecentPaymentDate: '2026-08-04',
+  paymentHistory: ['2026-08-04'],
+  creditTrackingStartDate: '2026-08-04',
+  carryOverBeforePayment: 0,
+  paymentCycleCredits: 2,
+  manualUsedAdjustment: 0
 }];
 const personalWorkFixtures = [{
   id: 'CHARACTERIZATION_TEST_PERSONAL_ACTIVE',
@@ -154,7 +188,25 @@ const calendarFixture = {
     repeatWeekly: true,
     repeatEndDate: '2026-07-15',
     repeatSkipDates: ['2026-07-08']
-  }, {
+  }, ...[
+    ['PAYMENT_CYCLE_CLASS_1', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-04', '10:00'],
+    ['PAYMENT_CYCLE_CLASS_2', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-11', '10:00'],
+    ['PAYMENT_CYCLE_CLASS_3', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-25', '10:00'],
+    ['PAYMENT_CYCLE_CLASS_4', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-28', '10:00'],
+    ['PAYMENT_CYCLE_CLASS_5', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-09-01', '10:00'],
+    ['PAYMENT_CYCLE_CLASS_6', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-09-08', '10:00'],
+    ['PAYMENT_CYCLE_REDUCED_CLASS_A', 'PAYMENT_CYCLE_REDUCED_STUDENT', '2026-08-11', '12:00'],
+    ['PAYMENT_CYCLE_REDUCED_CLASS_B', 'PAYMENT_CYCLE_REDUCED_STUDENT', '2026-08-28', '12:00'],
+    ['PAYMENT_CYCLE_REDUCED_CLASS_C', 'PAYMENT_CYCLE_REDUCED_STUDENT', '2026-09-04', '12:00']
+  ].map(([id, title, date, start]) => ({
+    id,
+    kind: '수강',
+    title,
+    instructor: currentUser.name,
+    date,
+    start,
+    end: start === '12:00' ? '13:00' : '11:00'
+  })), {
     id: 'CHARACTERIZATION_TEST_PERSONAL_ACTIVE_USAGE',
     kind: '개인작업',
     title: 'CHARACTERIZATION_TEST_ACTIVE_ARTIST',
@@ -1437,6 +1489,53 @@ test('student payment credits preserve row, detail, role actions, recomputation,
     students: localStorage.getItem('pottery-students-v1'),
     calendar: localStorage.getItem('studio-calendar-state-v1')
   }))).toEqual(stateBefore);
+  expect(pageErrors).toEqual([]);
+});
+
+test('student payment cycles render late payment overflow consistently and preserve reduced credits', async ({ page }) => {
+  await page.addInitScript(() => {
+    const RealDate = Date;
+    const fixedTime = new RealDate('2026-09-08T12:00:00').getTime();
+    class FixedDate extends RealDate {
+      constructor(...args) {
+        super(...(args.length > 0 ? args : [fixedTime]));
+      }
+
+      static now() {
+        return fixedTime;
+      }
+    }
+    window.Date = FixedDate;
+  });
+
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.goto('/pottery-students.html', { waitUntil: 'networkidle' });
+
+  const cycleRow = page.locator('#students-tbody tr').filter({ hasText: 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT' });
+  await expect(cycleRow.locator('.remaining-badge')).toHaveText('2');
+  await cycleRow.locator('.row-action-btn.detail').click();
+
+  const detailText = await page.locator('#student-detail-payment-class-body').innerText();
+  expect(detailText.indexOf('2026-09-08')).toBeLessThan(detailText.indexOf('2026-09-01'));
+  expect(detailText.indexOf('2026-09-01')).toBeLessThan(detailText.indexOf('2026-08-04'));
+  expect(detailText).not.toContain('이전 결제 사이클');
+  await page.locator('#student-detail-close-btn').click();
+
+  const reducedRow = page.locator('#students-tbody tr').filter({ hasText: 'PAYMENT_CYCLE_REDUCED_STUDENT' });
+  await expect(reducedRow.locator('.remaining-badge')).toHaveText('0');
+  await reducedRow.locator('.row-action-btn.detail').click();
+  const reducedDetailRows = page.locator('#student-detail-payment-class-body tr');
+  await expect(reducedDetailRows.filter({ hasText: '2026-08-04' })).toContainText('2026-08-28');
+  await expect(reducedDetailRows.filter({ hasText: '2026-08-04' })).not.toContainText('2026-09-04');
+  await expect(reducedDetailRows.filter({ hasText: '다음 결제 대기' })).toContainText('2026-09-04');
+  await page.locator('#student-detail-close-btn').click();
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await expect(page.locator('#students-tbody tr').filter({ hasText: 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT' })
+    .locator('.remaining-badge')).toHaveText('2');
+  await expect(page.locator('#students-tbody tr').filter({ hasText: 'PAYMENT_CYCLE_REDUCED_STUDENT' })
+    .locator('.remaining-badge')).toHaveText('0');
   expect(pageErrors).toEqual([]);
 });
 

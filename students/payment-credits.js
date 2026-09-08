@@ -36,7 +36,7 @@
     const fromBasis = Number(basisCount);
     const safeDirect = Number.isFinite(direct) && direct > 0 ? Math.floor(direct) : 0;
     const safeBasis = Number.isFinite(fromBasis) && fromBasis > 0 ? Math.floor(fromBasis) : 0;
-    return Math.max(1, safeDirect, safeBasis);
+    return safeDirect || safeBasis || 1;
   }
 
   function getStudentPaymentHistory(student) {
@@ -110,6 +110,7 @@
     const groupsAsc = [];
     sortedPaymentsAsc.forEach((paymentDate, index) => {
       const nextPaymentDate = sortedPaymentsAsc[index + 1] || '';
+      const firstPaymentDate = sortedPaymentsAsc[0] || paymentDate;
       const paymentRecord = paymentRecordByDate.get(paymentDate) || null;
       const recordCredits = Number(paymentRecord?.credits);
       const cycleSize = Number.isFinite(recordCredits) && recordCredits > 0
@@ -128,7 +129,7 @@
         const record = workingClasses[classIndex];
         const classDate = String(record?.date || '');
         if (!classDate || record.__assignedPayment || record.__priorCycle) continue;
-        if (classDate < paymentDate) continue;
+        if (classDate < firstPaymentDate) continue;
         if (nextPaymentDate && classDate >= nextPaymentDate) continue;
         assignRecord(record);
         if (paidCount >= cycleSize) break;
@@ -145,18 +146,39 @@
         }
       }
 
-      groupsAsc.push({ paymentDate, paymentRecord, classRecords: assigned });
+      groupsAsc.push({
+        paymentDate,
+        paymentRecord,
+        classRecords: assigned.sort((a, b) => `${b.date} ${b.start}`.localeCompare(`${a.date} ${a.start}`))
+      });
     });
 
+    const latestPaymentDate = sortedPaymentsAsc[sortedPaymentsAsc.length - 1] || '';
+    const currentGroup = groupsAsc[groupsAsc.length - 1];
+    const priorUsageSinceLatestPayment = workingClasses.filter((record) => (
+      record.__priorCycle && String(record?.date || '') >= latestPaymentDate
+    )).length;
     return {
       groups: groupsAsc.slice().sort((a, b) => String(b.paymentDate || '').localeCompare(String(a.paymentDate || ''))),
-      unassigned: workingClasses.filter((record) => !record.__assignedPayment)
+      unassigned: workingClasses
+        .filter((record) => !record.__assignedPayment)
+        .sort((a, b) => `${b.date} ${b.start}`.localeCompare(`${a.date} ${a.start}`)),
+      remainingCount: getRemainingClassCount({
+        student,
+        completedSincePayment: (currentGroup?.classRecords.length || 0) + priorUsageSinceLatestPayment,
+        basisCount: options?.paymentCycleSize
+      })
     };
   }
 
   function buildPaymentClassDetailRows(options) {
     const groups = Array.isArray(options?.groups) ? options.groups : [];
     const unassigned = Array.isArray(options?.unassigned) ? options.unassigned : [];
+    const latestPaymentDate = groups.reduce((latest, group) => (
+      String(group?.paymentDate || '') > latest ? String(group.paymentDate) : latest
+    ), '');
+    const pending = unassigned.filter((record) => String(record?.date || '') >= latestPaymentDate);
+    const prior = unassigned.filter((record) => String(record?.date || '') < latestPaymentDate);
     const dayNames = Array.isArray(options?.dayNames) ? options.dayNames : [];
     const getDayIndex = options?.getDayIndex;
     const formatTuition = options?.formatTuition;
@@ -198,13 +220,18 @@
       }
     });
 
-    unassigned.forEach((record, index) => {
+    appendUnassignedRows(rows, pending, '다음 결제 대기', formatClass);
+    appendUnassignedRows(rows, prior, '이전 결제 사이클', formatClass);
+    return rows;
+  }
+
+  function appendUnassignedRows(rows, records, label, formatClass) {
+    records.forEach((record, index) => {
       const cells = [];
-      if (index === 0) cells.push({ text: '이전 결제 사이클', rowSpan: unassigned.length, colSpan: 4 });
+      if (index === 0) cells.push({ text: label, rowSpan: records.length, colSpan: 4 });
       cells.push({ text: formatClass(record) });
       rows.push({ cells });
     });
-    return rows;
   }
 
   function reservePriorCycleClasses(options) {

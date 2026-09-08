@@ -39,6 +39,7 @@ function loadStudents(globals = {}) {
     'getRemainingClassCount',
     'computeCarryOverForNewPaymentCycle',
     'buildPaymentClassGroups',
+    'getStudentPaymentProjection',
     'normalizePaymentRecords',
     'getStudentPaymentHistory',
     'getStudentPaymentCycleSize',
@@ -226,6 +227,130 @@ test('student credits characterize empty, fallback, excess, and manual adjustmen
   }, 'bad'), 0);
   assert.equal(students.getStudentPaymentCycleSize({}), 1);
   assert.equal(students.getStudentPaymentCycleSize({ tuitionBasis: '4회', paymentCycleCredits: 7.9 }), 7);
+  assert.equal(students.getStudentPaymentCycleSize({ tuitionBasis: '4회', paymentCycleCredits: 2 }), 2);
+});
+
+test('student payment cycles assign late-entered payment overflow and preserve reduced starting credits', () => {
+  const students = loadStudents();
+  const student = {
+    tuitionBasis: '4회',
+    paymentCycleCredits: 4,
+    mostRecentPaymentDate: '2026-09-02',
+    paymentHistory: ['2026-08-04', '2026-09-02'],
+    paymentRecords: [
+      { id: 'august', date: '2026-08-04', basis: '4회', credits: 4 },
+      { id: 'september', date: '2026-09-02', basis: '4회', credits: 4 }
+    ]
+  };
+  const classRecords = [
+    { id: 'aug-04', date: '2026-08-04', start: '10:00' },
+    { id: 'aug-11', date: '2026-08-11', start: '10:00' },
+    { id: 'aug-25', date: '2026-08-25', start: '10:00' },
+    { id: 'aug-28', date: '2026-08-28', start: '10:00' },
+    { id: 'sep-01', date: '2026-09-01', start: '10:00' },
+    { id: 'sep-08', date: '2026-09-08', start: '10:00' }
+  ];
+
+  const grouped = students.buildPaymentClassGroups(
+    student,
+    student.paymentHistory,
+    classRecords
+  );
+
+  assert.deepEqual(grouped.groups.map((group) => [
+    group.paymentDate,
+    group.classRecords.map((record) => record.id)
+  ]), [
+    ['2026-09-02', ['sep-08', 'sep-01']],
+    ['2026-08-04', ['aug-28', 'aug-25', 'aug-11', 'aug-04']]
+  ]);
+  assert.equal(grouped.remainingCount, 2);
+  assert.deepEqual(grouped.unassigned, []);
+
+  const projected = students.getStudentPaymentProjection(student, classRecords);
+  assert.deepEqual(projected.groups, grouped.groups);
+  assert.equal(projected.remainingCount, grouped.remainingCount);
+
+  const reducedStudent = {
+    tuitionBasis: '4회',
+    paymentCycleCredits: 2,
+    mostRecentPaymentDate: '2026-08-04',
+    paymentHistory: ['2026-08-04']
+  };
+  const reduced = students.buildPaymentClassGroups(reducedStudent, ['2026-08-04'], [classRecords[0]]);
+  assert.equal(reduced.remainingCount, 1);
+});
+
+test('exhausted reduced legacy cycle leaves later class pending until the next payment', () => {
+  const students = loadStudents();
+  const classRecords = [
+    { id: 'class-a', date: '2026-08-11', start: '10:00', end: '11:00' },
+    { id: 'class-b', date: '2026-08-28', start: '10:00', end: '11:00' },
+    { id: 'class-c', date: '2026-09-04', start: '10:00', end: '11:00' }
+  ];
+  const legacyStudent = {
+    tuitionBasis: '4회',
+    paymentCycleCredits: 2,
+    mostRecentPaymentDate: '2026-08-04',
+    paymentHistory: ['2026-08-04']
+  };
+
+  const exhausted = students.buildPaymentClassGroups(legacyStudent, ['2026-08-04'], classRecords);
+  assert.deepEqual(exhausted.groups[0].classRecords.map((record) => record.id), ['class-b', 'class-a']);
+  assert.deepEqual(exhausted.unassigned.map((record) => record.id), ['class-c']);
+  assert.equal(exhausted.remainingCount, 0);
+
+  const pendingRows = paymentCredits.buildPaymentClassDetailRows({
+    ...exhausted,
+    dayNames: [],
+    getDayIndex: () => -1
+  });
+  assert.equal(pendingRows.at(-1).cells[0].text, '다음 결제 대기');
+  assert.match(pendingRows.at(-1).cells.at(-1).text, /^2026-09-04/);
+
+  const renewedStudent = {
+    ...legacyStudent,
+    paymentCycleCredits: 4,
+    mostRecentPaymentDate: '2026-09-05',
+    paymentHistory: ['2026-08-04', '2026-09-05'],
+    paymentRecords: [
+      { id: 'legacy', date: '2026-08-04', basis: '4회', credits: 2 },
+      { id: 'renewal', date: '2026-09-05', basis: '4회', credits: 4 }
+    ]
+  };
+  const renewed = students.buildPaymentClassGroups(
+    renewedStudent,
+    renewedStudent.paymentHistory,
+    classRecords
+  );
+  assert.deepEqual(renewed.groups.map((group) => [
+    group.paymentDate,
+    group.classRecords.map((record) => record.id)
+  ]), [
+    ['2026-09-05', ['class-c']],
+    ['2026-08-04', ['class-b', 'class-a']]
+  ]);
+  assert.equal(renewed.remainingCount, 3);
+  assert.deepEqual(renewed.unassigned, []);
+});
+
+test('student payment detail rows retain canonical newest-first cycle ordering', () => {
+  const rows = paymentCredits.buildPaymentClassDetailRows({
+    groups: [{
+      paymentDate: '2026-09-02',
+      paymentRecord: { basis: '4회', tuition: 250000, credits: 4 },
+      classRecords: [
+        { date: '2026-09-08', start: '10:00', end: '11:00' },
+        { date: '2026-09-01', start: '10:00', end: '11:00' }
+      ]
+    }],
+    dayNames: ['일', '월', '화', '수', '목', '금', '토'],
+    getDayIndex: () => 2,
+    formatTuition: String,
+    isMonthlyBasis: () => false
+  });
+  assert.match(rows[0].cells.at(-1).text, /^2026-09-08/);
+  assert.match(rows[1].cells.at(-1).text, /^2026-09-01/);
 });
 
 test('student payment records characterize legacy merge, precedence, sorting, and malformed values', () => {
@@ -287,13 +412,13 @@ test('student payment grouping characterizes cycle boundaries, excess, carry, an
       classIds: group.classRecords.map((record) => record.id)
     })))),
     [
-      { paymentDate: '2026-08-01', paymentRecordId: 'august', classIds: ['after', 'excess'] },
-      { paymentDate: '2026-07-01', paymentRecordId: 'july', classIds: ['middle', 'boundary-b'] }
+      { paymentDate: '2026-08-01', paymentRecordId: 'august', classIds: ['excess', 'after'] },
+      { paymentDate: '2026-07-01', paymentRecordId: 'july', classIds: ['boundary-b', 'middle'] }
     ]
   );
   assert.deepEqual(
     JSON.parse(JSON.stringify(grouped.unassigned.map((record) => record.id))),
-    ['before', 'first', 'boundary-a']
+    ['boundary-a', 'first', 'before']
   );
   assert.deepEqual(classRecords, original);
 });
@@ -332,7 +457,7 @@ test('student carry-over characterizes same-day class boundaries without changin
   assert.equal(students.computeCarryOverForNewPaymentCycle(student, '2026-07-01', '', 99), 0);
 });
 
-test('extracted student payment credits match the retained legacy implementation exactly', () => {
+test('unchanged student payment helpers match the retained legacy implementation', () => {
   const students = loadStudents();
   const student = {
     tuition: 120000,
@@ -371,28 +496,6 @@ test('extracted student payment credits match the retained legacy implementation
   assert.equal(
     paymentCredits.computeCarryOverForNewPaymentCycle(carryInput),
     computeCarryOverForNewPaymentCycleLegacy(carryInput)
-  );
-
-  const classRecords = [
-    { id: 'before', date: '2026-06-30', start: '10:00' },
-    { id: 'first', date: '2026-07-01', start: '10:00' },
-    { id: 'middle', date: '2026-07-15', start: '10:00' },
-    { id: 'boundary-a', date: '2026-08-01', start: '09:00' },
-    { id: 'boundary-b', date: '2026-08-01', start: '11:00' },
-    { id: 'after', date: '2026-08-02', start: '10:00' }
-  ];
-  const groupingInput = {
-    student,
-    paymentDates: ['2026-07-01', '2026-08-01'],
-    classRecords,
-    paymentRecords: extractedRecords,
-    isMonthlyStart: false,
-    paymentCycleSize,
-    manualUsedAdjustment: students.getManualUsedAdjustment(student)
-  };
-  assert.deepEqual(
-    JSON.parse(JSON.stringify(paymentCredits.buildPaymentClassGroups(groupingInput))),
-    JSON.parse(JSON.stringify(buildPaymentClassGroupsLegacy(groupingInput)))
   );
 
   const monthlyInput = {

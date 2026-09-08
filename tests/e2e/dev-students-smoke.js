@@ -35,6 +35,35 @@ const students = [{
   carryOverBeforePayment: 1,
   paymentCycleCredits: 4,
   manualUsedAdjustment: 1
+}, {
+  id: 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT_ID',
+  name: 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT',
+  studentGroup: '정규반',
+  instructor: currentUser.name,
+  tuition: 250000,
+  tuitionBasis: '4회',
+  mostRecentPaymentDate: '2026-09-02',
+  paymentHistory: ['2026-08-04', '2026-09-02'],
+  paymentRecords: [
+    { id: 'PAYMENT_CYCLE_AUGUST', date: '2026-08-04', tuition: 250000, basis: '4회', credits: 4 },
+    { id: 'PAYMENT_CYCLE_SEPTEMBER', date: '2026-09-02', tuition: 250000, basis: '4회', credits: 4 }
+  ],
+  creditTrackingStartDate: '2026-08-04',
+  carryOverBeforePayment: 0,
+  paymentCycleCredits: 4,
+  manualUsedAdjustment: 0
+}, {
+  id: 'PAYMENT_CYCLE_REDUCED_STUDENT_ID',
+  name: 'PAYMENT_CYCLE_REDUCED_STUDENT',
+  studentGroup: '정규반',
+  instructor: currentUser.name,
+  tuitionBasis: '4회',
+  mostRecentPaymentDate: '2026-08-04',
+  paymentHistory: ['2026-08-04'],
+  creditTrackingStartDate: '2026-08-04',
+  carryOverBeforePayment: 0,
+  paymentCycleCredits: 2,
+  manualUsedAdjustment: 0
 }];
 const calendar = {
   events: [{
@@ -48,11 +77,34 @@ const calendar = {
     repeatWeekly: true,
     repeatEndDate: '2026-07-15',
     repeatSkipDates: ['2026-07-08']
+  }, ...[
+    ['PAYMENT_CYCLE_CLASS_1', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-04'],
+    ['PAYMENT_CYCLE_CLASS_2', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-11'],
+    ['PAYMENT_CYCLE_CLASS_3', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-25'],
+    ['PAYMENT_CYCLE_CLASS_4', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-08-28'],
+    ['PAYMENT_CYCLE_CLASS_5', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-09-01'],
+    ['PAYMENT_CYCLE_CLASS_6', 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT', '2026-09-08']
+  ].map(([id, title, date]) => ({
+    id,
+    kind: '수강',
+    title,
+    instructor: currentUser.name,
+    date,
+    start: '10:00',
+    end: '11:00'
+  })), {
+    id: 'PAYMENT_CYCLE_REDUCED_CLASS',
+    kind: '수강',
+    title: 'PAYMENT_CYCLE_REDUCED_STUDENT',
+    instructor: currentUser.name,
+    date: '2026-08-04',
+    start: '12:00',
+    end: '13:00'
   }],
   baseRules: [],
   baseRuleTimeline: [],
   baseWeekOverrides: {},
-  studioUsers: [currentUser.name, students[0].name]
+  studioUsers: [currentUser.name, ...students.map((student) => student.name)]
 };
 
 async function main() {
@@ -113,7 +165,7 @@ async function main() {
     localStorage.setItem('pottery-accounting-v1', '[]');
     localStorage.setItem('studio-calendar-state-v1', JSON.stringify(fixtureCalendar));
     const RealDate = Date;
-    const fixedTime = new RealDate('2026-08-15T12:00:00').getTime();
+    const fixedTime = new RealDate('2026-09-08T12:00:00').getTime();
     class FixedDate extends RealDate {
       constructor(...args) {
         super(...(args.length > 0 ? args : [fixedTime]));
@@ -146,12 +198,28 @@ async function main() {
     assert.doesNotMatch(detailText, /2026-07-08/);
     await page.locator('#student-detail-close-btn').click();
 
+    const cycleRow = page.locator('#students-tbody tr').filter({ hasText: students[1].name });
+    assert.equal((await cycleRow.locator('.remaining-badge').textContent()).trim(), '2');
+    await cycleRow.locator('.row-action-btn.detail').click();
+    const cycleDetail = await page.locator('#student-detail-payment-class-body').innerText();
+    assert.ok(cycleDetail.indexOf('2026-09-08') < cycleDetail.indexOf('2026-09-01'));
+    assert.ok(cycleDetail.indexOf('2026-09-01') < cycleDetail.indexOf('2026-08-28'));
+    assert.doesNotMatch(cycleDetail, /이전 결제 사이클/);
+    await page.locator('#student-detail-close-btn').click();
+
+    const reducedRow = page.locator('#students-tbody tr').filter({ hasText: students[2].name });
+    assert.equal((await reducedRow.locator('.remaining-badge').textContent()).trim(), '1');
+
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     assert.equal((await studentRow.locator('.remaining-badge').textContent()).trim(), '2');
     assert.deepEqual(await readBusinessState(page), stateBefore);
     await page.reload({ waitUntil: 'domcontentloaded' });
     const reloadedRow = page.locator('#students-tbody tr').filter({ hasText: students[0].name });
     assert.equal((await reloadedRow.locator('.remaining-badge').textContent()).trim(), '2');
+    assert.equal((await page.locator('#students-tbody tr').filter({ hasText: students[1].name })
+      .locator('.remaining-badge').textContent()).trim(), '2');
+    assert.equal((await page.locator('#students-tbody tr').filter({ hasText: students[2].name })
+      .locator('.remaining-badge').textContent()).trim(), '1');
     assert.deepEqual(await readBusinessState(page), stateBefore);
 
     await gotoReady(page, '/pottery-master-calendar.html', 'body');
@@ -163,6 +231,9 @@ async function main() {
     console.log(JSON.stringify({
       ok: true,
       remainingCredits: 2,
+      latePaymentRemainingCredits: 2,
+      reducedStartingBalanceRemainingCredits: 1,
+      latePaymentDetailOrdered: true,
       recentClassDate: '2026-07-15',
       cancelledOccurrenceAbsent: true,
       paymentDetailStable: true,

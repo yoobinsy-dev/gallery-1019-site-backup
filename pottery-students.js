@@ -590,12 +590,9 @@
     visibleStudents.forEach((student, index) => {
       const stats = getStudentClassStats(student.name);
       const isMonthly = isMonthlyStartBasis(student?.tuitionBasis);
-      const completedSincePayment = isMonthly
-        ? 0
-        : getCompletedClassCountForBalance(student);
       const remainingCount = isMonthly
         ? null
-        : getRemainingClassCount(student, completedSincePayment);
+        : getStudentPaymentProjection(student).remainingCount;
       const recentClassDate = stats.mostRecentClassDate || '';
       const currentInstructor = getStudentCurrentInstructor(student);
 
@@ -1119,7 +1116,7 @@
       return;
     }
 
-    const grouped = buildPaymentClassGroups(student, paymentDates, classRecords);
+    const grouped = getStudentPaymentProjection(student, classRecords);
     const rows = globalThis.StudentPaymentCredits.buildPaymentClassDetailRows({
       ...grouped,
       dayNames: DAY_NAMES,
@@ -1182,6 +1179,13 @@
       paymentCycleSize: getStudentPaymentCycleSize(student),
       manualUsedAdjustment: getManualUsedAdjustment(student)
     });
+  }
+
+  function getStudentPaymentProjection(student, classRecords) {
+    const eligibleClasses = Array.isArray(classRecords)
+      ? classRecords
+      : collectStudentEventOccurrences(student?.name, ['수강'], { pastOnly: true });
+    return buildPaymentClassGroups(student, getStudentPaymentHistory(student), eligibleClasses);
   }
 
   function getStudentPaymentHistory(student) {
