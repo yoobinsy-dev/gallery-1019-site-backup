@@ -1690,6 +1690,74 @@ test('student V2 setup keeps V1 non-authoritative and previews a stable signed l
   expect(await page.evaluate(() => localStorage.getItem('pottery-students-v1'))).toBe(persistedBeforeReload);
 });
 
+test('student V2 activation switches operational authority without V1 fallback', async ({ page }) => {
+  await page.goto('/pottery-students.html', { waitUntil: 'networkidle' });
+  await page.evaluate(() => {
+    const students = JSON.parse(localStorage.getItem('pottery-students-v1') || '[]');
+    students.push({
+      id: 'STAGE2_MONTHLY_STUDENT_ID',
+      name: 'STAGE2_MONTHLY_STUDENT',
+      studentGroup: '정규반',
+      tuitionBasis: '월초',
+      paymentHistory: [],
+      paymentRecords: []
+    });
+    localStorage.setItem('pottery-students-v1', JSON.stringify(students));
+    localStorage.setItem('student-credit-ledger-v2-activation', JSON.stringify({
+      version: 2,
+      activated: true,
+      activatedAt: '2025-01-01T00:00:00.000Z',
+      paymentAuthorityStartAt: '2025-01-01T00:00:00.000Z'
+    }));
+    window.dispatchEvent(new CustomEvent('cloud-sync:state-applied', {
+      detail: { keys: ['pottery-students-v1', 'student-credit-ledger-v2-activation'] }
+    }));
+  });
+
+  const signedRow = page.locator('#students-tbody tr').filter({ hasText: 'CREDIT_LEDGER_V2_SIGNED_STUDENT' });
+  await expect(signedRow.locator('.remaining-badge')).toHaveText('확인 필요');
+
+  const signedSetup = page.locator('#credit-ledger-v2-setup-body tr').filter({ hasText: 'CREDIT_LEDGER_V2_SIGNED_STUDENT' });
+  const payments = signedSetup.locator('.credit-ledger-v2-payment-item');
+  await payments.filter({ hasText: '2026-08-02' }).locator('.credit-ledger-v2-payment-credits').fill('4');
+  await payments.filter({ hasText: '2026-08-02' }).locator('.credit-ledger-v2-payment-confirm').click();
+  await payments.filter({ hasText: '2026-08-15' }).locator('.credit-ledger-v2-payment-ignore').click();
+  await expect(signedRow.locator('.remaining-badge')).toHaveText('-1');
+
+  await signedRow.locator('.row-action-btn.detail').click();
+  await expect(page.locator('#student-detail-current-balance')).toHaveText('현재 -1회');
+  await expect(page.locator('#student-detail-payment-history-title')).toContainText('V1');
+  await page.locator('#student-detail-close-btn').click();
+
+  const monthlyRow = page.locator('#students-tbody tr').filter({ hasText: 'STAGE2_MONTHLY_STUDENT' });
+  await expect(monthlyRow.locator('.remaining-badge')).toHaveText('-');
+
+  const v1FieldsBefore = await page.evaluate(() => {
+    const student = JSON.parse(localStorage.getItem('pottery-students-v1')).find((item) => item.id === 'CREDIT_LEDGER_V2_SIGNED_STUDENT_ID');
+    return {
+      carryOverBeforePayment: student.carryOverBeforePayment,
+      paymentCycleCredits: student.paymentCycleCredits,
+      manualUsedAdjustment: student.manualUsedAdjustment
+    };
+  });
+  await signedRow.locator('.row-action-btn.payment-add').click();
+  await expect(page.locator('#student-payment-current-balance')).toHaveText('현재 V2 잔액 -1회');
+  await page.locator('#payment-record-date').fill('2026-09-09');
+  await page.locator('#payment-record-tuition').fill('250000');
+  await page.locator('#payment-record-basis').selectOption('4회');
+  await page.locator('#payment-record-credits').fill('4');
+  await page.locator('#student-payment-save-btn').click();
+  await expect(signedRow.locator('.remaining-badge')).toHaveText('3');
+  expect(await page.evaluate(() => {
+    const student = JSON.parse(localStorage.getItem('pottery-students-v1')).find((item) => item.id === 'CREDIT_LEDGER_V2_SIGNED_STUDENT_ID');
+    return {
+      carryOverBeforePayment: student.carryOverBeforePayment,
+      paymentCycleCredits: student.paymentCycleCredits,
+      manualUsedAdjustment: student.manualUsedAdjustment
+    };
+  })).toEqual(v1FieldsBefore);
+});
+
 test('personal work cycles preserve active, dormant, payment, usage, edit, detail, and reload behavior', async ({ page }) => {
   await page.addInitScript(() => {
     const RealDate = Date;

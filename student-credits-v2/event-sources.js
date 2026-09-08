@@ -20,7 +20,7 @@
   function isTrustedPayment(record, paymentAuthorityStartAt) {
     const authorityStart = String(paymentAuthorityStartAt || '').trim();
     const createdAt = String(record?.createdAt || '').trim();
-    return Boolean(authorityStart && createdAt && createdAt >= authorityStart);
+    return Boolean(authorityStart && createdAt && createdAt > authorityStart);
   }
 
   function getLegacyPaymentSetups(paymentRecords, openingDate = CUTOVER_DATE, options = {}) {

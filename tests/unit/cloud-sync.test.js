@@ -14,7 +14,8 @@ const SYNCED_KEYS = [
   'studio-calendar-state-v1',
   'pottery-material-orders-v1',
   'pottery-accounting-v1',
-  'gallery-artworks-v1'
+  'gallery-artworks-v1',
+  'student-credit-ledger-v2-activation'
 ];
 
 function createCloudSyncHarness({
@@ -130,7 +131,7 @@ test('cloud sync characterizes the page-to-active-key request matrix', async () 
     ['/pottery-master-calendar.html', ['users', 'pottery-personal-work-v1', 'studio-calendar-state-v1']],
     ['/pottery-personal-work.html', ['users', 'pottery-personal-work-v1', 'studio-calendar-state-v1']],
     ['/pottery-material-orders.html', ['users', 'pottery-material-orders-v1']],
-    ['/pottery-students.html', ['users', 'pottery-students-v1', 'studio-calendar-state-v1']],
+    ['/pottery-students.html', ['users', 'pottery-students-v1', 'studio-calendar-state-v1', 'student-credit-ledger-v2-activation']],
     ['/pottery-accounting.html', SYNCED_KEYS],
     ['/gallery-lounge.html', []],
     ['/inventory.html', []],

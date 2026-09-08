@@ -101,7 +101,7 @@ test('state handler characterizes rejected keys, malformed body, methods, and st
   assert.deepEqual(Object.keys(invalidGet.json().meta), [
     'users', 'exhibitions', 'pottery-students-v1', 'pottery-personal-work-v1',
     'studio-calendar-state-v1', 'pottery-material-orders-v1', 'pottery-accounting-v1',
-    'gallery-artworks-v1'
+    'gallery-artworks-v1', 'student-credit-ledger-v2-activation'
   ]);
   assert.equal((await invoke(harness, 'PUT', { body: { key: 'invalid', value: [] } })).statusCode, 400);
   assert.equal((await invoke(harness, 'POST')).statusCode, 405);
@@ -147,6 +147,21 @@ test('PUT /api/state characterizes successful writes, safeguards, audit, and res
     'audit:users-missing-admin-with-password',
     'alert:users-admin-invariant-rejected'
   ]);
+});
+
+test('PUT /api/state persists the explicit V2 activation record as strict state', async () => {
+  const harness = createHarness({ meta: { 'student-credit-ledger-v2-activation': { updatedAt: null } } });
+  const activation = {
+    version: 2,
+    activated: true,
+    activatedAt: '2026-09-09T00:00:00.000Z',
+    paymentAuthorityStartAt: '2026-09-09T00:00:00.000Z'
+  };
+  const response = await invoke(harness, 'PUT', {
+    body: { key: 'student-credit-ledger-v2-activation', value: activation }
+  });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(harness.values['student-credit-ledger-v2-activation'], activation);
 });
 
 test('DELETE /api/state characterizes blocked users deletion and accepted disposable-key deletion', async () => {

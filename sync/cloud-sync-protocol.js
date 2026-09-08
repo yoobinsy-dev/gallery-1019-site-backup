@@ -9,7 +9,8 @@
     'studio-calendar-state-v1',
     'pottery-material-orders-v1',
     'pottery-accounting-v1',
-    'gallery-artworks-v1'
+    'gallery-artworks-v1',
+    'student-credit-ledger-v2-activation'
   ]);
 
   function getPageName(pathname) {
@@ -33,7 +34,7 @@
       return ['users', 'pottery-material-orders-v1'];
     }
     if (page === 'pottery-students.html') {
-      return ['users', 'pottery-students-v1', 'studio-calendar-state-v1'];
+      return ['users', 'pottery-students-v1', 'studio-calendar-state-v1', 'student-credit-ledger-v2-activation'];
     }
     if (page === 'pottery-accounting.html') {
       return SYNCED_KEYS.slice();

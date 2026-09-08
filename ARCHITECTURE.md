@@ -53,6 +53,7 @@ Postgres is the authoritative shared state store. `api/state.js` reads and mutat
 - `studio-calendar-state-v1`
 - `pottery-material-orders-v1`
 - `pottery-accounting-v1`
+- `student-credit-ledger-v2-activation`
 
 Supporting tables own full-state snapshots, per-exhibition snapshots, write audit records, and alerts: `app_state_snapshots`, `exhibition_state_snapshots`, `app_state_write_audit`, and `app_state_alerts`.
 

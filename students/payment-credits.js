@@ -52,13 +52,17 @@
   function normalizePaymentRecords({ student, isValidDateString, paymentCycleSize }) {
     const records = Array.isArray(student?.paymentRecords) ? student.paymentRecords : [];
     const normalized = records
-      .map((record) => ({
-        id: String(record?.id || '').trim() || `legacy-payment-${String(record?.date || '').trim()}`,
-        date: String(record?.date || '').trim(),
-        tuition: Number(record?.tuition) || 0,
-        basis: String(record?.basis || '').trim(),
-        credits: Math.max(0, Math.floor(Number(record?.credits) || 0))
-      }))
+      .map((record) => {
+        const createdAt = String(record?.createdAt || '').trim();
+        return {
+          id: String(record?.id || '').trim() || `legacy-payment-${String(record?.date || '').trim()}`,
+          date: String(record?.date || '').trim(),
+          tuition: Number(record?.tuition) || 0,
+          basis: String(record?.basis || '').trim(),
+          credits: Math.max(0, Math.floor(Number(record?.credits) || 0)),
+          ...(createdAt ? { createdAt } : {})
+        };
+      })
       .filter((record) => isValidDateString(record.date));
 
     getStudentPaymentHistory(student).forEach((date) => {

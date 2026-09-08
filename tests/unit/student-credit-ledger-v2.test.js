@@ -1,7 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { projectStudentCreditLedgerV2 } = require('../../student-credits-v2/projection');
-const { addAdjustment, confirmLegacyPayment, confirmOpeningBalance } = require('../../student-credits-v2/commands');
+const {
+  addAdjustment,
+  confirmLegacyPayment,
+  confirmOpeningBalance,
+  createActivation,
+  initializeActivatedStudentLedger
+} = require('../../student-credits-v2/commands');
 
 function student(openingBalance, overrides = {}) {
   return {
@@ -178,6 +184,62 @@ test('V2 requires explicit legacy payment interpretation and can ignore bookkeep
   assert.equal(projectStudentCreditLedgerV2({
     student: future, paymentRecords: [trusted], classRecords: []
   }).currentBalance, 4);
+
+  const boundaryPayment = payment('boundary', '2026-10-01', 4);
+  boundaryPayment.createdAt = '2026-10-01T00:00:00.000Z';
+  assert.equal(projectStudentCreditLedgerV2({
+    student: future, paymentRecords: [boundaryPayment], classRecords: []
+  }).isReady, false);
+});
+
+test('Stage 2 activation is explicit and initializes only genuinely new students at zero', () => {
+  const activation = createActivation('2026-09-09T01:00:00.000Z');
+  assert.deepEqual(activation, {
+    version: 2,
+    activated: true,
+    activatedAt: '2026-09-09T01:00:00.000Z',
+    paymentAuthorityStartAt: '2026-09-09T01:00:00.000Z'
+  });
+  assert.deepEqual(initializeActivatedStudentLedger(activation, '2026-09-09T01:00:01.000Z'), {
+    version: 2,
+    openingDate: '2026-09-09',
+    openingBalance: 0,
+    openingConfirmed: true,
+    openingConfirmedAt: '2026-09-09T01:00:01.000Z',
+    initializedAfterActivation: true,
+    adjustments: [],
+    legacyPaymentOverrides: []
+  });
+  assert.throws(() => initializeActivatedStudentLedger(activation, activation.activatedAt), /after activation/);
+
+  const newStudent = { tuitionBasis: '4회', creditLedgerV2: initializeActivatedStudentLedger(activation, '2026-09-09T01:00:01.000Z') };
+  const newPayment = payment('new-payment', '2026-09-09', 4);
+  newPayment.createdAt = '2026-09-09T01:00:02.000Z';
+  assert.equal(projectStudentCreditLedgerV2({
+    student: newStudent,
+    paymentRecords: [newPayment],
+    classRecords: [classRecord('new-class', '2026-09-09')],
+    paymentAuthorityStartAt: activation.paymentAuthorityStartAt
+  }).currentBalance, 3);
+});
+
+test('Stage 2 authority changes the source, not a reviewed historical ledger balance', () => {
+  const configured = withLegacyPayments(student(-2), [
+    { id: 'normalized', credits: 4 },
+    { id: 'ignored', ignored: true }
+  ]);
+  const input = {
+    student: configured,
+    paymentRecords: [payment('normalized', '2026-08-02', 1), payment('ignored', '2026-08-15', 4)],
+    classRecords: [classRecord('class', '2026-08-03')]
+  };
+  const before = projectStudentCreditLedgerV2(input);
+  const after = projectStudentCreditLedgerV2({
+    ...input,
+    paymentAuthorityStartAt: '2026-09-09T00:00:00.000Z'
+  });
+  assert.equal(before.currentBalance, 1);
+  assert.deepEqual(after, before);
 });
 
 test('V2 commands persist only confirmed opening data and explicit stable adjustments', () => {

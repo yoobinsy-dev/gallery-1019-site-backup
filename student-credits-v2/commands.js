@@ -3,6 +3,39 @@
 
   const CUTOVER_DATE = '2026-07-26';
 
+  function createActivation(activatedAt) {
+    const boundary = String(activatedAt || new Date().toISOString()).trim();
+    if (!Number.isFinite(new Date(boundary).getTime())) {
+      throw new TypeError('Activation requires a valid timestamp.');
+    }
+    return {
+      version: 2,
+      activated: true,
+      activatedAt: boundary,
+      paymentAuthorityStartAt: boundary
+    };
+  }
+
+  function initializeActivatedStudentLedger(activation, createdAt) {
+    if (activation?.version !== 2 || activation?.activated !== true) {
+      throw new TypeError('Student Credit Ledger V2 must be activated first.');
+    }
+    const timestamp = String(createdAt || new Date().toISOString()).trim();
+    if (!Number.isFinite(new Date(timestamp).getTime()) || timestamp <= activation.paymentAuthorityStartAt) {
+      throw new TypeError('New student initialization must occur after activation.');
+    }
+    return {
+      version: 2,
+      openingDate: timestamp.slice(0, 10),
+      openingBalance: 0,
+      openingConfirmed: true,
+      openingConfirmedAt: timestamp,
+      initializedAfterActivation: true,
+      adjustments: [],
+      legacyPaymentOverrides: []
+    };
+  }
+
   function confirmOpeningBalance(existing, openingBalance, confirmedAt) {
     const parsed = Number(openingBalance);
     if (!Number.isInteger(parsed)) throw new TypeError('Opening balance must be a signed integer.');
@@ -70,7 +103,14 @@
     return { ...existing, adjustments };
   }
 
-  const api = Object.freeze({ CUTOVER_DATE, addAdjustment, confirmLegacyPayment, confirmOpeningBalance });
+  const api = Object.freeze({
+    CUTOVER_DATE,
+    addAdjustment,
+    confirmLegacyPayment,
+    confirmOpeningBalance,
+    createActivation,
+    initializeActivatedStudentLedger
+  });
   root.StudentCreditLedgerV2Commands = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

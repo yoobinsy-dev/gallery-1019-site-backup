@@ -65,6 +65,19 @@ body {
   gap: 16px;
   margin-bottom: 10px;
 }
+
+.credit-ledger-v2-activation-controls,
+.students-detail-balance-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.remaining-badge.not-ready {
+  color: #9a3412;
+  background: #ffedd5;
+}
 .credit-ledger-v2-heading-row h2 {
   margin-bottom: 4px;
 }

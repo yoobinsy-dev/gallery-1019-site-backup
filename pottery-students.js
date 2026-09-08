@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = 'pottery-students-v1';
   const CALENDAR_STORAGE_KEY = 'studio-calendar-state-v1';
+  const CREDIT_LEDGER_V2_ACTIVATION_KEY = 'student-credit-ledger-v2-activation';
   const SLOT_MINUTES = 30;
   const SLOTS_PER_DAY = 48;
   const DAY_NAMES = ['월', '화', '수', '목', '금', '토', '일'];
@@ -22,6 +23,7 @@
     paymentStudentId: '',
     detailStudentId: '',
     creditLedgerV2StudentId: '',
+    creditLedgerV2Activation: null,
     activeStudentGroup: STUDENT_GROUP_REGULAR,
     slotPicker: {
       weekStart: getWeekStart(new Date()),
@@ -42,12 +44,16 @@
 
   window.addEventListener('cloud-sync:state-applied', (event) => {
     const keys = Array.isArray(event?.detail?.keys) ? event.detail.keys : [];
-    if (!keys.includes('pottery-students-v1') && !keys.includes('studio-calendar-state-v1') && !keys.includes('users')) {
+    if (!keys.includes('pottery-students-v1')
+      && !keys.includes('studio-calendar-state-v1')
+      && !keys.includes('student-credit-ledger-v2-activation')
+      && !keys.includes('users')) {
       return;
     }
 
     loadStudents();
     loadCalendarState();
+    loadCreditLedgerV2Activation();
     renderStudents();
   });
 
@@ -155,6 +161,7 @@
     await waitForCloudSyncReady();
     loadStudents();
     loadCalendarState();
+    loadCreditLedgerV2Activation();
     renderStudents();
   }
 
@@ -215,6 +222,12 @@
     document.getElementById('student-detail-close-btn')?.addEventListener('click', closeDetailModal);
     document.getElementById('credit-ledger-v2-close-btn')?.addEventListener('click', closeCreditLedgerV2Modal);
     document.getElementById('credit-ledger-v2-adjustment-form')?.addEventListener('submit', saveCreditLedgerV2Adjustment);
+    document.getElementById('credit-ledger-v2-activate')?.addEventListener('click', activateCreditLedgerV2);
+    document.getElementById('student-detail-v2-ledger-btn')?.addEventListener('click', () => {
+      const studentId = state.detailStudentId;
+      closeDetailModal();
+      openCreditLedgerV2Modal(studentId);
+    });
 
     const addTuitionInput = document.getElementById('student-tuition');
     if (addTuitionInput) {
@@ -300,6 +313,7 @@
     const purchasedCount = basisToCount(tuitionBasis);
     const studentGroup = normalizeStudentGroup(groupInput?.value);
 
+    const createdAt = new Date().toISOString();
     state.pendingStudent = {
       studentGroup,
       name,
@@ -307,10 +321,11 @@
       tuitionBasis,
       mostRecentPaymentDate: paymentDate,
       paymentHistory: paymentDate ? [paymentDate] : [],
-      paymentRecords: paymentDate ? [createPaymentRecord(paymentDate, tuition, tuitionBasis, purchasedCount)] : [],
+      paymentRecords: paymentDate ? [createPaymentRecord(paymentDate, tuition, tuitionBasis, purchasedCount, { createdAt })] : [],
       creditTrackingStartDate: formatDateInput(new Date()),
       carryOverBeforePayment: 0,
-      paymentCycleCredits: purchasedCount
+      paymentCycleCredits: purchasedCount,
+      createdAt
     };
 
     state.slotPicker.weekStart = getWeekStart(new Date());
@@ -359,7 +374,8 @@
       paymentRecords: normalizePaymentRecords(state.pendingStudent),
       creditTrackingStartDate: state.pendingStudent.creditTrackingStartDate,
       carryOverBeforePayment: state.pendingStudent.carryOverBeforePayment,
-      paymentCycleCredits: state.pendingStudent.paymentCycleCredits
+      paymentCycleCredits: state.pendingStudent.paymentCycleCredits,
+      ...getNewStudentCreditLedger(state.pendingStudent.createdAt)
     };
 
     state.students.push(student);
@@ -410,7 +426,8 @@
       paymentRecords: normalizePaymentRecords(state.pendingStudent),
       creditTrackingStartDate: state.pendingStudent.creditTrackingStartDate,
       carryOverBeforePayment: state.pendingStudent.carryOverBeforePayment,
-      paymentCycleCredits: state.pendingStudent.paymentCycleCredits
+      paymentCycleCredits: state.pendingStudent.paymentCycleCredits,
+      ...getNewStudentCreditLedger(state.pendingStudent.createdAt)
     };
 
     state.students.push(student);
@@ -594,9 +611,12 @@
     visibleStudents.forEach((student, index) => {
       const stats = getStudentClassStats(student.name);
       const isMonthly = isMonthlyStartBasis(student?.tuitionBasis);
+      const operationalProjection = !isMonthly && isCreditLedgerV2Activated()
+        ? getCreditLedgerV2Projection(student)
+        : null;
       const remainingCount = isMonthly
         ? null
-        : getStudentPaymentProjection(student).remainingCount;
+        : (operationalProjection ? operationalProjection.currentBalance : getStudentPaymentProjection(student).remainingCount);
       const recentClassDate = stats.mostRecentClassDate || '';
       const currentInstructor = getStudentCurrentInstructor(student);
 
@@ -633,10 +653,11 @@
       const remainingTd = document.createElement('td');
       const remainingBadge = document.createElement('span');
       remainingBadge.className = 'remaining-badge';
-      if (!isMonthly && remainingCount < 0) {
+      if (!isMonthly && Number.isInteger(remainingCount) && remainingCount < 0) {
         remainingBadge.classList.add('negative');
       }
-      remainingBadge.textContent = isMonthly ? '-' : String(remainingCount);
+      if (operationalProjection && !operationalProjection.isReady) remainingBadge.classList.add('not-ready');
+      remainingBadge.textContent = isMonthly ? '-' : (Number.isInteger(remainingCount) ? String(remainingCount) : '확인 필요');
       remainingTd.appendChild(remainingBadge);
       tr.appendChild(remainingTd);
 
@@ -682,8 +703,44 @@
       student,
       paymentRecords: Array.isArray(student?.paymentRecords) ? student.paymentRecords : [],
       paymentDates,
-      classRecords: collectStudentEventOccurrences(student?.name, ['수강'], { pastOnly: true })
+      classRecords: collectStudentEventOccurrences(student?.name, ['수강'], { pastOnly: true }),
+      paymentAuthorityStartAt: isCreditLedgerV2Activated()
+        ? state.creditLedgerV2Activation.paymentAuthorityStartAt
+        : ''
     });
+  }
+
+  function isCreditLedgerV2Activated() {
+    const activation = state.creditLedgerV2Activation;
+    return activation?.version === 2
+      && activation?.activated === true
+      && Boolean(String(activation?.paymentAuthorityStartAt || '').trim());
+  }
+
+  function getNewStudentCreditLedger(createdAt) {
+    if (!isCreditLedgerV2Activated()) return {};
+    return {
+      creditLedgerV2: globalThis.StudentCreditLedgerV2Commands.initializeActivatedStudentLedger(
+        state.creditLedgerV2Activation,
+        createdAt
+      )
+    };
+  }
+
+  function activateCreditLedgerV2() {
+    if (state.access.studioRole !== '어드민' || isCreditLedgerV2Activated()) return;
+    const students = state.students.filter((student) => !isMonthlyStartBasis(student?.tuitionBasis));
+    if (students.some((student) => !getCreditLedgerV2Projection(student).isReady)) {
+      alert('모든 회차 수강생의 V2 설정을 먼저 완료해주세요.');
+      return;
+    }
+    if (!confirm('V2 회차 원장을 운영 잔여 회차의 기준으로 활성화할까요?')) return;
+    state.creditLedgerV2Activation = globalThis.StudentCreditLedgerV2Commands.createActivation();
+    globalThis.BrowserStorageAdapter.storage.write(
+      CREDIT_LEDGER_V2_ACTIVATION_KEY,
+      JSON.stringify(state.creditLedgerV2Activation)
+    );
+    renderStudents();
   }
 
   function getCreditLedgerV2PaymentSetups(student) {
@@ -704,6 +761,15 @@
     const students = getCreditLedgerV2Students();
     const readyCount = students.filter((student) => getCreditLedgerV2Projection(student).isReady).length;
     progress.textContent = `${readyCount} / ${students.length} 준비`;
+    const activationStatus = document.getElementById('credit-ledger-v2-activation-status');
+    const activationButton = document.getElementById('credit-ledger-v2-activate');
+    const activated = isCreditLedgerV2Activated();
+    if (activationStatus) activationStatus.textContent = activated ? 'V2 운영 중' : 'Stage 1 설정';
+    if (activationButton) {
+      activationButton.hidden = state.access.studioRole !== '어드민';
+      activationButton.disabled = activated || readyCount !== students.length;
+      activationButton.textContent = activated ? 'V2 활성화됨' : 'V2 활성화';
+    }
     tbody.innerHTML = '';
 
     students.forEach((student) => {
@@ -1001,6 +1067,27 @@
       title.textContent = `${student.name || '-'} 상세 기록`;
     }
 
+    const detailBalance = document.getElementById('student-detail-current-balance');
+    const ledgerButton = document.getElementById('student-detail-v2-ledger-btn');
+    const isMonthly = isMonthlyStartBasis(student.tuitionBasis);
+    if (detailBalance) {
+      if (isMonthly) {
+        detailBalance.textContent = '월초 수강생';
+      } else if (isCreditLedgerV2Activated()) {
+        const projection = getCreditLedgerV2Projection(student);
+        detailBalance.textContent = projection.isReady ? `현재 ${formatSignedInteger(projection.currentBalance)}회` : 'V2 확인 필요';
+        detailBalance.classList.toggle('negative', projection.isReady && projection.currentBalance < 0);
+      } else {
+        detailBalance.textContent = `현재 ${getStudentPaymentProjection(student).remainingCount}회`;
+        detailBalance.classList.remove('negative');
+      }
+    }
+    if (ledgerButton) ledgerButton.hidden = isMonthly || !isCreditLedgerV2Activated();
+    const historyTitle = document.getElementById('student-detail-payment-history-title');
+    if (historyTitle) historyTitle.textContent = isCreditLedgerV2Activated() && !isMonthly
+      ? 'V1 결제 사이클 기록 (참고)'
+      : '수업 기록 (결제일 기준)';
+
     renderDetailPaymentClassTable(student);
     renderDetailOtherUsageTable(student);
 
@@ -1118,6 +1205,19 @@
     document.getElementById('payment-record-tuition').value = student.tuition ? formatWon(student.tuition) : '';
     document.getElementById('payment-record-basis').value = student.tuitionBasis || '';
     document.getElementById('payment-record-credits').value = String(basisToCount(student.tuitionBasis));
+    const currentBalance = document.getElementById('student-payment-current-balance');
+    if (currentBalance) {
+      const projection = !isMonthlyStartBasis(student.tuitionBasis) && isCreditLedgerV2Activated()
+        ? getCreditLedgerV2Projection(student)
+        : null;
+      currentBalance.textContent = projection
+        ? (projection.isReady ? `현재 V2 잔액 ${formatSignedInteger(projection.currentBalance)}회` : 'V2 잔액 확인 필요')
+        : '';
+    }
+    const paymentRuleNote = document.getElementById('student-payment-rule-note');
+    if (paymentRuleNote) paymentRuleNote.textContent = !isMonthlyStartBasis(student.tuitionBasis) && isCreditLedgerV2Activated()
+      ? '결제 회차가 현재 V2 잔액에 그대로 더해집니다.'
+      : '남은 횟수는 이월되지 않으며, 마이너스 횟수는 새 결제에서 먼저 차감됩니다.';
 
     const modal = document.getElementById('student-payment-modal');
     if (!modal) return;
@@ -1167,8 +1267,9 @@
       if (!confirmed) return;
     }
 
-    const previousCompletedSincePayment = getCompletedClassCountForBalance(student, previousPaymentDate);
-    const previousRemaining = getRemainingClassCount(student, previousCompletedSincePayment);
+    const useV2Authority = !isMonthlyStartBasis(nextBasis) && isCreditLedgerV2Activated();
+    const previousCompletedSincePayment = useV2Authority ? 0 : getCompletedClassCountForBalance(student, previousPaymentDate);
+    const previousRemaining = useV2Authority ? 0 : getRemainingClassCount(student, previousCompletedSincePayment);
 
     student.tuition = nextTuition;
     student.tuitionBasis = nextBasis;
@@ -1176,14 +1277,16 @@
     appendPaymentHistory(student, nextPaymentDate);
     student.paymentRecords = normalizePaymentRecords(student)
       .filter((record) => record.date !== nextPaymentDate);
-    student.paymentRecords.push(createPaymentRecord(nextPaymentDate, nextTuition, nextBasis, nextCredits));
+    student.paymentRecords.push(createPaymentRecord(nextPaymentDate, nextTuition, nextBasis, nextCredits, {
+      createdAt: new Date().toISOString()
+    }));
 
     const paymentChanged = previousPaymentDate !== nextPaymentDate;
     if (isMonthlyStartBasis(nextBasis)) {
       student.carryOverBeforePayment = 0;
       student.paymentCycleCredits = 0;
       student.manualUsedAdjustment = 0;
-    } else if (paymentChanged) {
+    } else if (paymentChanged && !useV2Authority) {
       student.carryOverBeforePayment = computeCarryOverForNewPaymentCycle(
         student,
         previousPaymentDate,
@@ -1242,13 +1345,15 @@
     student.paymentHistory = history.sort((a, b) => b.localeCompare(a));
   }
 
-  function createPaymentRecord(date, tuition, basis, credits) {
+  function createPaymentRecord(date, tuition, basis, credits, options = {}) {
+    const createdAt = String(options.createdAt || '').trim();
     return {
-      id: `payment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: String(options.id || '').trim() || `payment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       date: String(date || '').trim(),
       tuition: Number(tuition) || 0,
       basis: String(basis || '').trim(),
-      credits: Math.max(0, Math.floor(Number(credits) || 0))
+      credits: Math.max(0, Math.floor(Number(credits) || 0)),
+      ...(createdAt ? { createdAt } : {})
     };
   }
 
@@ -1272,7 +1377,8 @@
         next,
         student.tuition,
         student.tuitionBasis,
-        student.paymentCycleCredits
+        student.paymentCycleCredits,
+        { id: correctedRecord?.id, createdAt: correctedRecord?.createdAt }
       );
       if (correctedRecord?.id) replacement.id = correctedRecord.id;
       records.push(replacement);
@@ -1886,6 +1992,15 @@
               ?? 0
             )
           }));
+  }
+
+  function loadCreditLedgerV2Activation() {
+    try {
+      const parsed = JSON.parse(globalThis.BrowserStorageAdapter.storage.read(CREDIT_LEDGER_V2_ACTIVATION_KEY) || 'null');
+      state.creditLedgerV2Activation = parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (error) {
+      state.creditLedgerV2Activation = null;
+    }
   }
 
   function saveStudents() {

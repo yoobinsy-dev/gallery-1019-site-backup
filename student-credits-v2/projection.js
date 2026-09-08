@@ -47,7 +47,7 @@
     ));
   }
 
-  function projectStudentCreditLedgerV2({ student, paymentRecords, paymentDates, classRecords }) {
+  function projectStudentCreditLedgerV2({ student, paymentRecords, paymentDates, classRecords, paymentAuthorityStartAt }) {
     if (isMonthlyStudent(student)) {
       return {
         isApplicable: false,
@@ -62,9 +62,14 @@
     const ledger = student?.creditLedgerV2;
     const openingDate = String(ledger?.openingDate || CUTOVER_DATE).trim();
     const openingBalance = Number(ledger?.openingBalance);
+    const authorityStart = String(paymentAuthorityStartAt || ledger?.paymentAuthorityStartAt || '').trim();
+    const initializedAfterActivation = ledger?.initializedAfterActivation === true
+      && authorityStart
+      && openingDate === String(ledger?.openingConfirmedAt || '').slice(0, 10)
+      && String(ledger?.openingConfirmedAt || '') > authorityStart;
     const openingConfirmed = ledger?.version === 2
       && ledger?.openingConfirmed === true
-      && openingDate === CUTOVER_DATE
+      && (openingDate === CUTOVER_DATE || initializedAfterActivation)
       && Number.isInteger(openingBalance);
     if (!openingConfirmed) {
       return {
@@ -79,7 +84,7 @@
 
     const paymentResult = eventSources.buildPaymentEvents(paymentRecords, openingDate, paymentDates, {
       legacyPaymentOverrides: ledger.legacyPaymentOverrides,
-      paymentAuthorityStartAt: ledger.paymentAuthorityStartAt
+      paymentAuthorityStartAt: authorityStart
     });
     const adjustmentResult = normalizeAdjustments(ledger.adjustments, openingDate);
     const events = sortEvents([{

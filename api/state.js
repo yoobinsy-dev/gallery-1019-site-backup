@@ -15,7 +15,8 @@ const ALLOWED_KEYS = new Set([
   'studio-calendar-state-v1',
   'pottery-material-orders-v1',
   'pottery-accounting-v1',
-  'gallery-artworks-v1'
+  'gallery-artworks-v1',
+  'student-credit-ledger-v2-activation'
 ]);
 const STRICT_VERSION_KEYS = new Set([
   'users',
@@ -24,7 +25,8 @@ const STRICT_VERSION_KEYS = new Set([
   'studio-calendar-state-v1',
   'pottery-material-orders-v1',
   'pottery-accounting-v1',
-  'gallery-artworks-v1'
+  'gallery-artworks-v1',
+  'student-credit-ledger-v2-activation'
 ]);
 const HARD_DROP_MIN_PREVIOUS_TOTAL = 20;
 const HARD_DROP_MIN_ABSOLUTE = 15;

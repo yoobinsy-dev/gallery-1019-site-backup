@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>도예공방 10.19 - 수강생 관리</title>
-  <link rel="stylesheet" href="pottery-students.css?v=20260908-1">
+  <link rel="stylesheet" href="pottery-students.css?v=20260909-1">
   <link rel="stylesheet" href="mobile-draft.css?v=20260819-8">
 </head>
 <body>
@@ -86,7 +86,11 @@
           <h2 id="credit-ledger-v2-heading">V2 회차 원장 설정</h2>
           <p>기초 잔액과 기존 결제의 실제 회차를 확인합니다. V1 값은 참고만 하며 자동 적용되지 않습니다.</p>
         </div>
-        <strong id="credit-ledger-v2-progress">0 / 0 확인</strong>
+        <div class="credit-ledger-v2-activation-controls">
+          <span id="credit-ledger-v2-activation-status">Stage 1 설정</span>
+          <strong id="credit-ledger-v2-progress">0 / 0 확인</strong>
+          <button type="button" class="students-primary-btn" id="credit-ledger-v2-activate">V2 활성화</button>
+        </div>
       </div>
       <div class="students-table-wrap">
         <table class="students-table credit-ledger-v2-table">
@@ -202,6 +206,7 @@
   <div class="students-modal" id="student-payment-modal" aria-hidden="true">
     <div class="students-modal-content">
       <h2 id="student-payment-title">결제 추가</h2>
+      <strong id="student-payment-current-balance"></strong>
       <form id="student-payment-form" class="students-edit-form" autocomplete="off">
         <div class="students-form-field">
           <label for="payment-record-date">결제일</label>
@@ -227,7 +232,7 @@
           <input id="payment-record-credits" type="number" min="0" step="1" inputmode="numeric" required>
         </div>
       </form>
-      <p class="students-payment-rule-note">남은 횟수는 이월되지 않으며, 마이너스 횟수는 새 결제에서 먼저 차감됩니다.</p>
+      <p class="students-payment-rule-note" id="student-payment-rule-note">남은 횟수는 이월되지 않으며, 마이너스 횟수는 새 결제에서 먼저 차감됩니다.</p>
       <div class="modal-actions">
         <button type="button" class="students-primary-btn" id="student-payment-save-btn">저장</button>
         <button type="button" class="students-secondary-btn" id="student-payment-cancel-btn">취소</button>
@@ -239,11 +244,15 @@
     <div class="students-modal-content students-modal-detail">
       <div class="students-detail-header-row">
         <h2 id="student-detail-title">상세 기록</h2>
+        <div class="students-detail-balance-actions">
+          <strong id="student-detail-current-balance">-</strong>
+          <button type="button" class="row-action-btn" id="student-detail-v2-ledger-btn" hidden>V2 원장</button>
+        </div>
       </div>
 
       <div class="students-detail-cards">
         <section class="students-detail-card students-detail-card-wide">
-          <h3>수업 기록 (결제일 기준)</h3>
+          <h3 id="student-detail-payment-history-title">수업 기록 (결제일 기준)</h3>
           <div class="students-detail-table-scroll">
             <table class="students-detail-table" id="student-detail-payment-class-table">
               <thead>
@@ -301,7 +310,7 @@
     </div>
   </div>
 
-  <script src="sync/cloud-sync-protocol.js?v=20260903-1"></script>
+  <script src="sync/cloud-sync-protocol.js?v=20260909-1"></script>
   <script src="sync/cloud-sync-model.js?v=20260903-1"></script>
   <script src="sync/cloud-sync-reconciliation.js?v=20260903-1"></script>
   <script src="cloud-sync.js?v=20260903-1"></script>
@@ -310,10 +319,10 @@
   <script src="storage/students-repository.js?v=20260903-1"></script>
   <script src="pottery-landing.js?v=20260812-2"></script>
   <script src="master-calendar/occurrences.js?v=20260829-1"></script>
-  <script src="students/payment-credits.js?v=20260908-3"></script>
-  <script src="student-credits-v2/event-sources.js?v=20260908-2"></script>
-  <script src="student-credits-v2/projection.js?v=20260908-2"></script>
-  <script src="student-credits-v2/commands.js?v=20260908-2"></script>
-  <script src="pottery-students.js?v=20260908-3"></script>
+  <script src="students/payment-credits.js?v=20260909-1"></script>
+  <script src="student-credits-v2/event-sources.js?v=20260909-1"></script>
+  <script src="student-credits-v2/projection.js?v=20260909-1"></script>
+  <script src="student-credits-v2/commands.js?v=20260909-1"></script>
+  <script src="pottery-students.js?v=20260909-1"></script>
 </body>
 </html>
