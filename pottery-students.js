@@ -686,13 +686,24 @@
     });
   }
 
+  function getCreditLedgerV2PaymentSetups(student) {
+    return globalThis.StudentCreditLedgerV2EventSources.getLegacyPaymentSetups(
+      Array.isArray(student?.paymentRecords) ? student.paymentRecords : [],
+      globalThis.StudentCreditLedgerV2.CUTOVER_DATE,
+      {
+        legacyPaymentOverrides: student?.creditLedgerV2?.legacyPaymentOverrides,
+        paymentAuthorityStartAt: student?.creditLedgerV2?.paymentAuthorityStartAt
+      }
+    );
+  }
+
   function renderCreditLedgerV2Setup() {
     const tbody = document.getElementById('credit-ledger-v2-setup-body');
     const progress = document.getElementById('credit-ledger-v2-progress');
     if (!tbody || !progress) return;
     const students = getCreditLedgerV2Students();
-    const confirmedCount = students.filter((student) => student?.creditLedgerV2?.openingConfirmed === true).length;
-    progress.textContent = `${confirmedCount} / ${students.length} 확인`;
+    const readyCount = students.filter((student) => getCreditLedgerV2Projection(student).isReady).length;
+    progress.textContent = `${readyCount} / ${students.length} 준비`;
     tbody.innerHTML = '';
 
     students.forEach((student) => {
@@ -721,7 +732,25 @@
       confirmButton.addEventListener('click', () => confirmCreditLedgerV2Opening(student.id, input.value));
       openingCell.append(input, confirmButton);
       row.appendChild(openingCell);
-      row.appendChild(buildTextCell(ledger?.openingConfirmed === true ? (projection.isReady ? '확인됨' : '확인 필요') : '미확인'));
+
+      const paymentSetups = getCreditLedgerV2PaymentSetups(student);
+      const confirmedPayments = paymentSetups.filter((setup) => setup.confirmed).length;
+      const paymentsCell = document.createElement('td');
+      const paymentList = document.createElement('div');
+      paymentList.className = 'credit-ledger-v2-payment-list';
+      if (!paymentSetups.length) {
+        const empty = document.createElement('span');
+        empty.className = 'credit-ledger-v2-payment-empty';
+        empty.textContent = '확인할 기존 결제 없음';
+        paymentList.appendChild(empty);
+      }
+      paymentSetups.forEach((setup) => {
+        paymentList.appendChild(buildCreditLedgerV2PaymentSetup(student, setup));
+      });
+      paymentsCell.appendChild(paymentList);
+      row.appendChild(paymentsCell);
+      const openingStatus = ledger?.openingConfirmed === true ? '기초 확인' : '기초 미확인';
+      row.appendChild(buildTextCell(`${openingStatus} · 결제 ${confirmedPayments}/${paymentSetups.length}`));
 
       const balanceCell = document.createElement('td');
       const balance = document.createElement('strong');
@@ -744,6 +773,48 @@
     });
   }
 
+  function buildCreditLedgerV2PaymentSetup(student, setup) {
+    const item = document.createElement('div');
+    item.className = `credit-ledger-v2-payment-item${setup.confirmed ? ' is-confirmed' : ''}`;
+    item.dataset.sourcePaymentRef = setup.sourcePaymentRef;
+    const date = document.createElement('span');
+    date.textContent = setup.date;
+    const reference = document.createElement('span');
+    reference.className = 'credit-ledger-v2-payment-reference';
+    reference.textContent = `기존 ${setup.existingCredits ?? '-'}회`;
+    const credits = document.createElement('input');
+    credits.type = 'number';
+    credits.min = '0';
+    credits.step = '1';
+    credits.inputMode = 'numeric';
+    credits.className = 'credit-ledger-v2-payment-credits';
+    credits.placeholder = 'V2 회차';
+    credits.value = setup.confirmed && !setup.ignored && Number.isInteger(setup.credits) ? String(setup.credits) : '';
+    credits.setAttribute('aria-label', `${student.name || '수강생'} ${setup.date} V2 실제 결제 회차`);
+    const note = document.createElement('input');
+    note.type = 'text';
+    note.className = 'credit-ledger-v2-payment-note';
+    note.placeholder = '메모 (선택)';
+    note.value = setup.note;
+    note.setAttribute('aria-label', `${student.name || '수강생'} ${setup.date} V2 결제 메모`);
+    const confirmButton = document.createElement('button');
+    confirmButton.type = 'button';
+    confirmButton.className = 'row-action-btn credit-ledger-v2-payment-confirm';
+    confirmButton.textContent = setup.confirmed && !setup.ignored ? '재확인' : '확인';
+    confirmButton.addEventListener('click', () => confirmCreditLedgerV2Payment(
+      student.id, setup.sourcePaymentRef, credits.value, false, note.value
+    ));
+    const ignoreButton = document.createElement('button');
+    ignoreButton.type = 'button';
+    ignoreButton.className = 'row-action-btn credit-ledger-v2-payment-ignore';
+    ignoreButton.textContent = setup.ignored ? '제외됨' : 'V2 제외';
+    ignoreButton.addEventListener('click', () => confirmCreditLedgerV2Payment(
+      student.id, setup.sourcePaymentRef, '', true, note.value
+    ));
+    item.append(date, reference, credits, note, confirmButton, ignoreButton);
+    return item;
+  }
+
   function confirmCreditLedgerV2Opening(studentId, rawValue) {
     const student = state.students.find((item) => String(item?.id || '') === String(studentId || ''));
     if (!student || !canManageStudent(student)) return;
@@ -756,6 +827,21 @@
       renderStudents();
     } catch (error) {
       alert('기초 잔액은 양수, 0, 음수를 포함한 정수로 입력해주세요.');
+    }
+  }
+
+  function confirmCreditLedgerV2Payment(studentId, sourcePaymentRef, rawCredits, ignored, note) {
+    const student = state.students.find((item) => String(item?.id || '') === String(studentId || ''));
+    if (!student || !canManageStudent(student)) return;
+    try {
+      student.creditLedgerV2 = globalThis.StudentCreditLedgerV2Commands.confirmLegacyPayment(
+        student.creditLedgerV2,
+        { sourcePaymentRef, credits: rawCredits, ignored, note }
+      );
+      saveStudents();
+      renderStudents();
+    } catch (error) {
+      alert('V2 실제 결제 회차는 0 이상의 정수로 입력하거나 V2 제외를 선택해주세요.');
     }
   }
 
@@ -796,8 +882,10 @@
       const cell = document.createElement('td');
       cell.colSpan = 4;
       cell.textContent = issue.type === 'payment-record-missing'
-        ? `${issue.date}: 결제 횟수 확인 필요`
-        : '원장 데이터 확인 필요';
+        ? `${issue.date}: 결제 기록 확인 필요`
+        : issue.type === 'legacy-payment-unconfirmed'
+          ? `${issue.date}: 기존 ${issue.existingCredits ?? '-'}회 기록의 V2 실제 회차 확인 필요`
+          : '원장 데이터 확인 필요';
       row.appendChild(cell);
       tbody.appendChild(row);
     });

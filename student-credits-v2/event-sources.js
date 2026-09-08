@@ -13,18 +13,81 @@
     return `${prefix}:${fallbackParts.map(stablePart).join(':')}`;
   }
 
-  function buildPaymentEvents(paymentRecords, openingDate = CUTOVER_DATE, paymentDates = []) {
+  function getPaymentSourceRef(record) {
+    return getStableSourceId('payment', record, [record?.date, record?.basis, record?.tuition, record?.credits]);
+  }
+
+  function isTrustedPayment(record, paymentAuthorityStartAt) {
+    const authorityStart = String(paymentAuthorityStartAt || '').trim();
+    const createdAt = String(record?.createdAt || '').trim();
+    return Boolean(authorityStart && createdAt && createdAt >= authorityStart);
+  }
+
+  function getLegacyPaymentSetups(paymentRecords, openingDate = CUTOVER_DATE, options = {}) {
+    const overrides = new Map();
+    (Array.isArray(options.legacyPaymentOverrides) ? options.legacyPaymentOverrides : []).forEach((override) => {
+      const sourcePaymentRef = String(override?.sourcePaymentRef || '').trim();
+      if (sourcePaymentRef && !overrides.has(sourcePaymentRef)) overrides.set(sourcePaymentRef, override);
+    });
+    const seen = new Set();
+    const setups = [];
+    (Array.isArray(paymentRecords) ? paymentRecords : []).forEach((record) => {
+      const date = String(record?.date || '').trim();
+      if (!date || date < openingDate || isTrustedPayment(record, options.paymentAuthorityStartAt)) return;
+      const sourcePaymentRef = getPaymentSourceRef(record);
+      if (seen.has(sourcePaymentRef)) return;
+      seen.add(sourcePaymentRef);
+      const override = overrides.get(sourcePaymentRef);
+      setups.push({
+        sourcePaymentRef,
+        date,
+        existingCredits: Number.isInteger(Number(record?.credits)) ? Number(record.credits) : null,
+        confirmed: override?.confirmed === true,
+        ignored: override?.confirmed === true && override?.ignored === true,
+        credits: override?.confirmed === true && override?.ignored !== true && Number.isInteger(Number(override?.credits))
+          ? Number(override.credits)
+          : null,
+        note: String(override?.note || '').trim()
+      });
+    });
+    return setups;
+  }
+
+  function buildPaymentEvents(paymentRecords, openingDate = CUTOVER_DATE, paymentDates = [], options = {}) {
     const events = [];
     const issues = [];
     const seen = new Set();
+    const legacySetups = new Map(getLegacyPaymentSetups(paymentRecords, openingDate, options)
+      .map((setup) => [setup.sourcePaymentRef, setup]));
 
     (Array.isArray(paymentRecords) ? paymentRecords : []).forEach((record) => {
       const date = String(record?.date || '').trim();
       if (!date || date < openingDate) return;
-      const credits = Number(record?.credits);
-      const eventId = getStableSourceId('payment', record, [date, record?.basis, record?.tuition, record?.credits]);
+      const eventId = getPaymentSourceRef(record);
       if (seen.has(eventId)) return;
       seen.add(eventId);
+      const legacySetup = legacySetups.get(eventId);
+      if (legacySetup) {
+        if (!legacySetup.confirmed) {
+          issues.push({ type: 'legacy-payment-unconfirmed', sourceId: eventId, date, existingCredits: legacySetup.existingCredits });
+          return;
+        }
+        if (legacySetup.ignored) return;
+        if (!Number.isInteger(legacySetup.credits) || legacySetup.credits < 0) {
+          issues.push({ type: 'invalid-legacy-payment-override', sourceId: eventId, date });
+          return;
+        }
+        events.push({
+          eventId,
+          date,
+          type: 'payment',
+          delta: legacySetup.credits,
+          sourceId: String(record?.id || '').trim() || null,
+          label: `결제 ${legacySetup.credits}회`
+        });
+        return;
+      }
+      const credits = Number(record?.credits);
       if (!Number.isInteger(credits) || credits < 0) {
         issues.push({ type: 'payment-credits-missing', sourceId: eventId, date });
         return;
@@ -77,6 +140,8 @@
     CUTOVER_DATE,
     buildClassEvents,
     buildPaymentEvents,
+    getLegacyPaymentSetups,
+    getPaymentSourceRef,
     getStableSourceId
   });
   root.StudentCreditLedgerV2EventSources = api;

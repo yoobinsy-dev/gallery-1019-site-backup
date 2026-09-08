@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { projectStudentCreditLedgerV2 } = require('../../student-credits-v2/projection');
-const { addAdjustment, confirmOpeningBalance } = require('../../student-credits-v2/commands');
+const { addAdjustment, confirmLegacyPayment, confirmOpeningBalance } = require('../../student-credits-v2/commands');
 
 function student(openingBalance, overrides = {}) {
   return {
@@ -21,6 +21,18 @@ function payment(id, date, credits) {
   return { id, date, credits, basis: `${credits}회` };
 }
 
+function withLegacyPayments(configured, entries) {
+  configured.creditLedgerV2.legacyPaymentOverrides = entries.map(({ id, credits, ignored = false, note = '' }) => ({
+    sourcePaymentRef: `payment:${id}`,
+    credits: ignored ? null : credits,
+    confirmed: true,
+    ignored,
+    note,
+    confirmedAt: '2026-09-08T00:00:00.000Z'
+  }));
+  return configured;
+}
+
 function classRecord(id, date, start = '10:00') {
   return { id, date, start, end: '11:00', kind: '수강' };
 }
@@ -33,30 +45,37 @@ test('V2 signed opening balances and natural carryover produce one running balan
     student: student(0), paymentRecords: [], classRecords: [classRecord('a', '2026-08-01')]
   }).currentBalance, -1);
   assert.equal(projectStudentCreditLedgerV2({
-    student: student(-2), paymentRecords: [payment('p', '2026-08-02', 4)], classRecords: []
+    student: withLegacyPayments(student(-2), [{ id: 'p', credits: 4 }]),
+    paymentRecords: [payment('p', '2026-08-02', 1)], classRecords: []
   }).currentBalance, 2);
   assert.equal(projectStudentCreditLedgerV2({
-    student: student(2), paymentRecords: [payment('p', '2026-08-02', 4)], classRecords: []
+    student: withLegacyPayments(student(2), [{ id: 'p', credits: 4 }]),
+    paymentRecords: [payment('p', '2026-08-02', 4)], classRecords: []
   }).currentBalance, 6);
+  assert.deepEqual(projectStudentCreditLedgerV2({
+    student: withLegacyPayments(student(-1), [{ id: 'p', credits: 4 }]),
+    paymentRecords: [payment('p', '2026-08-02', 1)],
+    classRecords: [classRecord('c', '2026-08-03')]
+  }).events.map((event) => event.runningBalance), [-1, 3, 2]);
 });
 
 test('V2 reproduces the 손원희 and 최복희 signed-ledger patterns without cycle assignment', () => {
   const wonheeClasses = ['2026-08-11', '2026-08-28', '2026-09-04'].map((date, index) => classRecord(`c${index}`, date));
   const beforePayment = projectStudentCreditLedgerV2({
-    student: student(-2),
+    student: withLegacyPayments(student(-2), [{ id: 'aug', credits: 4 }]),
     paymentRecords: [payment('aug', '2026-08-02', 4)],
     classRecords: wonheeClasses
   });
   assert.equal(beforePayment.currentBalance, -1);
   assert.equal(beforePayment.events.some((event) => /pending|unassigned/i.test(event.label)), false);
   assert.equal(projectStudentCreditLedgerV2({
-    student: student(-2),
+    student: withLegacyPayments(student(-2), [{ id: 'aug', credits: 4 }, { id: 'next', credits: 4 }]),
     paymentRecords: [payment('aug', '2026-08-02', 4), payment('next', '2026-09-10', 4)],
     classRecords: wonheeClasses
   }).currentBalance, 3);
 
   const bokhee = projectStudentCreditLedgerV2({
-    student: student(0),
+    student: withLegacyPayments(student(0), [{ id: 'sep', credits: 4 }]),
     paymentRecords: [payment('sep', '2026-09-02', 4)],
     classRecords: [classRecord('before', '2026-09-01'), classRecord('after', '2026-09-08')]
   });
@@ -66,7 +85,7 @@ test('V2 reproduces the 손원희 and 최복희 signed-ledger patterns without c
 
 test('V2 same-day display is deterministic and cutover boundaries are exact', () => {
   const projection = projectStudentCreditLedgerV2({
-    student: student(0),
+    student: withLegacyPayments(student(0), [{ id: 'cutover', credits: 4 }]),
     paymentRecords: [payment('old', '2026-07-25', 9), payment('cutover', '2026-07-26', 4)],
     classRecords: [classRecord('old', '2026-07-25'), classRecord('cutover', '2026-07-26')]
   });
@@ -82,6 +101,7 @@ test('V2 same-day display is deterministic and cutover boundaries are exact', ()
     reason: '서비스 회차',
     createdAt: '2026-07-26T12:00:00.000Z'
   }];
+  withLegacyPayments(configured, [{ id: 'cutover', credits: 4 }]);
   const ordered = projectStudentCreditLedgerV2({
     student: configured,
     paymentRecords: [payment('cutover', '2026-07-26', 4)],
@@ -105,6 +125,7 @@ test('V2 excludes monthly students and requires a confirmed signed opening balan
 
 test('V2 counts each stable source once and supports explicit signed adjustments', () => {
   const configured = student(0);
+  withLegacyPayments(configured, [{ id: 'p', credits: 4 }]);
   configured.creditLedgerV2.adjustments = [
     { id: 'service', date: '2026-08-01', delta: 1, reason: '서비스', createdAt: '2026-08-01T01:00:00Z' },
     { id: 'correction', date: '2026-08-02', delta: -1, reason: '정정', createdAt: '2026-08-02T01:00:00Z' }
@@ -121,15 +142,42 @@ test('V2 counts each stable source once and supports explicit signed adjustments
   assert.deepEqual(first.events.filter((event) => event.type === 'adjustment').map((event) => event.delta), [1, -1]);
 });
 
-test('V2 surfaces payment records whose purchased credits are not reliable', () => {
-  const projection = projectStudentCreditLedgerV2({
+test('V2 requires explicit legacy payment interpretation and can ignore bookkeeping records', () => {
+  const unconfirmed = projectStudentCreditLedgerV2({
     student: student(0),
-    paymentRecords: [{ id: 'missing', date: '2026-08-01', basis: '4회' }],
+    paymentRecords: [payment('legacy', '2026-08-01', 4)],
     classRecords: []
   });
-  assert.equal(projection.isReady, false);
-  assert.equal(projection.currentBalance, 0);
-  assert.equal(projection.issues[0].type, 'payment-credits-missing');
+  assert.equal(unconfirmed.isReady, false);
+  assert.equal(unconfirmed.currentBalance, null);
+  assert.equal(unconfirmed.events.some((event) => event.type === 'payment'), false);
+  assert.equal(unconfirmed.issues[0].type, 'legacy-payment-unconfirmed');
+
+  const ignored = projectStudentCreditLedgerV2({
+    student: withLegacyPayments(student(0), [{ id: 'legacy', ignored: true, note: 'bookkeeping only' }]),
+    paymentRecords: [payment('legacy', '2026-08-01', 4)],
+    classRecords: []
+  });
+  assert.equal(ignored.isReady, true);
+  assert.equal(ignored.currentBalance, 0);
+  assert.equal(ignored.events.some((event) => event.type === 'payment'), false);
+
+  const future = student(0);
+  future.creditLedgerV2.paymentAuthorityStartAt = '2026-10-01T00:00:00.000Z';
+  const historical = payment('historical', '2026-08-02', 4);
+  historical.createdAt = '2026-08-02T09:00:00.000Z';
+  const historicalProjection = projectStudentCreditLedgerV2({
+    student: future, paymentRecords: [historical], classRecords: []
+  });
+  assert.equal(historicalProjection.isReady, false);
+  assert.equal(historicalProjection.currentBalance, null);
+  assert.equal(historicalProjection.events.some((event) => event.type === 'payment'), false);
+
+  const trusted = payment('future', '2026-10-02', 4);
+  trusted.createdAt = '2026-10-02T09:00:00.000Z';
+  assert.equal(projectStudentCreditLedgerV2({
+    student: future, paymentRecords: [trusted], classRecords: []
+  }).currentBalance, 4);
 });
 
 test('V2 commands persist only confirmed opening data and explicit stable adjustments', () => {
@@ -140,13 +188,24 @@ test('V2 commands persist only confirmed opening data and explicit stable adjust
     openingBalance: -2,
     openingConfirmed: true,
     openingConfirmedAt: '2026-09-08T00:00:00.000Z',
-    adjustments: []
+    adjustments: [],
+    legacyPaymentOverrides: []
   });
   const adjusted = addAdjustment(ledger, {
     id: 'adjustment-1', date: '2026-09-08', delta: 1, reason: '서비스', createdAt: '2026-09-08T01:00:00.000Z'
   });
   assert.equal(adjusted.adjustments[0].id, 'adjustment-1');
   assert.equal(adjusted.adjustments[0].delta, 1);
+  const originalPayment = payment('legacy', '2026-07-27', 1);
+  const confirmedPayment = confirmLegacyPayment(adjusted, {
+    sourcePaymentRef: 'payment:legacy', credits: 4, note: '실제 4회', confirmedAt: '2026-09-08T02:00:00.000Z'
+  });
+  const reconfirmedPayment = confirmLegacyPayment(confirmedPayment, {
+    sourcePaymentRef: 'payment:legacy', credits: 3, note: '재확인', confirmedAt: '2026-09-08T03:00:00.000Z'
+  });
+  assert.deepEqual(originalPayment, payment('legacy', '2026-07-27', 1));
+  assert.equal(reconfirmedPayment.legacyPaymentOverrides.length, 1);
+  assert.equal(reconfirmedPayment.legacyPaymentOverrides[0].credits, 3);
   assert.throws(() => confirmOpeningBalance(null, 1.5), /signed integer/);
   assert.throws(() => addAdjustment(ledger, { id: 'bad', date: '2026-09-08', delta: 0, reason: '' }), /requires/);
 });

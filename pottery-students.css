@@ -79,10 +79,13 @@ body {
   font-size: 14px;
 }
 .credit-ledger-v2-table {
-  min-width: 820px;
+  min-width: 1120px;
 }
 .credit-ledger-v2-table td:nth-child(3) {
   min-width: 190px;
+}
+.credit-ledger-v2-table td:nth-child(4) {
+  min-width: 360px;
 }
 .credit-ledger-v2-opening-input {
   width: 90px;
@@ -92,8 +95,36 @@ body {
   margin-right: 6px;
 }
 .credit-ledger-v2-confirm,
-.credit-ledger-v2-preview {
+.credit-ledger-v2-preview,
+.credit-ledger-v2-payment-confirm {
   background: #e4f1e7;
+  color: #245d38;
+}
+.credit-ledger-v2-payment-list {
+  display: grid;
+  gap: 6px;
+}
+.credit-ledger-v2-payment-item {
+  display: grid;
+  grid-template-columns: 84px 72px 64px minmax(90px, 1fr) auto auto;
+  align-items: center;
+  gap: 5px;
+}
+.credit-ledger-v2-payment-item input {
+  min-width: 0;
+  border: 1px solid #b8c9bb;
+  border-radius: 6px;
+  padding: 5px 6px;
+}
+.credit-ledger-v2-payment-item .credit-ledger-v2-payment-credits {
+  width: 64px;
+}
+.credit-ledger-v2-payment-reference,
+.credit-ledger-v2-payment-empty {
+  color: #68756a;
+  font-size: 11px;
+}
+.credit-ledger-v2-payment-item.is-confirmed {
   color: #245d38;
 }
 .credit-ledger-v2-preview:disabled {

@@ -77,7 +77,10 @@
       };
     }
 
-    const paymentResult = eventSources.buildPaymentEvents(paymentRecords, openingDate, paymentDates);
+    const paymentResult = eventSources.buildPaymentEvents(paymentRecords, openingDate, paymentDates, {
+      legacyPaymentOverrides: ledger.legacyPaymentOverrides,
+      paymentAuthorityStartAt: ledger.paymentAuthorityStartAt
+    });
     const adjustmentResult = normalizeAdjustments(ledger.adjustments, openingDate);
     const events = sortEvents([{
       eventId: `opening:${openingDate}`,
@@ -93,12 +96,13 @@
       return Object.freeze({ ...event, runningBalance });
     });
     const issues = [...paymentResult.issues, ...adjustmentResult.issues];
+    const isReady = issues.length === 0;
 
     return {
       isApplicable: true,
-      isReady: issues.length === 0,
+      isReady,
       openingBalance,
-      currentBalance: runningBalance,
+      currentBalance: isReady ? runningBalance : null,
       events: projectedEvents,
       issues
     };

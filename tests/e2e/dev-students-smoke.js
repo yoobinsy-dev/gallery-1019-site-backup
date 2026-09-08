@@ -41,7 +41,8 @@ const students = [{
     openingBalance: 3,
     openingConfirmed: true,
     openingConfirmedAt: '2026-09-08T00:00:00.000Z',
-    adjustments: []
+    adjustments: [],
+    legacyPaymentOverrides: []
   }
 }, {
   id: 'PAYMENT_CYCLE_LATE_ENTRY_STUDENT_ID',
@@ -66,7 +67,11 @@ const students = [{
     openingBalance: 0,
     openingConfirmed: true,
     openingConfirmedAt: '2026-09-08T00:00:00.000Z',
-    adjustments: []
+    adjustments: [],
+    legacyPaymentOverrides: [
+      { sourcePaymentRef: 'payment:PAYMENT_CYCLE_AUGUST', credits: 4, confirmed: true, ignored: false, note: '실제 4회', confirmedAt: '2026-09-08T00:00:00.000Z' },
+      { sourcePaymentRef: 'payment:PAYMENT_CYCLE_SEPTEMBER', credits: 4, confirmed: true, ignored: false, note: '', confirmedAt: '2026-09-08T00:00:00.000Z' }
+    ]
   }
 }, {
   id: 'PAYMENT_CYCLE_REDUCED_STUDENT_ID',
@@ -89,7 +94,10 @@ const students = [{
     openingBalance: -2,
     openingConfirmed: true,
     openingConfirmedAt: '2026-09-08T00:00:00.000Z',
-    adjustments: []
+    adjustments: [],
+    legacyPaymentOverrides: [
+      { sourcePaymentRef: 'payment:PAYMENT_CYCLE_REDUCED_LEGACY', credits: null, confirmed: true, ignored: true, note: 'V1 장부용', confirmedAt: '2026-09-08T00:00:00.000Z' }
+    ]
   }
 }, {
   id: 'PAYMENT_CYCLE_RENEWED_STUDENT_ID',
@@ -278,14 +286,15 @@ async function main() {
     assert.equal((await v2SetupRows.filter({ hasText: students[2].name })
       .locator('.credit-ledger-v2-opening-input').inputValue()), '-2');
     const signedV2Row = v2SetupRows.filter({ hasText: students[1].name });
-    assert.equal((await signedV2Row.locator('.credit-ledger-v2-balance').textContent()).trim(), '+2');
+    assert.match(await signedV2Row.innerText(), /기존 2회/);
+    assert.equal((await signedV2Row.locator('.credit-ledger-v2-balance').textContent()).trim(), '+4');
     assert.equal((await v2SetupRows.filter({ hasText: students[2].name })
-      .locator('.credit-ledger-v2-balance').textContent()).trim(), '-3');
+      .locator('.credit-ledger-v2-balance').textContent()).trim(), '-5');
     await signedV2Row.locator('.credit-ledger-v2-preview').click();
     const v2History = await page.locator('#credit-ledger-v2-history-body').innerText();
     const sameDayV2Rows = page.locator('#credit-ledger-v2-history-body tr').filter({ hasText: '2026-08-04' });
     assert.equal(await sameDayV2Rows.count(), 2);
-    assert.match(await sameDayV2Rows.nth(0).innerText(), /결제 2회/);
+    assert.match(await sameDayV2Rows.nth(0).innerText(), /결제 4회/);
     assert.match(await sameDayV2Rows.nth(1).innerText(), /수업/);
     assert.match(v2History, /기초 잔액/);
     assert.doesNotMatch(v2History, /대기|사이클/);
@@ -336,7 +345,9 @@ async function main() {
       v2SignedOpenings: [3, 0, -2],
       v2MonthlyExcluded: true,
       v2SameDayPaymentFirst: true,
-      v2NegativeCurrentBalance: -3,
+      v2AlteredLegacyPayment: 4,
+      v2IgnoredLegacyPayment: true,
+      v2NegativeCurrentBalance: -5,
       businessStateUnchanged: true,
       calendarSmoke: true,
       personalWorkSmoke: true,

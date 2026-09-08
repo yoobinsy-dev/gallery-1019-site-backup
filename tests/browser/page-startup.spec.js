@@ -140,9 +140,12 @@ const studentFixtures = [{
   instructor: currentUser.name,
   tuition: 250000,
   tuitionBasis: '4회',
-  mostRecentPaymentDate: '2026-08-02',
-  paymentHistory: ['2026-08-02'],
-  paymentRecords: [{ id: 'CREDIT_LEDGER_V2_PAYMENT', date: '2026-08-02', tuition: 250000, basis: '4회', credits: 4 }],
+  mostRecentPaymentDate: '2026-08-15',
+  paymentHistory: ['2026-08-02', '2026-08-15'],
+  paymentRecords: [
+    { id: 'CREDIT_LEDGER_V2_PAYMENT', date: '2026-08-02', tuition: 250000, basis: '4회', credits: 1 },
+    { id: 'CREDIT_LEDGER_V2_DUMMY_PAYMENT', date: '2026-08-15', tuition: 0, basis: '4회', credits: 4 }
+  ],
   paymentCycleCredits: 99,
   manualUsedAdjustment: -17,
   carryOverBeforePayment: 23,
@@ -152,7 +155,8 @@ const studentFixtures = [{
     openingBalance: -2,
     openingConfirmed: true,
     openingConfirmedAt: '2026-09-08T00:00:00.000Z',
-    adjustments: []
+    adjustments: [],
+    legacyPaymentOverrides: []
   }
 }, {
   id: 'CREDIT_LEDGER_V2_UNCONFIRMED_STUDENT_ID',
@@ -1610,7 +1614,7 @@ test('student V2 setup keeps V1 non-authoritative and previews a stable signed l
   const openingInput = unconfirmedRow.locator('.credit-ledger-v2-opening-input');
   await expect(openingInput).toHaveValue('');
   await expect(unconfirmedRow).toContainText('미확인');
-  await expect(page.locator('#credit-ledger-v2-progress')).toContainText(`1 / ${expectedCreditStudents}`);
+  await expect(page.locator('#credit-ledger-v2-progress')).toContainText(`0 / ${expectedCreditStudents}`);
 
   for (const value of ['3', '0', '-2']) {
     await openingInput.fill(value);
@@ -1619,10 +1623,39 @@ test('student V2 setup keeps V1 non-authoritative and previews a stable signed l
   }
   await expect(unconfirmedRow.locator('.credit-ledger-v2-balance')).toHaveText('-2');
   await expect(unconfirmedRow.locator('.credit-ledger-v2-balance')).toHaveClass(/negative/);
-  await expect(page.locator('#credit-ledger-v2-progress')).toContainText(`2 / ${expectedCreditStudents}`);
+  await expect(page.locator('#credit-ledger-v2-progress')).toContainText(`1 / ${expectedCreditStudents}`);
 
   const signedRow = setupRows.filter({ hasText: 'CREDIT_LEDGER_V2_SIGNED_STUDENT' });
+  const originalPaymentRecords = await page.evaluate(() => {
+    const students = JSON.parse(localStorage.getItem('pottery-students-v1') || '[]');
+    return students.find((student) => student.id === 'CREDIT_LEDGER_V2_SIGNED_STUDENT_ID').paymentRecords;
+  });
+  await expect(signedRow).toContainText('결제 0/2');
+  await expect(signedRow.locator('.credit-ledger-v2-balance')).toHaveText('-');
+  await signedRow.locator('.credit-ledger-v2-preview').click();
+  await expect(page.locator('#credit-ledger-v2-current-balance')).toHaveText('확인 필요');
+  await expect(page.locator('#credit-ledger-v2-history-body')).toContainText('기존 1회 기록의 V2 실제 회차 확인 필요');
+  await page.locator('#credit-ledger-v2-close-btn').click();
+
+  const alteredPayment = signedRow.locator('.credit-ledger-v2-payment-item').filter({ hasText: '2026-08-02' });
+  await expect(alteredPayment).toContainText('기존 1회');
+  await alteredPayment.locator('.credit-ledger-v2-payment-credits').fill('4');
+  await alteredPayment.locator('.credit-ledger-v2-payment-note').fill('실제 4회 결제');
+  await alteredPayment.locator('.credit-ledger-v2-payment-confirm').click();
+  await expect(signedRow).toContainText('결제 1/2');
+  await expect(signedRow.locator('.credit-ledger-v2-balance')).toHaveText('-');
+
+  const dummyPayment = signedRow.locator('.credit-ledger-v2-payment-item').filter({ hasText: '2026-08-15' });
+  await expect(dummyPayment).toContainText('기존 4회');
+  await dummyPayment.locator('.credit-ledger-v2-payment-note').fill('V1 장부용');
+  await dummyPayment.locator('.credit-ledger-v2-payment-ignore').click();
+  await expect(signedRow).toContainText('결제 2/2');
+  await expect(page.locator('#credit-ledger-v2-progress')).toContainText(`2 / ${expectedCreditStudents}`);
   await expect(signedRow.locator('.credit-ledger-v2-balance')).toHaveText('-1');
+  expect(await page.evaluate(() => {
+    const students = JSON.parse(localStorage.getItem('pottery-students-v1') || '[]');
+    return students.find((student) => student.id === 'CREDIT_LEDGER_V2_SIGNED_STUDENT_ID').paymentRecords;
+  })).toEqual(originalPaymentRecords);
   await signedRow.locator('.credit-ledger-v2-preview').click();
   await expect(page.locator('#credit-ledger-v2-current-balance')).toHaveText('현재 -1');
   const historyRows = page.locator('#credit-ledger-v2-history-body tr');
