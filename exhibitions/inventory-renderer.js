@@ -39,8 +39,7 @@
       soldQuantity,
       stockQuantity,
       remainingQuantity,
-      isSoloExhibition,
-      sizeParts = { width: '', height: '' }
+      isSoloExhibition
     } = options;
     const { actionButton, duplicateButton, deleteButton } = buildActionButtons(work, canModifyWork);
     const { savedPhotoCell, editPhotoPreview } = buildPhotoCells(work, previewDataUrl);
@@ -148,14 +147,7 @@
           </div>
         </td>
         <td><input type="text" data-field="materials" value="${work.materials || ''}" onchange="handleWorkChange(${work.id}, 'materials', this.value)"></td>
-        <td>
-          <div class="size-input-group">
-            <input type="text" data-field="sizeWidth" value="${sizeParts.width}" class="size-dimension-input" placeholder="가로" oninput="handleWorkSizeChange(${work.id}, 'width', this.value)">
-            <span class="size-unit">cm x</span>
-            <input type="text" data-field="sizeHeight" value="${sizeParts.height}" class="size-dimension-input" placeholder="세로" oninput="handleWorkSizeChange(${work.id}, 'height', this.value)">
-            <span class="size-unit">cm</span>
-          </div>
-        </td>
+        <td><input type="text" data-field="size" value="${work.size || ''}" onchange="handleWorkSizeChange(${work.id}, this.value)"></td>
         <td><input type="text" data-field="year" value="${work.year || ''}" onchange="handleWorkChange(${work.id}, 'year', this.value)"></td>
         <td class="work-status-cell">${statusCell}</td>
         <td>

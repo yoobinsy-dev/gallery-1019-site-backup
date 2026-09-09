@@ -368,8 +368,7 @@
           soldQuantity,
           stockQuantity,
           remainingQuantity: Math.max(0, stockQuantity - soldQuantity),
-          isSoloExhibition: exhibition.type === '개인전',
-          sizeParts: options.parseSizeParts(work.size)
+          isSoloExhibition: exhibition.type === '개인전'
         });
         row.setAttribute('data-work-id', String(work.id));
         row.className = presentation.className;

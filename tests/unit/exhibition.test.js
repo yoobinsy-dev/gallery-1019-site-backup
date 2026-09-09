@@ -719,7 +719,7 @@ test('exhibition inventory renderer builds saved, editable, and goods rows', () 
   assert.match(saved.html, /class="work-status-badge sold"/);
 
   const editable = inventoryRenderer.buildWorkRow({
-    work: { id: 8, title: 'Draft', author: 'Artist', price: '미판매', saved: false },
+    work: { id: 8, title: 'Draft', author: 'Artist', price: '미판매', size: '21 × 29.7 cm', saved: false },
     index: 2,
     isGoodsMode: false,
     isSelected: false,
@@ -727,13 +727,13 @@ test('exhibition inventory renderer builds saved, editable, and goods rows', () 
     previewDataUrl: '',
     isUnsold: true,
     isSold: false,
-    isSoloExhibition: true,
-    sizeParts: { width: '10', height: '20' }
+    isSoloExhibition: true
   });
   assert.equal(editable.className, '');
   assert.match(editable.html, /data-field="author" value="Artist" disabled/);
   assert.match(editable.html, /data-field="price" value="미판매"/);
-  assert.match(editable.html, /data-field="sizeWidth" value="10"/);
+  assert.match(editable.html, /data-field="size" value="21 × 29\.7 cm"/);
+  assert.doesNotMatch(editable.html, /sizeWidth|sizeHeight|size-unit|placeholder="가로"|placeholder="세로"/);
 
   const goods = inventoryRenderer.buildWorkRow({
     work: { id: 9, title: 'Goods', saved: true },
@@ -751,6 +751,34 @@ test('exhibition inventory renderer builds saved, editable, and goods rows', () 
   });
   assert.match(goods.html, /<td>5<\/td>\s*<td>2<\/td>\s*<td>3<\/td>/);
   assert.doesNotMatch(goods.html, /openDeleteWorkModal/);
+});
+
+test('exhibition work size accepts and persists arbitrary free text', () => {
+  const work = { id: 8, size: '21 × 29.7 cm' };
+  const state = { exhibition: { works: [work] } };
+  const controller = worksEditorController.create({
+    state,
+    document: {},
+    window: {},
+    inventoryModel,
+    getCurrentExhibition: () => state.exhibition,
+    canCurrentUserModifyOwnedRow: () => true,
+    ensureWorkEditUndoSnapshot() {},
+    saveExhibition() {}
+  });
+
+  for (const size of ['30 × 20 × 15 cm', '가변크기', '', 'Ø 40']) {
+    controller.handleWorkSizeChange(work.id, size);
+    assert.equal(work.size, size);
+  }
+
+  const sizeInput = { value: 'Dimensions variable' };
+  controller.syncWorkFromRow(work, {
+    querySelector(selector) {
+      return selector === 'input[data-field="size"]' ? sizeInput : null;
+    }
+  });
+  assert.equal(work.size, 'Dimensions variable');
 });
 
 test('exhibition sales add controller closes an empty confirmation without saving', () => {

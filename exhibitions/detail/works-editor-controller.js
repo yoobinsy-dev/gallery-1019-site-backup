@@ -293,8 +293,7 @@
       const priceInput = row.querySelector('input[data-field="price"]');
       const materialsInput = row.querySelector('input[data-field="materials"]');
       const yearInput = row.querySelector('input[data-field="year"]');
-      const sizeWidthInput = row.querySelector('input[data-field="sizeWidth"]');
-      const sizeHeightInput = row.querySelector('input[data-field="sizeHeight"]');
+      const sizeInput = row.querySelector('input[data-field="size"]');
       const quantityInput = row.querySelector('input[data-field="quantity"]');
 
       if (manualNumberInput) work.manualNumber = manualNumberInput.value.trim();
@@ -304,17 +303,7 @@
       if (priceInput) work.price = priceInput.value.trim();
       if (materialsInput) work.materials = materialsInput.value.trim();
       if (yearInput) work.year = yearInput.value.trim();
-      if (sizeWidthInput || sizeHeightInput) {
-        const width = (sizeWidthInput?.value || '').replace(/[^\d.]/g, '').trim();
-        const height = (sizeHeightInput?.value || '').replace(/[^\d.]/g, '').trim();
-        if (!width && !height) {
-          work.size = '';
-        } else if (width && height) {
-          work.size = `${width} cm x ${height} cm`;
-        } else {
-          work.size = width ? `${width} cm x ` : ` x ${height} cm`;
-        }
-      }
+      if (sizeInput) work.size = sizeInput.value.trim();
       if (quantityInput) work.quantity = quantityInput.value.trim();
     }
 
@@ -712,25 +701,14 @@
       return inventoryModel.parseSizeParts(sizeText);
     }
 
-    function handleWorkSizeChange(workId, part, value) {
+    function handleWorkSizeChange(workId, value) {
       const exhibition = options.getCurrentExhibition();
       const work = exhibition.works.find((item) => item.id === workId);
       if (!work) return;
       if (!options.canCurrentUserModifyOwnedRow(work)) return;
 
       options.ensureWorkEditUndoSnapshot(workId);
-      const cleanedValue = (value || '').replace(/[^\d.]/g, '');
-      const current = parseSizeParts(work.size);
-      const width = part === 'width' ? cleanedValue : current.width;
-      const height = part === 'height' ? cleanedValue : current.height;
-
-      if (!width && !height) {
-        work.size = '';
-      } else if (width && height) {
-        work.size = `${width} cm x ${height} cm`;
-      } else {
-        work.size = width ? `${width} cm x ` : ` x ${height} cm`;
-      }
+      work.size = (value || '').toString();
 
       if (state.exhibition) state.exhibition.works = exhibition.works;
       options.saveExhibition();

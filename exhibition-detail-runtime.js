@@ -10,7 +10,8 @@
     'studio-calendar-state-v1',
     'pottery-material-orders-v1',
     'pottery-accounting-v1',
-    'gallery-artworks-v1'
+    'gallery-artworks-v1',
+    'student-credit-ledger-v2-activation'
   ]);
 
   function getPageName(pathname) {
@@ -34,7 +35,7 @@
       return ['users', 'pottery-material-orders-v1'];
     }
     if (page === 'pottery-students.html') {
-      return ['users', 'pottery-students-v1', 'studio-calendar-state-v1'];
+      return ['users', 'pottery-students-v1', 'studio-calendar-state-v1', 'student-credit-ledger-v2-activation'];
     }
     if (page === 'pottery-accounting.html') {
       return SYNCED_KEYS.slice();
@@ -5684,8 +5685,7 @@ registerLocalPreviewAdminGuards();
       const priceInput = row.querySelector('input[data-field="price"]');
       const materialsInput = row.querySelector('input[data-field="materials"]');
       const yearInput = row.querySelector('input[data-field="year"]');
-      const sizeWidthInput = row.querySelector('input[data-field="sizeWidth"]');
-      const sizeHeightInput = row.querySelector('input[data-field="sizeHeight"]');
+      const sizeInput = row.querySelector('input[data-field="size"]');
       const quantityInput = row.querySelector('input[data-field="quantity"]');
 
       if (manualNumberInput) work.manualNumber = manualNumberInput.value.trim();
@@ -5695,17 +5695,7 @@ registerLocalPreviewAdminGuards();
       if (priceInput) work.price = priceInput.value.trim();
       if (materialsInput) work.materials = materialsInput.value.trim();
       if (yearInput) work.year = yearInput.value.trim();
-      if (sizeWidthInput || sizeHeightInput) {
-        const width = (sizeWidthInput?.value || '').replace(/[^\d.]/g, '').trim();
-        const height = (sizeHeightInput?.value || '').replace(/[^\d.]/g, '').trim();
-        if (!width && !height) {
-          work.size = '';
-        } else if (width && height) {
-          work.size = `${width} cm x ${height} cm`;
-        } else {
-          work.size = width ? `${width} cm x ` : ` x ${height} cm`;
-        }
-      }
+      if (sizeInput) work.size = sizeInput.value.trim();
       if (quantityInput) work.quantity = quantityInput.value.trim();
     }
 
@@ -6103,25 +6093,14 @@ registerLocalPreviewAdminGuards();
       return inventoryModel.parseSizeParts(sizeText);
     }
 
-    function handleWorkSizeChange(workId, part, value) {
+    function handleWorkSizeChange(workId, value) {
       const exhibition = options.getCurrentExhibition();
       const work = exhibition.works.find((item) => item.id === workId);
       if (!work) return;
       if (!options.canCurrentUserModifyOwnedRow(work)) return;
 
       options.ensureWorkEditUndoSnapshot(workId);
-      const cleanedValue = (value || '').replace(/[^\d.]/g, '');
-      const current = parseSizeParts(work.size);
-      const width = part === 'width' ? cleanedValue : current.width;
-      const height = part === 'height' ? cleanedValue : current.height;
-
-      if (!width && !height) {
-        work.size = '';
-      } else if (width && height) {
-        work.size = `${width} cm x ${height} cm`;
-      } else {
-        work.size = width ? `${width} cm x ` : ` x ${height} cm`;
-      }
+      work.size = (value || '').toString();
 
       if (state.exhibition) state.exhibition.works = exhibition.works;
       options.saveExhibition();
@@ -6531,8 +6510,7 @@ registerLocalPreviewAdminGuards();
       soldQuantity,
       stockQuantity,
       remainingQuantity,
-      isSoloExhibition,
-      sizeParts = { width: '', height: '' }
+      isSoloExhibition
     } = options;
     const { actionButton, duplicateButton, deleteButton } = buildActionButtons(work, canModifyWork);
     const { savedPhotoCell, editPhotoPreview } = buildPhotoCells(work, previewDataUrl);
@@ -6640,14 +6618,7 @@ registerLocalPreviewAdminGuards();
           </div>
         </td>
         <td><input type="text" data-field="materials" value="${work.materials || ''}" onchange="handleWorkChange(${work.id}, 'materials', this.value)"></td>
-        <td>
-          <div class="size-input-group">
-            <input type="text" data-field="sizeWidth" value="${sizeParts.width}" class="size-dimension-input" placeholder="가로" oninput="handleWorkSizeChange(${work.id}, 'width', this.value)">
-            <span class="size-unit">cm x</span>
-            <input type="text" data-field="sizeHeight" value="${sizeParts.height}" class="size-dimension-input" placeholder="세로" oninput="handleWorkSizeChange(${work.id}, 'height', this.value)">
-            <span class="size-unit">cm</span>
-          </div>
-        </td>
+        <td><input type="text" data-field="size" value="${work.size || ''}" onchange="handleWorkSizeChange(${work.id}, this.value)"></td>
         <td><input type="text" data-field="year" value="${work.year || ''}" onchange="handleWorkChange(${work.id}, 'year', this.value)"></td>
         <td class="work-status-cell">${statusCell}</td>
         <td>
@@ -8897,8 +8868,7 @@ registerLocalPreviewAdminGuards();
           soldQuantity,
           stockQuantity,
           remainingQuantity: Math.max(0, stockQuantity - soldQuantity),
-          isSoloExhibition: exhibition.type === '개인전',
-          sizeParts: options.parseSizeParts(work.size)
+          isSoloExhibition: exhibition.type === '개인전'
         });
         row.setAttribute('data-work-id', String(work.id));
         row.className = presentation.className;
@@ -12564,8 +12534,8 @@ function parseSizeParts(sizeText) {
   return worksEditorController.parseSizeParts(sizeText);
 }
 
-function handleWorkSizeChange(workId, part, value) {
-  return worksEditorController.handleWorkSizeChange(workId, part, value);
+function handleWorkSizeChange(workId, value) {
+  return worksEditorController.handleWorkSizeChange(workId, value);
 }
 
 function openImagePreviewByWorkId(workId, event) {

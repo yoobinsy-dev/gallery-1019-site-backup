@@ -1862,8 +1862,8 @@ function parseSizeParts(sizeText) {
   return worksEditorController.parseSizeParts(sizeText);
 }
 
-function handleWorkSizeChange(workId, part, value) {
-  return worksEditorController.handleWorkSizeChange(workId, part, value);
+function handleWorkSizeChange(workId, value) {
+  return worksEditorController.handleWorkSizeChange(workId, value);
 }
 
 function openImagePreviewByWorkId(workId, event) {

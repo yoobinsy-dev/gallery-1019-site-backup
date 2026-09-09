@@ -84,8 +84,11 @@ test('occurrence identity edits update canonical and latest occurrence price upd
     { id: 1, endDate: '2025-01-01', works: [occurrence(1, 'work_a', { price: 80 })] },
     { id: 2, endDate: '2026-01-01', works: [occurrence(2, 'work_a', { price: 100 })] }
   ];
-  const older = sync.synchronizeOccurrenceEdit({ artworks, exhibitions, exhibitionId: 1, occurrenceId: 1, changes: { title: 'Green', price: 90 } });
+  const older = sync.synchronizeOccurrenceEdit({ artworks, exhibitions, exhibitionId: 1, occurrenceId: 1, changes: { title: 'Green', size: '30 × 20 × 15 cm', price: 90 } });
   assert.equal(older.artworks[0].title, 'Green');
+  assert.equal(older.artworks[0].size, '30 × 20 × 15 cm');
+  assert.equal(older.exhibitions[0].works[0].size, '30 × 20 × 15 cm');
+  assert.equal(older.exhibitions[1].works[0].size, '10x10');
   assert.equal(older.artworks[0].currentPrice, 100);
   const latest = sync.synchronizeOccurrenceEdit({ artworks: older.artworks, exhibitions: older.exhibitions, exhibitionId: 2, occurrenceId: 2, changes: { price: 300 } });
   assert.equal(latest.artworks[0].currentPrice, 300);
