@@ -36,6 +36,7 @@
   }
 
   function create(element, options = {}) {
+    const inputEditor = root.ArtworkRowEditorController.compositionSafeInputEditor;
     const table = new root.Tabulator(element, {
       index: 'workId',
       data: options.data || [],
@@ -47,12 +48,12 @@
         { formatter: 'rowSelection', titleFormatter: 'rowSelection', download: false, hozAlign: 'center', headerSort: false, width: 48 },
         { title: '소장/판매 여부', field: 'ownershipSaleStatus', formatter: ownershipSaleStatus, accessorDownload: (value) => value === 'collection' ? '소장' : (value === 'sold' ? '판매' : ''), headerSort: false, hozAlign: 'center', width: 120 },
         { title: '사진', field: 'imageRef', formatter: thumbnail, download: false, headerSort: false, width: 96 },
-        { title: '작품명', field: 'title', editor: 'input', sorter: 'string', minWidth: 180 },
-        { title: '작가', field: 'artistName', editor: 'input', sorter: 'string', minWidth: 130 },
-        { title: '가격', field: 'latestPrice', editor: 'input', sorter: 'number', formatter: price, hozAlign: 'right', minWidth: 120 },
-        { title: '크기', field: 'size', editor: 'input', sorter: 'string', minWidth: 120 },
-        { title: '재료', field: 'medium', editor: 'input', sorter: 'string', minWidth: 140 },
-        { title: '연도', field: 'year', editor: 'input', sorter: 'number', minWidth: 88 },
+        { title: '작품명', field: 'title', editor: inputEditor, sorter: 'string', minWidth: 180 },
+        { title: '작가', field: 'artistName', editor: inputEditor, sorter: 'string', minWidth: 130 },
+        { title: '가격', field: 'latestPrice', editor: inputEditor, sorter: 'number', formatter: price, hozAlign: 'right', minWidth: 120 },
+        { title: '크기', field: 'size', editor: inputEditor, sorter: 'string', minWidth: 120 },
+        { title: '재료', field: 'medium', editor: inputEditor, sorter: 'string', minWidth: 140 },
+        { title: '연도', field: 'year', editor: inputEditor, sorter: 'number', minWidth: 88 },
         { title: '최근 전시일', field: 'latestExhibitionDate', sorter: 'date', minWidth: 130 },
         { title: '최근 전시명', field: 'latestExhibitionName', sorter: 'string', minWidth: 180 },
         { title: '전시 이력', field: 'exhibitionHistory', formatter: history, accessorDownload: (value) => (value || []).map((entry) => entry.name).join(', '), headerSort: false, minWidth: 260 }

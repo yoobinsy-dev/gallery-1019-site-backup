@@ -26,6 +26,41 @@ async function mockStateApi(page, serverState) {
   });
 }
 
+test('artwork management Tab navigation advances one editable cell without IME leakage', async ({ page }) => {
+  const fixture = buildSeedData(new Date('2026-09-07T12:00:00.000Z'));
+  const serverState = { ...fixture, users: [user] };
+  await mockStateApi(page, serverState);
+  await page.addInitScript((activeUser) => localStorage.setItem('currentUser', JSON.stringify(activeUser)), user);
+
+  await page.goto('/artwork-management.html', { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => window.artworkManagementReady);
+
+  await page.locator('#artwork-add-btn').click();
+  const row = page.locator('#collection-table .tabulator-row').first();
+  await row.locator('[tabulator-field="title"] input').fill('Tab navigation work');
+  await row.locator('[tabulator-field="title"] input').press('Tab');
+  await expect(row.locator('[tabulator-field="artistName"] input')).toBeFocused();
+  await row.locator('[tabulator-field="artistName"] input').fill('Tab navigation artist');
+  await row.locator('[tabulator-field="artistName"] input').press('Tab');
+  await expect(row.locator('[tabulator-field="currentPrice"] input')).toBeFocused();
+  await row.locator('[tabulator-field="currentPrice"] input').press('Tab');
+  await expect(row.locator('[tabulator-field="size"] input')).toBeFocused();
+
+  await row.locator('[tabulator-field="title"]').dblclick();
+  const titleInput = row.locator('[tabulator-field="title"] input');
+  await titleInput.evaluate((input) => {
+    input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '다' }));
+    input.value = '다행이다';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '다', inputType: 'insertCompositionText', isComposing: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Tab', keyCode: 9, isComposing: true }));
+    input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '다행이다' }));
+  });
+
+  await expect(row.locator('[tabulator-field="artistName"] input')).toBeFocused();
+  await expect(row.locator('[tabulator-field="title"]')).toHaveText('다행이다');
+  await expect(row.locator('[tabulator-field="artistName"] input')).not.toHaveValue(/다/);
+});
+
 test('artwork management renders canonical collection and derived exhibition views with persistent edits', async ({ page }) => {
   const fixture = buildSeedData(new Date('2026-09-07T12:00:00.000Z'));
   const serverState = { ...fixture, users: [user] };

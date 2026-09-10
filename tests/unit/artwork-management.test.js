@@ -225,6 +225,61 @@ test('valid draft persists once and adopts its permanent workId', async () => {
   assert.equal(data._draft, false);
 });
 
+test('composition-safe editor commits IME text before one native Tab navigation', async () => {
+  class InputStub extends EventTarget {
+    constructor() {
+      super();
+      this.style = {};
+      this.value = '';
+    }
+    focus() {}
+  }
+
+  const originalDocument = global.document;
+  global.document = { createElement: () => new InputStub() };
+  try {
+    async function exercise(shiftKey) {
+      let committed = '';
+      let direction = '';
+      let input;
+      const cell = {
+        getValue: () => '',
+        navigateNext() {
+          direction = 'next';
+          input.dispatchEvent(new Event('blur'));
+        },
+        navigatePrev() {
+          direction = 'prev';
+          input.dispatchEvent(new Event('blur'));
+        }
+      };
+      input = rowEditorModule.compositionSafeInputEditor(
+        cell,
+        (rendered) => rendered(),
+        (value) => { committed = value; return true; },
+        () => {}
+      );
+      input.dispatchEvent(new Event('compositionstart'));
+      input.value = '다행이다';
+      const tab = new Event('keydown', { bubbles: true, cancelable: true });
+      Object.defineProperties(tab, {
+        key: { value: 'Tab' },
+        isComposing: { value: true },
+        shiftKey: { value: shiftKey }
+      });
+      input.dispatchEvent(tab);
+      input.dispatchEvent(new Event('compositionend'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return { committed, direction, prevented: tab.defaultPrevented };
+    }
+
+    assert.deepEqual(await exercise(false), { committed: '다행이다', direction: 'next', prevented: true });
+    assert.deepEqual(await exercise(true), { committed: '다행이다', direction: 'prev', prevented: true });
+  } finally {
+    global.document = originalDocument;
+  }
+});
+
 test('photo upload persists Blob references without base64 and failed replacement keeps old reference', async () => {
   class FileReaderStub {
     readAsDataURL() {

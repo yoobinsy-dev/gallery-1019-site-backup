@@ -36,6 +36,7 @@
   }
 
   function create(element, options = {}) {
+    const inputEditor = root.ArtworkRowEditorController.compositionSafeInputEditor;
     const table = new root.Tabulator(element, {
       index: 'workId',
       data: options.data || [],
@@ -45,14 +46,14 @@
       placeholder: '등록된 소장품이 없습니다.',
       columns: [
         { formatter: 'rowSelection', titleFormatter: 'rowSelection', download: false, hozAlign: 'center', headerSort: false, width: 48 },
-        { title: '번호', field: 'collection.collectionNumber', editor: 'input', sorter: 'string', minWidth: 130 },
+        { title: '번호', field: 'collection.collectionNumber', editor: inputEditor, sorter: 'string', minWidth: 130 },
         { title: '사진', field: 'imageRef', formatter: thumbnail, download: false, headerSort: false, width: 96 },
-        { title: '작품명', field: 'title', editor: 'input', sorter: 'string', minWidth: 180 },
-        { title: '작가', field: 'artistName', editor: 'input', sorter: 'string', minWidth: 130 },
-        { title: '가격', field: 'currentPrice', editor: 'input', sorter: 'number', formatter: (cell) => formatPrice(cell.getValue()), hozAlign: 'right', minWidth: 120 },
-        { title: '크기', field: 'size', editor: 'input', sorter: 'string', minWidth: 120 },
-        { title: '재료', field: 'medium', editor: 'input', sorter: 'string', minWidth: 140 },
-        { title: '연도', field: 'year', editor: 'input', sorter: 'number', minWidth: 88 },
+        { title: '작품명', field: 'title', editor: inputEditor, sorter: 'string', minWidth: 180 },
+        { title: '작가', field: 'artistName', editor: inputEditor, sorter: 'string', minWidth: 130 },
+        { title: '가격', field: 'currentPrice', editor: inputEditor, sorter: 'number', formatter: (cell) => formatPrice(cell.getValue()), hozAlign: 'right', minWidth: 120 },
+        { title: '크기', field: 'size', editor: inputEditor, sorter: 'string', minWidth: 120 },
+        { title: '재료', field: 'medium', editor: inputEditor, sorter: 'string', minWidth: 140 },
+        { title: '연도', field: 'year', editor: inputEditor, sorter: 'number', minWidth: 88 },
         { title: '등록일', field: 'collection.dateAdded', editor: 'date', sorter: 'date', minWidth: 120 },
         { title: '전시 이력', field: 'exhibitionHistory', formatter: history, accessorDownload: (value) => (value || []).map((entry) => entry.name).join(', '), headerSort: false, minWidth: 240 }
       ]

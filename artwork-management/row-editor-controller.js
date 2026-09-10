@@ -31,6 +31,62 @@
     return values;
   }
 
+  function compositionSafeInputEditor(cell, onRendered, success, cancel) {
+    const input = root.document.createElement('input');
+    let composing = false;
+    let pendingTabDirection = 0;
+    let finished = false;
+
+    input.type = 'text';
+    input.value = cell.getValue() ?? '';
+    input.style.padding = '4px';
+    input.style.width = '100%';
+    input.style.boxSizing = 'border-box';
+
+    function commit() {
+      if (finished) return;
+      finished = true;
+      success(input.value);
+    }
+
+    onRendered(() => {
+      input.focus({ preventScroll: true });
+      input.style.height = '100%';
+    });
+
+    input.addEventListener('compositionstart', () => {
+      composing = true;
+    });
+    input.addEventListener('compositionend', () => {
+      composing = false;
+      if (!pendingTabDirection) return;
+      const direction = pendingTabDirection;
+      pendingTabDirection = 0;
+      root.setTimeout(() => {
+        if (direction < 0) cell.navigatePrev();
+        else cell.navigateNext();
+      }, 0);
+    });
+    input.addEventListener('blur', commit);
+    input.addEventListener('change', commit);
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Tab' && (composing || event.isComposing)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        pendingTabDirection = event.shiftKey ? -1 : 1;
+        return;
+      }
+      if (event.key === 'Enter') commit();
+      if (event.key === 'Escape') {
+        finished = true;
+        cancel();
+      }
+      if (event.key === 'Home' || event.key === 'End') event.stopPropagation();
+    });
+
+    return input;
+  }
+
   function readFileAsDataUrl(file, FileReaderImpl) {
     return new Promise((resolve, reject) => {
       const reader = new FileReaderImpl();
@@ -139,5 +195,5 @@
     });
   }
 
-  return Object.freeze({ create, hasMinimumData, readFileAsDataUrl, valuesFromRow });
+  return Object.freeze({ compositionSafeInputEditor, create, hasMinimumData, readFileAsDataUrl, valuesFromRow });
 });
