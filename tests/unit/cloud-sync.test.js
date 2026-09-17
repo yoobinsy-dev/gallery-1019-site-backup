@@ -299,7 +299,50 @@ test('cloud sync merges material orders and repairs both local and remote state'
   assert.deepEqual(JSON.parse(harness.fetchCalls[1].options.body), {
     key,
     value: reconciled,
-    baseUpdatedAt: null,
+    baseUpdatedAt: '2026-08-30T10:03:00.000Z',
+    syncMode: 'full'
+  });
+});
+
+test('cloud sync versions a fresh material-orders client before its first save', async () => {
+  const key = 'pottery-material-orders-v1';
+  const updatedAt = '2026-08-30T10:03:00.000Z';
+  const remoteOrders = [{
+    id: 'order-1',
+    createdAt: '2026-08-30T10:01:00.000Z',
+    items: [{ id: 'clay', quantity: 1 }]
+  }];
+  const harness = createCloudSyncHarness({
+    pathname: '/pottery-material-orders.html',
+    respond(call) {
+      if (!call.options.method) {
+        return response({
+          body: {
+            ok: true,
+            data: { users: [], [key]: remoteOrders },
+            meta: { [key]: { updatedAt } }
+          }
+        });
+      }
+      return response();
+    }
+  });
+
+  await harness.window.cloudSyncReady;
+  const nextOrders = remoteOrders.concat({
+    id: 'order-2',
+    createdAt: '2026-08-30T10:04:00.000Z',
+    items: [{ id: 'glaze', quantity: 1 }]
+  });
+  harness.localStorage.setItem(key, JSON.stringify(nextOrders));
+
+  assert.equal(harness.timers.size, 1);
+  const [runPush] = harness.timers.values();
+  await runPush();
+  assert.deepEqual(JSON.parse(harness.fetchCalls[1].options.body), {
+    key,
+    value: nextOrders,
+    baseUpdatedAt: updatedAt,
     syncMode: 'full'
   });
 });

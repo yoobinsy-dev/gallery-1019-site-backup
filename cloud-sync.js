@@ -547,6 +547,10 @@
           let mergedRemoteValue = remoteValue;
           let shouldHealRemotePreviews = false;
 
+          if (remoteUpdatedAt) {
+            markKnownRemoteVersion(key, remoteUpdatedAt);
+          }
+
           if (key === 'pottery-material-orders-v1' && Array.isArray(parsedLocal) && Array.isArray(remoteValue)) {
             const reconciledOrders = mergeMaterialOrdersForSync(parsedLocal, remoteValue);
             const localNeedsApply = !isSameValue(parsedLocal, reconciledOrders);
@@ -565,10 +569,6 @@
               }
               return;
             }
-          }
-
-          if (remoteUpdatedAt) {
-            markKnownRemoteVersion(key, remoteUpdatedAt);
           }
 
           if (key === 'exhibitions' && parsedLocal && Array.isArray(remoteValue)) {
