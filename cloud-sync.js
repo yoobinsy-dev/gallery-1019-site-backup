@@ -40,6 +40,7 @@
   const originalSetItem = Storage.prototype.setItem;
   const originalRemoveItem = Storage.prototype.removeItem;
   const pendingTimers = new Map();
+  const pendingPushes = new Map();
   const lastSyncedStateSignatures = new Map();
 
   const pathname = typeof window !== 'undefined' && window.location
@@ -380,14 +381,15 @@
       clearTimeout(existing);
     }
 
-    const timer = setTimeout(async () => {
+    const push = async () => {
       pendingTimers.delete(key);
+      pendingPushes.delete(key);
       try {
         if (value === null) {
-          await fetch(`/api/state?key=${encodeURIComponent(key)}`, {
+          const response = await fetch(`/api/state?key=${encodeURIComponent(key)}`, {
             method: 'DELETE'
           });
-          return;
+          return response.ok;
         }
 
         const remoteMeta = getRemoteSyncMeta();
@@ -420,7 +422,7 @@
           if (response.status === 409 || response.status === 422) {
             await pullRemoteState();
           }
-          return;
+          return false;
         }
 
         const payload = await response.json().catch(() => null);
@@ -430,12 +432,31 @@
           markLocalUpdate(key, serverUpdatedAt);
           lastSyncedStateSignatures.set(key, stateSignature);
         }
+        return true;
       } catch (error) {
         console.error('Cloud sync push failed for key:', key, error);
+        return false;
       }
-    }, PUSH_DEBOUNCE_MS);
+    };
+
+    const timer = setTimeout(push, PUSH_DEBOUNCE_MS);
 
     pendingTimers.set(key, timer);
+    pendingPushes.set(key, push);
+  }
+
+  async function flushPendingPush(key) {
+    const normalizedKey = String(key || '').trim();
+    const push = pendingPushes.get(normalizedKey);
+    if (!push) return false;
+
+    const timer = pendingTimers.get(normalizedKey);
+    if (timer) {
+      clearTimeout(timer);
+    }
+    pendingTimers.delete(normalizedKey);
+    pendingPushes.delete(normalizedKey);
+    return push();
   }
 
   Storage.prototype.setItem = function patchedSetItem(key, value) {
@@ -486,6 +507,10 @@
     lastSyncedStateSignatures.delete(key);
     schedulePush(key, null);
   };
+
+  if (typeof window !== 'undefined') {
+    window.cloudSyncFlushKey = flushPendingPush;
+  }
 
   async function pullRemoteState() {
     if (!canUseRemoteState()) {

@@ -463,6 +463,38 @@ test('cloud sync intercepts users writes as one debounced delta push', async () 
   assert.deepEqual(JSON.parse(harness.localStorage.getItem('__sync_remote_updated_at__')), { users: savedAt });
 });
 
+test('cloud sync can immediately flush a queued users write', async () => {
+  const baseline = [{ id: 1, username: 'member', password: 'old-password' }];
+  const next = [{ id: 1, username: 'member', password: 'temporary-password' }];
+  const harness = createCloudSyncHarness({
+    initialLocal: { users: JSON.stringify(baseline) },
+    initialSession: {
+      __sync_remote_updated_at_session__: JSON.stringify({ users: '2026-09-28T10:00:00.000Z' })
+    },
+    respond(call) {
+      if (!call.options.method) return response({ status: 304 });
+      return response({
+        body: { ok: true, meta: { key: 'users', updatedAt: '2026-09-28T10:01:00.000Z' } }
+      });
+    }
+  });
+  await harness.window.cloudSyncReady;
+
+  harness.localStorage.setItem('users', JSON.stringify(next));
+  const synced = await harness.window.cloudSyncFlushKey('users');
+
+  assert.equal(synced, true);
+  assert.equal(harness.timers.size, 0);
+  assert.equal(harness.fetchCalls.length, 2);
+  assert.deepEqual(JSON.parse(harness.fetchCalls[1].options.body), {
+    key: 'users',
+    value: next,
+    baseUpdatedAt: '2026-09-28T10:00:00.000Z',
+    syncMode: 'delta',
+    removedIds: []
+  });
+});
+
 test('cloud sync revalidates cached pulls and finalizes a 304 without applying state', async () => {
   const harness = createCloudSyncHarness({
     initialSession: {

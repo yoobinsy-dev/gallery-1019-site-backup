@@ -655,7 +655,7 @@ function editUser(userId) {
   loadUsers();
 }
 
-function resetUserPassword(userId) {
+async function resetUserPassword(userId) {
   const users = getStoredUsers();
   const userIndex = users.findIndex((item) => item.id === userId);
   if (userIndex === -1) {
@@ -680,6 +680,13 @@ function resetUserPassword(userId) {
   const saved = persistUsers(users);
   if (!saved) {
     alert('저장 공간이 부족해 임시비밀번호를 저장하지 못했습니다.');
+    return;
+  }
+
+  const synced = typeof window.cloudSyncFlushKey === 'function'
+    && await window.cloudSyncFlushKey('users');
+  if (!synced) {
+    alert('임시비밀번호를 서버에 저장하지 못했습니다. 네트워크 연결을 확인한 뒤 다시 시도해주세요.');
     return;
   }
 
