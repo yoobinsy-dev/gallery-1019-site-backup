@@ -462,6 +462,137 @@ body.accounting-interactive-mode .accounting-table > tfoot > tr > th:nth-child(2
   flex-wrap: wrap;
 }
 
+.labor-settlement {
+  display: grid;
+  gap: 12px;
+}
+
+.accounting-summary[hidden],
+.accounting-grid[hidden],
+.labor-settlement[hidden] {
+  display: none;
+}
+
+.labor-person-panel,
+.labor-empty {
+  min-width: 0;
+  border: 1px solid rgba(135, 98, 64, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 20px rgba(45, 31, 21, 0.09);
+  padding: 14px;
+}
+
+.labor-person-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.labor-person-toggle {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  padding: 4px 0;
+  color: #2f241c;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.labor-person-chevron {
+  flex: 0 0 auto;
+  color: #705b4b;
+  font-size: 12px;
+  transition: transform 0.24s ease;
+}
+
+.labor-person-toggle[aria-expanded="true"] .labor-person-chevron {
+  transform: rotate(90deg);
+}
+
+.labor-person-summary {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.labor-person-summary strong {
+  font-size: 19px;
+}
+
+.labor-person-summary small {
+  color: #176640;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.labor-detail {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.28s ease, opacity 0.2s ease;
+}
+
+.labor-detail.is-expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.labor-detail-inner {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.labor-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.labor-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+}
+
+.labor-table th,
+.labor-table td {
+  border-bottom: 1px solid #ecdfd1;
+  padding: 9px 8px;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.labor-table thead th {
+  background: #fcf8f2;
+  color: #503b2d;
+}
+
+.labor-table th:nth-child(n + 3),
+.labor-table td:nth-child(n + 3) {
+  text-align: right;
+}
+
+.labor-table tfoot th {
+  border-top: 2px solid #d9c7b3;
+  border-bottom: 0;
+  background: #faf4eb;
+  font-weight: 800;
+}
+
+.labor-empty {
+  color: #705b4b;
+  text-align: center;
+}
+
 .accounting-switch {
   position: relative;
   width: 48px;
@@ -747,5 +878,10 @@ body.accounting-interactive-mode .accounting-table > tfoot > tr > th:nth-child(2
 
   .accounting-entry-table {
     min-width: 640px;
+  }
+
+  .labor-person-head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
