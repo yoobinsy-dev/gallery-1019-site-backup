@@ -1,7 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const laborSettlement = require('../../accounting/labor-settlement');
+
+const ROOT = path.resolve(__dirname, '../..');
 
 test('labor settlement groups completed class revenue by instructor and calculates won totals', () => {
   const settlements = laborSettlement.buildInstructorSettlements({
@@ -53,4 +57,9 @@ test('labor settlement workbook uses readable widths and won number formatting',
 
   assert.deepEqual(widths, [[1, 14], [2, 24], [3, 18], [4, 18], [5, 16], [6, 18]]);
   assert.deepEqual(styles, [['C2:F3', 'numberFormat', '₩#,##0']]);
+});
+
+test('accounting page cache-busts instructor-aware automatic entries', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'pottery-accounting.html'), 'utf8');
+  assert.match(html, /accounting\/auto-entries\.js\?v=20261001-1/);
 });
