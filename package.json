@@ -43,6 +43,6 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
-    "vercel": "58.9.4"
+    "vercel": "^60.1.3"
   }
 }
