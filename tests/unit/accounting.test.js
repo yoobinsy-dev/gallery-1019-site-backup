@@ -393,7 +393,7 @@ test('accounting characterizes monthly class occurrence grouping and dedupe', ()
     PotteryAccountingFinanceProjection: financeProjection
   } }).exposed;
   accounting.state.calendarEvents = [
-    { kind: '수강', title: 'A', date: '2026-07-27', start: '10:00', end: '11:00', repeatWeekly: true, repeatEndDate: '2026-08-31', repeatSkipDates: ['2026-08-10'] },
+    { kind: '수강', title: 'A', date: '2026-07-27', start: '10:00', end: '11:00', instructor: '김강사', repeatWeekly: true, repeatEndDate: '2026-08-31', repeatSkipDates: ['2026-08-10'] },
     { kind: '수강', title: 'A', date: '2026-08-03', start: '10:00', end: '11:00' },
     { kind: '수강', title: 'B', date: '2026-08-15', start: '13:00', end: '14:00' },
     { kind: '수강', title: 'B', date: '2026-08-15', start: '09:00', end: '10:00' },
@@ -403,7 +403,7 @@ test('accounting characterizes monthly class occurrence grouping and dedupe', ()
   ];
   const grouped = accounting.collectClassOccurrencesByStudentInMonth('2026-08');
   assert.deepEqual(JSON.parse(JSON.stringify(Array.from(grouped.entries()))), [
-    ['A', [{ date: '2026-08-03', start: '10:00' }]],
+    ['A', [{ date: '2026-08-03', start: '10:00', instructor: '김강사' }]],
     ['B', [{ date: '2026-08-15', start: '09:00' }]],
     ['C', [{ date: '2026-08-04', start: '10:00' }, { date: '2026-08-11', start: '10:00' }]]
   ]);

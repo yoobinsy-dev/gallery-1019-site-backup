@@ -9,6 +9,7 @@
 
   const TAB_POTTERY = 'pottery';
   const TAB_GALLERY = 'gallery';
+  const TAB_LABOR = 'labor';
 
   const FIXED_BY_TAB = {
     pottery: {
@@ -83,6 +84,7 @@
         expense: new Set()
       }
     },
+    laborExpanded: new Set(),
     entries: [],
     exhibitions: [],
     students: [],
@@ -141,6 +143,12 @@
 
     document.getElementById('accounting-tab-gallery')?.addEventListener('click', () => {
       state.activeTab = TAB_GALLERY;
+      state.expandAll = false;
+      renderAll();
+    });
+
+    document.getElementById('accounting-tab-labor')?.addEventListener('click', () => {
+      state.activeTab = TAB_LABOR;
       state.expandAll = false;
       renderAll();
     });
@@ -205,6 +213,30 @@
 
     document.getElementById('accounting-revenue-body')?.addEventListener('click', handleTableBodyClick);
     document.getElementById('accounting-expense-body')?.addEventListener('click', handleTableBodyClick);
+    document.getElementById('labor-settlement')?.addEventListener('click', handleLaborSettlementClick);
+  }
+
+  function handleLaborSettlementClick(event) {
+    const exportBtn = event.target.closest('button[data-action="export-settlement"]');
+    if (exportBtn instanceof HTMLButtonElement) {
+      const instructor = String(exportBtn.dataset.instructor || '');
+      const settlement = Array.isArray(state.renderCache)
+        ? state.renderCache.find((item) => item.instructor === instructor)
+        : null;
+      if (settlement) exportInstructorSettlement(settlement);
+      return;
+    }
+
+    const toggleBtn = event.target.closest('button[data-action="toggle-settlement"]');
+    if (!(toggleBtn instanceof HTMLButtonElement)) return;
+    const instructor = String(toggleBtn.dataset.instructor || '');
+    if (!instructor) return;
+    if (state.laborExpanded.has(instructor)) {
+      state.laborExpanded.delete(instructor);
+    } else {
+      state.laborExpanded.add(instructor);
+    }
+    renderLaborSettlement(getMonthKeyFromDate(state.monthStart));
   }
 
   function handleTableBodyClick(event) {
@@ -474,6 +506,19 @@
     renderTabUi();
     renderViewToggle();
 
+    const summary = document.querySelector('.accounting-summary');
+    const grid = document.querySelector('.accounting-grid');
+    const settlementSection = document.getElementById('labor-settlement');
+    const isLabor = state.activeTab === TAB_LABOR;
+    if (summary) summary.hidden = isLabor;
+    if (grid) grid.hidden = isLabor;
+    if (settlementSection) settlementSection.hidden = !isLabor;
+
+    if (isLabor) {
+      renderLaborSettlement(getMonthKeyFromDate(state.monthStart));
+      return;
+    }
+
     const monthKey = getMonthKeyFromDate(state.monthStart);
     const calc = buildFinanceForTab(state.activeTab, monthKey);
     state.renderCache = calc;
@@ -486,6 +531,7 @@
   function renderTabUi() {
     const potteryBtn = document.getElementById('accounting-tab-pottery');
     const galleryBtn = document.getElementById('accounting-tab-gallery');
+    const laborBtn = document.getElementById('accounting-tab-labor');
     const addRevenueBtn = document.getElementById('accounting-add-revenue-btn');
     const addExpenseBtn = document.getElementById('accounting-add-expense-btn');
     document.body.classList.add('accounting-interactive-mode');
@@ -497,14 +543,18 @@
       galleryBtn.classList.toggle('is-active', state.activeTab === TAB_GALLERY);
       galleryBtn.setAttribute('aria-selected', state.activeTab === TAB_GALLERY ? 'true' : 'false');
     }
+    if (laborBtn) {
+      laborBtn.classList.toggle('is-active', state.activeTab === TAB_LABOR);
+      laborBtn.setAttribute('aria-selected', state.activeTab === TAB_LABOR ? 'true' : 'false');
+    }
 
     if (addRevenueBtn) {
-      addRevenueBtn.disabled = false;
-      addRevenueBtn.hidden = false;
+      addRevenueBtn.disabled = state.activeTab === TAB_LABOR;
+      addRevenueBtn.hidden = state.activeTab === TAB_LABOR;
     }
     if (addExpenseBtn) {
-      addExpenseBtn.disabled = false;
-      addExpenseBtn.hidden = false;
+      addExpenseBtn.disabled = state.activeTab === TAB_LABOR;
+      addExpenseBtn.hidden = state.activeTab === TAB_LABOR;
     }
   }
 
@@ -512,18 +562,21 @@
     const toggle = document.getElementById('accounting-view-toggle');
     const toggleWrap = document.querySelector('label.accounting-switch[for="accounting-view-toggle"]');
     const label = document.getElementById('accounting-view-toggle-label');
+    const exportBtn = document.getElementById('accounting-export-btn');
+    const isLabor = state.activeTab === TAB_LABOR;
     if (toggle) {
       toggle.checked = state.expandAll;
-      toggle.disabled = false;
-      toggle.hidden = false;
+      toggle.disabled = isLabor;
+      toggle.hidden = isLabor;
     }
     if (toggleWrap) {
-      toggleWrap.hidden = false;
+      toggleWrap.hidden = isLabor;
     }
     if (label) {
-      label.hidden = false;
+      label.hidden = isLabor;
       label.textContent = state.expandAll ? '상세 뷰' : '요약 뷰';
     }
+    if (exportBtn) exportBtn.hidden = isLabor;
   }
 
   function renderMonthLabel() {
@@ -637,6 +690,71 @@
     });
   }
 
+  function renderLaborSettlement(monthKey) {
+    const container = document.getElementById('labor-settlement');
+    if (!container) return;
+
+    const settlements = globalThis.PotteryLaborSettlement.buildInstructorSettlements({
+      entries: buildPotteryClassRevenueEntries(monthKey),
+      roundWon
+    });
+    state.renderCache = settlements;
+
+    if (!settlements.length) {
+      container.innerHTML = '<div class="labor-empty">이 달에 정산할 강사 수업이 없습니다.</div>';
+      return;
+    }
+
+    container.innerHTML = settlements.map((settlement, index) => {
+      const isExpanded = state.laborExpanded.has(settlement.instructor);
+      const detailId = `labor-detail-${index}`;
+      return `
+      <article class="labor-person-panel">
+        <div class="labor-person-head">
+          <button type="button" class="labor-person-toggle" data-action="toggle-settlement" data-instructor="${escapeAttribute(settlement.instructor)}" aria-expanded="${isExpanded ? 'true' : 'false'}" aria-controls="${detailId}">
+            <span class="labor-person-chevron" aria-hidden="true">▶</span>
+            <span class="labor-person-summary">
+              <strong>${escapeHtml(settlement.instructor)}</strong>
+              <small>실지급액 ${escapeHtml(formatWon(settlement.totals.netPayment))}</small>
+            </span>
+          </button>
+          <button type="button" class="accounting-export-btn" data-action="export-settlement" data-instructor="${escapeAttribute(settlement.instructor)}">엑셀 다운로드</button>
+        </div>
+        <div class="labor-detail${isExpanded ? ' is-expanded' : ''}" id="${detailId}" aria-hidden="${isExpanded ? 'false' : 'true'}">
+          <div class="labor-detail-inner">
+            <div class="labor-table-wrap">
+              <table class="labor-table">
+                <thead><tr><th>날짜</th><th>수강생 + time</th><th>금액</th><th>작가 커미션</th><th>원천세</th><th>실지급액</th></tr></thead>
+                <tbody>
+                  ${settlement.rows.map((row) => `
+                    <tr>
+                      <td>${escapeHtml(row.date)}</td>
+                      <td>${escapeHtml(row.item)}</td>
+                      <td>${escapeHtml(formatWon(row.amount))}</td>
+                      <td>${escapeHtml(formatWon(row.commission))}</td>
+                      <td>${escapeHtml(formatWon(row.withholdingTax))}</td>
+                      <td>${escapeHtml(formatWon(row.netPayment))}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th>합계</th><th></th>
+                    <th>${escapeHtml(formatWon(settlement.totals.amount))}</th>
+                    <th>${escapeHtml(formatWon(settlement.totals.commission))}</th>
+                    <th>${escapeHtml(formatWon(settlement.totals.withholdingTax))}</th>
+                    <th>${escapeHtml(formatWon(settlement.totals.netPayment))}</th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      </article>
+    `;
+    }).join('');
+  }
+
   function buildPotteryPersonalWorkRevenueEntries(monthKey) {
     return globalThis.PotteryAccountingAutoEntries.buildPotteryPersonalWorkRevenueEntries({
       personalWorkEntries: state.personalWorkEntries,
@@ -671,7 +789,13 @@
       const studentName = String(event.title || '').trim();
       if (!studentName) return;
       const list = byStudent.get(studentName) || [];
-      list.push({ date: normalizedDate, start: String(event.start || '') });
+      const occurrence = {
+        date: normalizedDate,
+        start: String(event.start || '')
+      };
+      const instructor = String(event.instructor || '').trim();
+      if (instructor) occurrence.instructor = instructor;
+      list.push(occurrence);
       byStudent.set(studentName, list);
     };
 
@@ -1176,6 +1300,37 @@
       downloadBlob(blob, `${tabLabel}-회계-${monthLabel}.xlsx`);
     } catch (_error) {
       exportRowsToCsv(rows, `${tabLabel}-회계-${monthLabel}.csv`);
+    }
+  }
+
+  async function exportInstructorSettlement(settlement) {
+    const rows = globalThis.PotteryLaborSettlement.buildSettlementExportRows(settlement);
+    const monthLabel = getMonthKeyFromDate(state.monthStart);
+    const safeInstructor = String(settlement.instructor || '강사').replace(/[\\/:*?"<>|]/g, '-');
+    const fileBase = `${safeInstructor}-인건비-정산-${monthLabel}`;
+
+    if (typeof XlsxPopulate === 'undefined' || typeof XlsxPopulate.fromBlankAsync !== 'function') {
+      exportRowsToCsv(rows, `${fileBase}.csv`);
+      return;
+    }
+
+    try {
+      const workbook = await XlsxPopulate.fromBlankAsync();
+      const sheet = workbook.sheet(0);
+      sheet.name(`${settlement.instructor} 인건비`.slice(0, 31));
+      rows.forEach((row, rowIndex) => {
+        row.forEach((cell, colIndex) => sheet.cell(rowIndex + 1, colIndex + 1).value(cell));
+      });
+      sheet.row(1).style({ bold: true });
+      sheet.row(rows.length).style({ bold: true });
+      globalThis.PotteryLaborSettlement.formatSettlementWorkbookSheet(sheet, rows.length);
+
+      const output = await workbook.outputAsync();
+      downloadBlob(new Blob([output], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      }), `${fileBase}.xlsx`);
+    } catch (_error) {
+      exportRowsToCsv(rows, `${fileBase}.csv`);
     }
   }
 

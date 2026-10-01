@@ -110,7 +110,7 @@
 
       studentOccurrences.forEach((occurrence, occurrenceIndex) => {
         const date = helpers.normalizeDateInput(occurrence.date || `${monthKey}-01`) || `${monthKey}-01`;
-        entries.push({
+        const entry = {
           id: `auto-pottery-class-${helpers.normalizeNameKey(name)}-${date}-${occurrence.start || occurrenceIndex}-${index}`,
           source: 'auto',
           side: 'revenue',
@@ -120,7 +120,10 @@
           amount: baseAmount + (occurrenceIndex < remainder ? 1 : 0),
           fixed: false,
           tab: 'pottery'
-        });
+        };
+        const instructor = String(occurrence.instructor || '').trim();
+        if (instructor) entry.instructor = instructor;
+        entries.push(entry);
       });
     });
 
