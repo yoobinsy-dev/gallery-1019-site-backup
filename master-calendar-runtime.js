@@ -9564,8 +9564,8 @@ registerLocalPreviewAdminGuards();
       && String(templateRule.instructor || '').trim() === String(weekRule.instructor || '').trim();
   }
 
-  function getTemplateBaseRuleForSlot(dayIndex, slot) {
-    return (state.baseRules || []).find((rule) => {
+  function getTemplateBaseRuleForSlot(dayIndex, slot, weekStartDate) {
+    return getTemplateRulesForWeek(weekStartDate).find((rule) => {
       return Number(rule?.day) === Number(dayIndex)
         && Number(rule?.startSlot) <= Number(slot)
         && Number(rule?.endSlot) > Number(slot);
@@ -9582,7 +9582,7 @@ registerLocalPreviewAdminGuards();
 
     for (let slot = startSlot; slot < endSlot; slot += 1) {
       const weekRule = getBaseRuleForSlot(dayIndex, slot, weekStart);
-      const templateRule = getTemplateBaseRuleForSlot(dayIndex, slot);
+      const templateRule = getTemplateBaseRuleForSlot(dayIndex, slot, weekStart);
       if (!weekRule || !templateRule) return false;
       if (String(weekRule.type || '') !== String(templateRule.type || '')) return false;
 
