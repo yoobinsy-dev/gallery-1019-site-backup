@@ -39,7 +39,7 @@ function loadCalendar(globals = {}) {
     'handleDeleteRecurringOne', 'handleDeleteRecurringFollowing',
     'handleMoveRecurringOne', 'handleMoveRecurringFollowing',
     'getTemplateRulesForWeek', 'setTemplateRulesForWeekFrom', 'normalizeTemplateTimeline',
-    'applyMovedRuleOverride'
+    'applyMovedRuleOverride', 'isBaseRangeRepeatingWeekly'
   ], { globals: {
     MasterCalendarDateTime: dateTime,
     MasterCalendarOccurrences: occurrences,
@@ -490,6 +490,31 @@ test('calendar base-rule domain characterizes timeline precedence, normalization
       { day: 2, startSlot: 12, endSlot: 16, type: '수업시간' }
     ]
   );
+});
+
+test('weekly recurrence uses the base timetable effective from the event week', () => {
+  const calendar = loadCalendar();
+  calendar.state.baseRules = [{
+    id: 'original-friday', day: 4, startSlot: 23, endSlot: 28,
+    type: '수업시간', className: 'Wheel', instructor: 'Teacher'
+  }];
+  calendar.state.baseRuleTimeline = [{
+    weekKey: '2026-10-05',
+    rules: [{
+      id: 'changed-friday', day: 4, startSlot: 21, endSlot: 26,
+      type: '수업시간', className: 'Wheel', instructor: 'Teacher'
+    }]
+  }];
+  calendar.state.baseWeekOverrides = {};
+
+  assert.equal(calendar.isBaseRangeRepeatingWeekly('2026-10-09', '10:30', '13:00'), true);
+  assert.equal(calendar.isBaseRangeRepeatingWeekly('2026-10-02', '10:30', '13:00'), false);
+
+  calendar.state.baseWeekOverrides['2026-10-05'] = [{
+    id: 'one-week-friday', day: 4, startSlot: 22, endSlot: 27,
+    type: '수업시간', className: 'Wheel', instructor: 'Teacher'
+  }];
+  assert.equal(calendar.isBaseRangeRepeatingWeekly('2026-10-09', '11:00', '13:30'), false);
 });
 
 function createRecurringCalendar(events) {
