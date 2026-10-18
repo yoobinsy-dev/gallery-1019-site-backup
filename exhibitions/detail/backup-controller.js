@@ -27,16 +27,23 @@
       return date.toLocaleString('ko-KR', { hour12: false });
     }
 
+    function renderBackupTabIfActive() {
+      if (state.currentTab === 'exhibition-backup') {
+        options.switchTab('exhibition-backup');
+      }
+    }
+
     async function fetchExhibitionBackupSnapshots() {
       const exhibitionId = getBackupExhibitionId();
       if (!exhibitionId) {
         state.backupError = '전시 ID를 찾을 수 없습니다.';
+        state.backupLoaded = true;
         return;
       }
 
       state.backupLoading = true;
       state.backupError = '';
-      options.switchTab('exhibition-backup');
+      renderBackupTabIfActive();
 
       try {
         const result = await snapshotClient.listSnapshots({
@@ -52,7 +59,8 @@
         state.backupCanUndo = false;
       } finally {
         state.backupLoading = false;
-        options.switchTab('exhibition-backup');
+        state.backupLoaded = true;
+        renderBackupTabIfActive();
       }
     }
 
@@ -131,7 +139,7 @@
     </div>
   `;
 
-      if (!state.backupLoading && state.backupSnapshots.length === 0 && !state.backupError) {
+      if (!state.backupLoading && !state.backupLoaded && !state.backupError) {
         fetchExhibitionBackupSnapshots();
       }
     }

@@ -170,6 +170,93 @@ test('exhibition detail persistence skips backup after failed main safe write', 
   assert.equal(exhibition.loadInventoryBackup(2), null);
 });
 
+test('exhibition files download persisted numeric IDs passed by inline handlers', () => {
+  let clickedAnchor = null;
+  const document = {
+    body: {
+      appendChild() {},
+      removeChild() {}
+    },
+    createElement() {
+      const anchor = {
+        href: '',
+        download: '',
+        click() { clickedAnchor = { href: anchor.href, download: anchor.download }; }
+      };
+      return anchor;
+    }
+  };
+  const exhibition = {
+    filesDocs: [{
+      id: 42,
+      title: 'Persisted document',
+      fileName: 'original.txt',
+      fileDataUrl: 'data:text/plain;base64,dGVzdA=='
+    }],
+    filesPromo: []
+  };
+  const controller = filesController.create({
+    state: {},
+    document,
+    URL: {},
+    Date,
+    Math,
+    getCurrentExhibition() { return exhibition; }
+  });
+
+  controller.downloadExhibitionFile('docs', '42');
+
+  assert.deepEqual(clickedAnchor, {
+    href: 'data:text/plain;base64,dGVzdA==',
+    download: 'Persisted document.txt'
+  });
+});
+
+test('exhibition backup loading does not reopen the tab or refetch an empty result', async () => {
+  let resolveSnapshots;
+  let listCalls = 0;
+  const switchedTabs = [];
+  const state = {
+    exhibitionId: 7,
+    currentTab: 'exhibition-backup',
+    backupSnapshots: [],
+    backupCanUndo: false,
+    backupLoading: false,
+    backupLoaded: false,
+    backupError: ''
+  };
+  const controller = backupController.create({
+    state,
+    document: {},
+    fetchImpl() {},
+    snapshotClient: {
+      listSnapshots() {
+        listCalls += 1;
+        return new Promise((resolve) => { resolveSnapshots = resolve; });
+      }
+    },
+    exhibitionsRepository: {},
+    getCurrentExhibition() { return { id: 7 }; },
+    getExhibitionAccessRole() { return 'admin'; },
+    getFirstAllowedTab() { return 'exhibition-info'; },
+    switchTab(tabName) { switchedTabs.push(tabName); },
+    escapeHtml(value) { return String(value); }
+  });
+
+  const request = controller.fetchExhibitionBackupSnapshots();
+  assert.deepEqual(switchedTabs, ['exhibition-backup']);
+  state.currentTab = 'exhibition-info';
+  resolveSnapshots({ error: '', snapshots: [], canUndo: false });
+  await request;
+
+  assert.deepEqual(switchedTabs, ['exhibition-backup']);
+  assert.equal(state.backupLoaded, true);
+
+  state.currentTab = 'exhibition-backup';
+  controller.renderExhibitionBackup({ innerHTML: '' });
+  assert.equal(listCalls, 1);
+});
+
 test('exhibition detail repository preserves backup, preference, and user contracts', () => {
   const values = new Map([
     ['users', '[{"unknown":"user"}]'],
