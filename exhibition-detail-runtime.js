@@ -7256,12 +7256,13 @@ registerLocalPreviewAdminGuards();
       const activeFiles = getFilesForView(view);
 
       const cardsHtml = activeFiles.map((fileItem) => {
-        const isPdf = isPdfLikeFile(fileItem.mimeType || '', fileItem.fileName || '', fileItem.fileDataUrl || fileItem.previewDataUrl || '') || fileItem.previewKind === 'pdf';
-        const pdfSource = fileItem.fileDataUrl || fileItem.previewDataUrl || '';
+        const fileSource = getFileDownloadSource(fileItem);
+        const isPdf = isPdfLikeFile(fileItem.mimeType || '', fileItem.fileName || '', fileSource) || fileItem.previewKind === 'pdf';
+        const pdfSource = fileSource;
         const canDeleteFile = options.canCurrentUserModifyOwnedRow(fileItem);
         const previewHtml = isPdf && pdfSource
           ? `<embed src="${pdfSource}#toolbar=0&navpanes=0&scrollbar=0" type="application/pdf" class="exhibition-file-preview-pdf" />`
-          : `<img src="${fileItem.previewDataUrl}" alt="${options.escapeAccountingHtml(fileItem.title || fileItem.fileName || '파일 미리보기')}" class="exhibition-file-preview-image">`;
+          : `<img src="${fileItem.previewDataUrl || fileSource}" alt="${options.escapeAccountingHtml(fileItem.title || fileItem.fileName || '파일 미리보기')}" class="exhibition-file-preview-image">`;
 
         return `
     <article class="exhibition-file-card" title="${options.escapeAccountingHtml(fileItem.fileName || '')}">
@@ -7305,14 +7306,28 @@ registerLocalPreviewAdminGuards();
       return mime.includes('pdf') || name.endsWith('.pdf') || data.startsWith('data:application/pdf');
     }
 
-    function triggerFileDownload(dataUrl, fileName) {
-      if (!dataUrl) return;
+    async function triggerFileDownload(source, fileName) {
+      if (!source) return;
+      let downloadSource = source;
+      let objectUrl = '';
+      if (/^https?:\/\//i.test(source)) {
+        try {
+          const response = await options.fetchImpl(source);
+          if (!response.ok) throw new Error('File download request failed');
+          objectUrl = URL.createObjectURL(await response.blob());
+          downloadSource = objectUrl;
+        } catch (error) {
+          options.alert('파일 다운로드에 실패했습니다. 다시 시도해주세요.');
+          return;
+        }
+      }
       const a = document.createElement('a');
-      a.href = dataUrl;
+      a.href = downloadSource;
       a.download = fileName || 'download';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     }
 
     function getFileDownloadName(fileItem, fallbackIndex) {
@@ -7326,6 +7341,10 @@ registerLocalPreviewAdminGuards();
 
     function hasFileId(fileItem, fileId) {
       return String(fileItem.id) === String(fileId);
+    }
+
+    function getFileDownloadSource(fileItem) {
+      return fileItem.fileUrl || fileItem.fileDataUrl || fileItem.previewDataUrl || '';
     }
 
     function deleteExhibitionFile(view, fileId) {
@@ -7378,23 +7397,28 @@ registerLocalPreviewAdminGuards();
       options.switchTab('exhibition-files');
     }
 
-    function downloadExhibitionFile(view, fileId) {
+    async function downloadExhibitionFile(view, fileId) {
       const targetView = view === 'promo' ? 'promo' : 'docs';
       const targetList = getFilesForView(targetView);
       const target = targetList.find((item) => hasFileId(item, fileId));
       if (!target) return;
-      const dataUrl = target.fileDataUrl || target.previewDataUrl;
-      triggerFileDownload(dataUrl, getFileDownloadName(target, 0));
+      const source = getFileDownloadSource(target);
+      if (!source) {
+        options.alert('원본 파일을 찾을 수 없습니다. 파일을 다시 업로드해주세요.');
+        return;
+      }
+      await triggerFileDownload(source, getFileDownloadName(target, 0));
     }
 
-    function downloadAllExhibitionFiles(view) {
+    async function downloadAllExhibitionFiles(view) {
       const targetView = view === 'promo' ? 'promo' : 'docs';
       const targetList = getFilesForView(targetView);
       if (!targetList.length) return;
-      targetList.forEach((item, index) => {
-        const dataUrl = item.fileDataUrl || item.previewDataUrl;
-        triggerFileDownload(dataUrl, getFileDownloadName(item, index));
-      });
+      for (let index = 0; index < targetList.length; index += 1) {
+        const item = targetList[index];
+        const source = getFileDownloadSource(item);
+        if (source) await triggerFileDownload(source, getFileDownloadName(item, index));
+      }
     }
 
     function openFileUploadModal(targetView, droppedFiles) {
@@ -7575,24 +7599,38 @@ registerLocalPreviewAdminGuards();
       const targetView = state.fileUploadTarget === 'promo' ? 'promo' : 'docs';
       const exhibition = ensureExhibitionFilesData();
       const targetList = targetView === 'promo' ? exhibition.filesPromo : exhibition.filesDocs;
+      const uploadedItems = [];
       for (let i = 0; i < entries.length; i += 1) {
         const entry = entries[i];
         const file = entry.file;
         const preview = await buildFileCardPreview(file);
+        let upload;
+        try {
+          upload = await options.uploadExhibitionFileDataUrl(preview.fileDataUrl, file.name || 'file');
+        } catch (error) {
+          upload = null;
+        }
+        if (!upload?.url) {
+          options.alert('파일 업로드에 실패했습니다. 다시 시도해주세요.');
+          return;
+        }
         const generatedTitle = (entry.title || '').trim() || file.name || '제목 없음';
-        targetList.push({
+        uploadedItems.push({
           id: `${Date.now()}-${Math.floor(Math.random() * 100000)}-${i}`,
           title: generatedTitle,
           fileName: file.name || '',
-          previewDataUrl: preview.previewDataUrl,
-          fileDataUrl: preview.fileDataUrl,
+          previewDataUrl: preview.previewKind === 'generic' ? preview.previewDataUrl : upload.url,
+          fileDataUrl: '',
+          fileUrl: upload.url,
+          filePath: upload.pathname || '',
           previewKind: preview.previewKind,
-          mimeType: preview.mimeType,
-          byteSize: preview.byteSize,
+          mimeType: upload.contentType || preview.mimeType,
+          byteSize: Number.isFinite(upload.size) ? upload.size : preview.byteSize,
           createdByUserId: options.getCurrentUserId(),
           createdAt: new Date().toISOString()
         });
       }
+      targetList.push(...uploadedItems);
       if (state.exhibition) {
         state.exhibition.filesDocs = exhibition.filesDocs;
         state.exhibition.filesPromo = exhibition.filesPromo;
@@ -11602,6 +11640,22 @@ function editExhibitionInfoField(fieldName) {
   return infoController.editExhibitionInfoField(fieldName);
 }
 
+async function uploadExhibitionFileDataUrl(dataUrl, fileName) {
+  const response = await fetch('/api/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dataUrl,
+      filename: fileName,
+      purpose: 'exhibition-file',
+      exhibitionId: exhibitionDetailState.exhibitionId
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok || !payload?.file?.url) return null;
+  return payload.file;
+}
+
 function createFilesController() {
   return exhibitionDetailDependencies.filesControllerModule.create({
     state: exhibitionDetailState,
@@ -11609,6 +11663,7 @@ function createFilesController() {
     URL,
     Date,
     Math,
+    fetchImpl: (...args) => fetch(...args),
     getCurrentExhibition,
     canCurrentUserModifyOwnedRow,
     isArtistScopedUser,
@@ -11616,6 +11671,7 @@ function createFilesController() {
     escapeAccountingHtml,
     buildCompactPhotoPreview,
     readFileAsDataUrl,
+    uploadExhibitionFileDataUrl,
     saveExhibition,
     switchTab,
     alert

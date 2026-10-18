@@ -893,6 +893,22 @@ function editExhibitionInfoField(fieldName) {
   return infoController.editExhibitionInfoField(fieldName);
 }
 
+async function uploadExhibitionFileDataUrl(dataUrl, fileName) {
+  const response = await fetch('/api/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dataUrl,
+      filename: fileName,
+      purpose: 'exhibition-file',
+      exhibitionId: exhibitionDetailState.exhibitionId
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok || !payload?.file?.url) return null;
+  return payload.file;
+}
+
 function createFilesController() {
   return exhibitionDetailDependencies.filesControllerModule.create({
     state: exhibitionDetailState,
@@ -900,6 +916,7 @@ function createFilesController() {
     URL,
     Date,
     Math,
+    fetchImpl: (...args) => fetch(...args),
     getCurrentExhibition,
     canCurrentUserModifyOwnedRow,
     isArtistScopedUser,
@@ -907,6 +924,7 @@ function createFilesController() {
     escapeAccountingHtml,
     buildCompactPhotoPreview,
     readFileAsDataUrl,
+    uploadExhibitionFileDataUrl,
     saveExhibition,
     switchTab,
     alert
