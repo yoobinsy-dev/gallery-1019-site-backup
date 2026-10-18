@@ -212,6 +212,79 @@ test('exhibition files download persisted numeric IDs passed by inline handlers'
   });
 });
 
+test('exhibition files persist Blob URLs and report missing download sources', async () => {
+  let clickedAnchor = null;
+  const revokedUrls = [];
+  const alerts = [];
+  const saves = [];
+  const exhibition = { filesDocs: [], filesPromo: [] };
+  const state = {
+    fileUploadTarget: 'docs',
+    filesView: 'docs',
+    pendingUploadFiles: [],
+    pendingUploadEntries: [{
+      file: { name: 'durable.txt', type: 'text/plain', size: 4 },
+      title: 'Durable document'
+    }]
+  };
+  const document = {
+    body: { appendChild() {}, removeChild() {} },
+    createElement() {
+      const anchor = {
+        href: '',
+        download: '',
+        click() { clickedAnchor = { href: anchor.href, download: anchor.download }; }
+      };
+      return anchor;
+    },
+    getElementById() { return null; }
+  };
+  const controller = filesController.create({
+    state,
+    document,
+    URL: {
+      createObjectURL() { return 'blob:durable-download'; },
+      revokeObjectURL(value) { revokedUrls.push(value); }
+    },
+    Date,
+    Math,
+    getCurrentExhibition() { return exhibition; },
+    getCurrentUserId() { return 9; },
+    readFileAsDataUrl: async () => 'data:text/plain;base64,dGVzdA==',
+    uploadExhibitionFileDataUrl: async () => ({
+      url: 'https://blob.example/exhibition-files/durable.txt',
+      pathname: 'exhibition-files/7/durable.txt',
+      contentType: 'text/plain',
+      size: 4
+    }),
+    fetchImpl: async () => ({
+      ok: true,
+      blob: async () => new Blob(['test'], { type: 'text/plain' })
+    }),
+    saveExhibition() { saves.push(true); },
+    switchTab() {},
+    alert(message) { alerts.push(message); }
+  });
+
+  await controller.confirmFileUploadModal();
+
+  assert.equal(saves.length, 1);
+  assert.equal(exhibition.filesDocs[0].fileUrl, 'https://blob.example/exhibition-files/durable.txt');
+  assert.equal(exhibition.filesDocs[0].filePath, 'exhibition-files/7/durable.txt');
+  assert.equal(exhibition.filesDocs[0].fileDataUrl, '');
+
+  await controller.downloadExhibitionFile('docs', exhibition.filesDocs[0].id);
+  assert.deepEqual(clickedAnchor, {
+    href: 'blob:durable-download',
+    download: 'Durable document.txt'
+  });
+  assert.deepEqual(revokedUrls, ['blob:durable-download']);
+
+  exhibition.filesDocs.push({ id: 'missing', title: 'Missing', fileName: 'missing.txt' });
+  controller.downloadExhibitionFile('docs', 'missing');
+  assert.equal(alerts.at(-1), '원본 파일을 찾을 수 없습니다. 파일을 다시 업로드해주세요.');
+});
+
 test('exhibition backup loading does not reopen the tab or refetch an empty result', async () => {
   let resolveSnapshots;
   let listCalls = 0;

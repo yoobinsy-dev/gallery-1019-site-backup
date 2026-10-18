@@ -833,7 +833,30 @@ test('certificate batch builder preserves page blocks, print area, images, and s
   ]);
 });
 
-test('exhibition files preserve upload, preview, download, ownership, and delete behavior', async ({ page }) => {
+test('exhibition files preserve upload, preview, download, ownership, and delete behavior', async ({ page, baseURL }) => {
+  let uploadRequest = null;
+  const durableFileUrl = `${baseURL}/test-files/characterization.txt`;
+  await page.route('**/api/upload', async (route) => {
+    uploadRequest = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        file: {
+          url: durableFileUrl,
+          pathname: 'exhibition-files/900001/characterization.txt',
+          contentType: 'text/plain',
+          size: 34
+        }
+      })
+    });
+  });
+  await page.route('**/test-files/characterization.txt', (route) => route.fulfill({
+    status: 200,
+    contentType: 'text/plain',
+    body: 'CHARACTERIZATION_TEST_FILE_CONTENT'
+  }));
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
   await page.evaluate(() => window.exhibitionDetailReady);
   await page.locator('[data-tab="exhibition-files"]').click();
@@ -853,6 +876,12 @@ test('exhibition files preserve upload, preview, download, ownership, and delete
 
   await expect(page.locator('#file-upload-modal')).toHaveCSS('display', 'none');
   await expect(page.locator('#file-upload-input')).toHaveValue('');
+  expect(uploadRequest).toMatchObject({
+    filename: 'CHARACTERIZATION_TEST_FILE.txt',
+    purpose: 'exhibition-file',
+    exhibitionId: EXHIBITION_ID
+  });
+  expect(uploadRequest.dataUrl).toMatch(/^data:text\/plain/);
   const card = page.locator('.exhibition-file-card').filter({ hasText: 'CHARACTERIZATION_TEST_DOCUMENT' });
   await expect(card).toHaveCount(1);
   await expect(card.locator('.exhibition-file-preview-image')).toHaveAttribute('src', /^data:image\/svg\+xml/);
@@ -864,9 +893,10 @@ test('exhibition files preserve upload, preview, download, ownership, and delete
     };
   });
   await card.getByRole('button', { name: '다운로드' }).click();
+  await expect.poll(() => page.evaluate(() => window.__characterizationFileDownload)).not.toBeNull();
   const download = await page.evaluate(() => window.__characterizationFileDownload);
   expect(download.download).toBe('CHARACTERIZATION_TEST_DOCUMENT.txt');
-  expect(download.href).toMatch(/^data:text\/plain/);
+  expect(download.href).toMatch(/^blob:/);
 
   const storedFile = await page.evaluate(() => {
     const [exhibition] = JSON.parse(localStorage.getItem('exhibitions') || '[]');
@@ -877,9 +907,11 @@ test('exhibition files preserve upload, preview, download, ownership, and delete
     fileName: 'CHARACTERIZATION_TEST_FILE.txt',
     previewKind: 'generic',
     mimeType: 'text/plain',
+    fileUrl: durableFileUrl,
+    filePath: 'exhibition-files/900001/characterization.txt',
     createdByUserId: currentUser.id
   });
-  expect(storedFile.fileDataUrl).toMatch(/^data:text\/plain/);
+  expect(storedFile.fileDataUrl).toBe('');
 
   await card.getByRole('button', { name: '삭제' }).click();
   await expect(card).toHaveCount(0);
