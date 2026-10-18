@@ -108,17 +108,21 @@
       return ext && !base.toLowerCase().endsWith(ext.toLowerCase()) ? `${base}${ext}` : base;
     }
 
+    function hasFileId(fileItem, fileId) {
+      return String(fileItem.id) === String(fileId);
+    }
+
     function deleteExhibitionFile(view, fileId) {
       const targetView = view === 'promo' ? 'promo' : 'docs';
       const exhibition = ensureExhibitionFilesData();
       const targetList = targetView === 'promo' ? exhibition.filesPromo : exhibition.filesDocs;
-      const target = targetList.find((item) => item.id === fileId);
+      const target = targetList.find((item) => hasFileId(item, fileId));
       if (!target) return;
       if (!options.canCurrentUserModifyOwnedRow(target)) {
         options.alert('다른 사용자가 추가한 파일은 삭제할 수 없습니다.');
         return;
       }
-      const next = targetList.filter((item) => item.id !== fileId);
+      const next = targetList.filter((item) => !hasFileId(item, fileId));
       if (targetView === 'promo') exhibition.filesPromo = next;
       else exhibition.filesDocs = next;
 
@@ -161,7 +165,7 @@
     function downloadExhibitionFile(view, fileId) {
       const targetView = view === 'promo' ? 'promo' : 'docs';
       const targetList = getFilesForView(targetView);
-      const target = targetList.find((item) => item.id === fileId);
+      const target = targetList.find((item) => hasFileId(item, fileId));
       if (!target) return;
       const dataUrl = target.fileDataUrl || target.previewDataUrl;
       triggerFileDownload(dataUrl, getFileDownloadName(target, 0));

@@ -3715,16 +3715,23 @@ registerLocalPreviewAdminGuards();
       return date.toLocaleString('ko-KR', { hour12: false });
     }
 
+    function renderBackupTabIfActive() {
+      if (state.currentTab === 'exhibition-backup') {
+        options.switchTab('exhibition-backup');
+      }
+    }
+
     async function fetchExhibitionBackupSnapshots() {
       const exhibitionId = getBackupExhibitionId();
       if (!exhibitionId) {
         state.backupError = '전시 ID를 찾을 수 없습니다.';
+        state.backupLoaded = true;
         return;
       }
 
       state.backupLoading = true;
       state.backupError = '';
-      options.switchTab('exhibition-backup');
+      renderBackupTabIfActive();
 
       try {
         const result = await snapshotClient.listSnapshots({
@@ -3740,7 +3747,8 @@ registerLocalPreviewAdminGuards();
         state.backupCanUndo = false;
       } finally {
         state.backupLoading = false;
-        options.switchTab('exhibition-backup');
+        state.backupLoaded = true;
+        renderBackupTabIfActive();
       }
     }
 
@@ -3819,7 +3827,7 @@ registerLocalPreviewAdminGuards();
     </div>
   `;
 
-      if (!state.backupLoading && state.backupSnapshots.length === 0 && !state.backupError) {
+      if (!state.backupLoading && !state.backupLoaded && !state.backupError) {
         fetchExhibitionBackupSnapshots();
       }
     }
@@ -7316,17 +7324,21 @@ registerLocalPreviewAdminGuards();
       return ext && !base.toLowerCase().endsWith(ext.toLowerCase()) ? `${base}${ext}` : base;
     }
 
+    function hasFileId(fileItem, fileId) {
+      return String(fileItem.id) === String(fileId);
+    }
+
     function deleteExhibitionFile(view, fileId) {
       const targetView = view === 'promo' ? 'promo' : 'docs';
       const exhibition = ensureExhibitionFilesData();
       const targetList = targetView === 'promo' ? exhibition.filesPromo : exhibition.filesDocs;
-      const target = targetList.find((item) => item.id === fileId);
+      const target = targetList.find((item) => hasFileId(item, fileId));
       if (!target) return;
       if (!options.canCurrentUserModifyOwnedRow(target)) {
         options.alert('다른 사용자가 추가한 파일은 삭제할 수 없습니다.');
         return;
       }
-      const next = targetList.filter((item) => item.id !== fileId);
+      const next = targetList.filter((item) => !hasFileId(item, fileId));
       if (targetView === 'promo') exhibition.filesPromo = next;
       else exhibition.filesDocs = next;
 
@@ -7369,7 +7381,7 @@ registerLocalPreviewAdminGuards();
     function downloadExhibitionFile(view, fileId) {
       const targetView = view === 'promo' ? 'promo' : 'docs';
       const targetList = getFilesForView(targetView);
-      const target = targetList.find((item) => item.id === fileId);
+      const target = targetList.find((item) => hasFileId(item, fileId));
       if (!target) return;
       const dataUrl = target.fileDataUrl || target.previewDataUrl;
       triggerFileDownload(dataUrl, getFileDownloadName(target, 0));
@@ -10770,6 +10782,7 @@ const exhibitionDetailState = {
   backupSnapshots: [],
   backupCanUndo: false,
   backupLoading: false,
+  backupLoaded: false,
   backupError: ''
 };
 
