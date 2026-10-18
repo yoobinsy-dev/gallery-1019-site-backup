@@ -19,6 +19,10 @@ function sanitizeFilename(name) {
 }
 
 async function verifyPublicImageUrl(url) {
+  return verifyPublicUploadUrl(url, '', true);
+}
+
+async function verifyPublicUploadUrl(url, expectedMimeType, requireImage) {
   const target = (url || '').toString().trim();
   if (!target) {
     return { ok: false, status: 0, contentType: '', isImage: false };
@@ -27,11 +31,15 @@ async function verifyPublicImageUrl(url) {
   try {
     const response = await fetch(target, { method: 'GET' });
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    const normalizedExpected = String(expectedMimeType || '').toLowerCase().split(';')[0].trim();
+    const normalizedActual = contentType.split(';')[0].trim();
+    const isImage = normalizedActual.startsWith('image/');
+    const contentTypeMatches = !normalizedExpected || normalizedActual === normalizedExpected;
     return {
-      ok: response.ok && contentType.startsWith('image/'),
+      ok: response.ok && contentTypeMatches && (!requireImage || isImage),
       status: response.status,
       contentType,
-      isImage: contentType.startsWith('image/')
+      isImage
     };
   } catch (error) {
     return { ok: false, status: 0, contentType: '', isImage: false };
@@ -63,7 +71,11 @@ module.exports = async function handler(req, res) {
     }
 
     const filename = sanitizeFilename(body.filename);
-    const blobPath = `uploads/${Date.now()}-${filename}`;
+    const isExhibitionFile = body.purpose === 'exhibition-file';
+    const exhibitionId = sanitizeFilename(body.exhibitionId || 'unknown');
+    const blobPath = isExhibitionFile
+      ? `exhibition-files/${exhibitionId}/${Date.now()}-${filename}`
+      : `uploads/${Date.now()}-${filename}`;
 
     const uploaded = await put(blobPath, parsed.buffer, {
       token: exhibitionBlobToken,
@@ -71,11 +83,15 @@ module.exports = async function handler(req, res) {
       contentType: parsed.mimeType
     });
 
-    const verification = await verifyPublicImageUrl(uploaded.url);
+    const verification = isExhibitionFile
+      ? await verifyPublicUploadUrl(uploaded.url, parsed.mimeType, false)
+      : await verifyPublicImageUrl(uploaded.url);
     if (!verification.ok) {
       sendJson(res, 502, {
         ok: false,
-        error: 'Uploaded image failed public URL verification.',
+        error: isExhibitionFile
+          ? 'Uploaded file failed public URL verification.'
+          : 'Uploaded image failed public URL verification.',
         details: verification
       });
       return;
