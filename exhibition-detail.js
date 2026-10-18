@@ -73,6 +73,7 @@ const exhibitionDetailState = {
   backupSnapshots: [],
   backupCanUndo: false,
   backupLoading: false,
+  backupLoaded: false,
   backupError: ''
 };
 

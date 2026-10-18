@@ -667,6 +667,36 @@ test('exhibition snapshot client preserves requests, defaults, and refresh order
   expect(requests.filter((request) => request.method === 'GET')).toHaveLength(4);
 });
 
+test('empty exhibition backup loading does not trap tab navigation', async ({ page }) => {
+  let releaseRequest;
+  let markRequestStarted;
+  let requestCount = 0;
+  const requestStarted = new Promise((resolve) => { markRequestStarted = resolve; });
+  const requestReleased = new Promise((resolve) => { releaseRequest = resolve; });
+  await page.route('**/api/exhibition-snapshots*', async (route) => {
+    requestCount += 1;
+    markRequestStarted();
+    await requestReleased;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, snapshots: [], canUndo: false })
+    });
+  });
+
+  await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.exhibitionDetailReady);
+  await page.locator('[data-tab="exhibition-backup"]').click();
+  await requestStarted;
+  await page.locator('[data-tab="exhibition-info"]').click();
+  releaseRequest();
+
+  await expect(page.locator('[data-tab="exhibition-info"]')).toHaveClass(/active/);
+  await page.locator('[data-tab="exhibition-backup"]').click();
+  await expect(page.locator('#tab-content')).toContainText('저장된 전시 스냅샷이 없습니다.');
+  await expect.poll(() => requestCount).toBe(1);
+});
+
 test('certificate builder preserves template cells, date, image, and source records', async ({ page }) => {
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
   await page.evaluate(() => window.exhibitionDetailReady);
