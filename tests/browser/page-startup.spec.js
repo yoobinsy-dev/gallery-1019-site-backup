@@ -755,6 +755,7 @@ test('certificate dependencies load once from deployable vendor paths', async ({
   expect(result.initialized).toBe(true);
   expect(result.sizes.every((size) => size > 1000)).toBe(true);
   expect(dependencyRequests).toEqual([
+    '/vendor/vercel-blob-client.js',
     '/vendor/xlsx-populate-1.21.0/xlsx-populate.min.js',
     '/vendor/jszip-3.10.1/jszip.min.js'
   ]);
@@ -834,24 +835,7 @@ test('certificate batch builder preserves page blocks, print area, images, and s
 });
 
 test('exhibition files preserve upload, preview, download, ownership, and delete behavior', async ({ page, baseURL }) => {
-  let uploadRequest = null;
   const durableFileUrl = `${baseURL}/test-files/characterization.txt`;
-  await page.route('**/api/upload', async (route) => {
-    uploadRequest = route.request().postDataJSON();
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        ok: true,
-        file: {
-          url: durableFileUrl,
-          pathname: 'exhibition-files/900001/characterization.txt',
-          contentType: 'text/plain',
-          size: 34
-        }
-      })
-    });
-  });
   await page.route('**/test-files/characterization.txt', (route) => route.fulfill({
     status: 200,
     contentType: 'text/plain',
@@ -859,6 +843,14 @@ test('exhibition files preserve upload, preview, download, ownership, and delete
   }));
   await page.goto(`/exhibition-detail.html?id=${EXHIBITION_ID}`, { waitUntil: 'networkidle' });
   await page.evaluate(() => window.exhibitionDetailReady);
+  await page.evaluate((url) => {
+    window.VercelBlobClient = {
+      async upload(pathname, file, options) {
+        window.__characterizationUpload = { pathname, fileName: file.name, fileSize: file.size, options };
+        return { url, pathname, contentType: file.type };
+      }
+    };
+  }, durableFileUrl);
   await page.locator('[data-tab="exhibition-files"]').click();
   await page.locator('.exhibition-file-upload-card').click();
   await expect(page.locator('#file-upload-modal')).toHaveCSS('display', 'flex');
@@ -876,12 +868,16 @@ test('exhibition files preserve upload, preview, download, ownership, and delete
 
   await expect(page.locator('#file-upload-modal')).toHaveCSS('display', 'none');
   await expect(page.locator('#file-upload-input')).toHaveValue('');
-  expect(uploadRequest).toMatchObject({
-    filename: 'CHARACTERIZATION_TEST_FILE.txt',
-    purpose: 'exhibition-file',
-    exhibitionId: EXHIBITION_ID
+  const uploadRequest = await page.evaluate(() => window.__characterizationUpload);
+  expect(uploadRequest.pathname).toMatch(new RegExp(`^exhibition-files/${EXHIBITION_ID}/`));
+  expect(uploadRequest.fileName).toBe('CHARACTERIZATION_TEST_FILE.txt');
+  expect(uploadRequest.fileSize).toBe(34);
+  expect(uploadRequest.options).toMatchObject({
+    access: 'public',
+    contentType: 'text/plain',
+    handleUploadUrl: '/api/upload',
+    multipart: true
   });
-  expect(uploadRequest.dataUrl).toMatch(/^data:text\/plain/);
   const card = page.locator('.exhibition-file-card').filter({ hasText: 'CHARACTERIZATION_TEST_DOCUMENT' });
   await expect(card).toHaveCount(1);
   await expect(card.locator('.exhibition-file-preview-image')).toHaveAttribute('src', /^data:image\/svg\+xml/);
@@ -908,9 +904,9 @@ test('exhibition files preserve upload, preview, download, ownership, and delete
     previewKind: 'generic',
     mimeType: 'text/plain',
     fileUrl: durableFileUrl,
-    filePath: 'exhibition-files/900001/characterization.txt',
     createdByUserId: currentUser.id
   });
+  expect(storedFile.filePath).toMatch(/^exhibition-files\/900001\/\d+-CHARACTERIZATION_TEST_FILE\.txt$/);
   expect(storedFile.fileDataUrl).toBe('');
 
   await card.getByRole('button', { name: '삭제' }).click();

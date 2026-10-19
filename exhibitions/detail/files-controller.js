@@ -364,14 +364,12 @@
       const isPdf = isPdfLikeFile(mimeType, file.name || '', '');
       if (mimeType.startsWith('image/')) {
         const compact = await options.buildCompactPhotoPreview(file);
-        return { previewDataUrl: compact.dataUrl, fileDataUrl: compact.dataUrl, previewKind: 'image', mimeType: compact.mimeType || file.type || '', byteSize: compact.byteSize || file.size || 0 };
+        return { previewDataUrl: compact.dataUrl, previewKind: 'image', mimeType: file.type || compact.mimeType || '', byteSize: file.size || compact.byteSize || 0 };
       }
       if (isPdf) {
-        const fileDataUrl = await options.readFileAsDataUrl(file);
-        return { previewDataUrl: fileDataUrl, fileDataUrl, previewKind: 'pdf', mimeType: file.type || '', byteSize: Number.isFinite(file.size) ? file.size : 0 };
+        return { previewDataUrl: '', previewKind: 'pdf', mimeType: file.type || '', byteSize: Number.isFinite(file.size) ? file.size : 0 };
       }
-      const fileDataUrl = await options.readFileAsDataUrl(file);
-      return { previewDataUrl: buildGenericFilePreviewDataUrl(file.name || ''), fileDataUrl, previewKind: 'generic', mimeType: file.type || '', byteSize: Number.isFinite(file.size) ? file.size : 0 };
+      return { previewDataUrl: buildGenericFilePreviewDataUrl(file.name || ''), previewKind: 'generic', mimeType: file.type || '', byteSize: Number.isFinite(file.size) ? file.size : 0 };
     }
 
     async function confirmFileUploadModal() {
@@ -390,7 +388,7 @@
         const preview = await buildFileCardPreview(file);
         let upload;
         try {
-          upload = await options.uploadExhibitionFileDataUrl(preview.fileDataUrl, file.name || 'file');
+          upload = await options.uploadExhibitionFile(file);
         } catch (error) {
           upload = null;
         }

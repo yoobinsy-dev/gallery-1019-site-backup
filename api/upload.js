@@ -1,5 +1,8 @@
 const { put } = require('@vercel/blob');
+const { handleUpload } = require('@vercel/blob/client');
 const { sendJson, methodNotAllowed, readJsonBody } = require('./_lib/http');
+
+const MAX_EXHIBITION_FILE_SIZE = 100 * 1024 * 1024;
 
 function parseDataUrl(dataUrl) {
   if (typeof dataUrl !== 'string') return null;
@@ -64,6 +67,43 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = await readJsonBody(req);
+    if (body.type === 'blob.generate-client-token' || body.type === 'blob.upload-completed') {
+      const result = await handleUpload({
+        token: exhibitionBlobToken,
+        request: req,
+        body,
+        onBeforeGenerateToken: async (pathname, clientPayload) => {
+          let payload;
+          try {
+            payload = JSON.parse(clientPayload || '{}');
+          } catch (error) {
+            throw new Error('Invalid exhibition file upload metadata.');
+          }
+
+          const exhibitionId = sanitizeFilename(payload.exhibitionId || 'unknown');
+          const expectedPrefix = `exhibition-files/${exhibitionId}/`;
+          const relativePath = String(pathname || '').slice(expectedPrefix.length);
+          if (payload.purpose !== 'exhibition-file'
+            || !String(pathname || '').startsWith(expectedPrefix)
+            || !relativePath
+            || relativePath.includes('/')) {
+            throw new Error('Invalid exhibition file upload path.');
+          }
+
+          const contentType = String(payload.contentType || 'application/octet-stream');
+          return {
+            allowedContentTypes: [contentType],
+            maximumSizeInBytes: MAX_EXHIBITION_FILE_SIZE,
+            addRandomSuffix: true,
+            tokenPayload: JSON.stringify({ purpose: 'exhibition-file', exhibitionId })
+          };
+        },
+        onUploadCompleted: async () => {}
+      });
+      sendJson(res, 200, result);
+      return;
+    }
+
     const parsed = parseDataUrl(body.dataUrl);
     if (!parsed) {
       sendJson(res, 400, { ok: false, error: 'Invalid dataUrl payload.' });

@@ -12,6 +12,16 @@ test('upload API keeps image verification and supports durable exhibition files'
         uploads.push({ pathname, content: buffer.toString('utf8'), options });
         return { url: `https://blob.example/${pathname}`, pathname };
       }
+    },
+    '@vercel/blob/client': {
+      async handleUpload(options) {
+        const tokenOptions = await options.onBeforeGenerateToken(
+          options.body.payload.pathname,
+          options.body.payload.clientPayload,
+          options.body.payload.multipart
+        );
+        return { type: options.body.type, clientToken: 'test-client-token', tokenOptions };
+      }
     }
   });
   const originalFetch = global.fetch;
@@ -53,6 +63,27 @@ test('upload API keeps image verification and supports durable exhibition files'
     assert.equal(uploads[1].pathname.endsWith('-document_name.txt'), true);
     assert.equal(uploads[1].content, 'test');
     assert.equal(uploads[1].options.contentType, 'text/plain');
+
+    const tokenResponse = createResponse();
+    await handler(createRequest('POST', {
+      body: {
+        type: 'blob.generate-client-token',
+        payload: {
+          pathname: 'exhibition-files/7/document.txt',
+          multipart: true,
+          clientPayload: JSON.stringify({
+            purpose: 'exhibition-file',
+            exhibitionId: 7,
+            contentType: 'text/plain'
+          })
+        }
+      }
+    }), tokenResponse);
+
+    assert.equal(tokenResponse.statusCode, 200);
+    assert.equal(tokenResponse.json().clientToken, 'test-client-token');
+    assert.deepEqual(tokenResponse.json().tokenOptions.allowedContentTypes, ['text/plain']);
+    assert.equal(tokenResponse.json().tokenOptions.maximumSizeInBytes, 100 * 1024 * 1024);
   } finally {
     global.fetch = originalFetch;
     if (originalToken === undefined) delete process.env.EXHIBITION_IMAGE_READ_WRITE_TOKEN;

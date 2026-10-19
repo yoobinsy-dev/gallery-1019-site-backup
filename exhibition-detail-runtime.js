@@ -7580,14 +7580,12 @@ registerLocalPreviewAdminGuards();
       const isPdf = isPdfLikeFile(mimeType, file.name || '', '');
       if (mimeType.startsWith('image/')) {
         const compact = await options.buildCompactPhotoPreview(file);
-        return { previewDataUrl: compact.dataUrl, fileDataUrl: compact.dataUrl, previewKind: 'image', mimeType: compact.mimeType || file.type || '', byteSize: compact.byteSize || file.size || 0 };
+        return { previewDataUrl: compact.dataUrl, previewKind: 'image', mimeType: file.type || compact.mimeType || '', byteSize: file.size || compact.byteSize || 0 };
       }
       if (isPdf) {
-        const fileDataUrl = await options.readFileAsDataUrl(file);
-        return { previewDataUrl: fileDataUrl, fileDataUrl, previewKind: 'pdf', mimeType: file.type || '', byteSize: Number.isFinite(file.size) ? file.size : 0 };
+        return { previewDataUrl: '', previewKind: 'pdf', mimeType: file.type || '', byteSize: Number.isFinite(file.size) ? file.size : 0 };
       }
-      const fileDataUrl = await options.readFileAsDataUrl(file);
-      return { previewDataUrl: buildGenericFilePreviewDataUrl(file.name || ''), fileDataUrl, previewKind: 'generic', mimeType: file.type || '', byteSize: Number.isFinite(file.size) ? file.size : 0 };
+      return { previewDataUrl: buildGenericFilePreviewDataUrl(file.name || ''), previewKind: 'generic', mimeType: file.type || '', byteSize: Number.isFinite(file.size) ? file.size : 0 };
     }
 
     async function confirmFileUploadModal() {
@@ -7606,7 +7604,7 @@ registerLocalPreviewAdminGuards();
         const preview = await buildFileCardPreview(file);
         let upload;
         try {
-          upload = await options.uploadExhibitionFileDataUrl(preview.fileDataUrl, file.name || 'file');
+          upload = await options.uploadExhibitionFile(file);
         } catch (error) {
           upload = null;
         }
@@ -11640,20 +11638,21 @@ function editExhibitionInfoField(fieldName) {
   return infoController.editExhibitionInfoField(fieldName);
 }
 
-async function uploadExhibitionFileDataUrl(dataUrl, fileName) {
-  const response = await fetch('/api/upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      dataUrl,
-      filename: fileName,
+async function uploadExhibitionFile(file) {
+  const exhibitionId = String(exhibitionDetailState.exhibitionId || 'unknown').replace(/[^a-zA-Z0-9._-]/g, '_');
+  const fileName = String(file?.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_') || 'file';
+  const contentType = String(file?.type || 'application/octet-stream');
+  return window.VercelBlobClient.upload(`exhibition-files/${exhibitionId}/${Date.now()}-${fileName}`, file, {
+    access: 'public',
+    contentType,
+    handleUploadUrl: '/api/upload',
+    multipart: true,
+    clientPayload: JSON.stringify({
       purpose: 'exhibition-file',
-      exhibitionId: exhibitionDetailState.exhibitionId
+      exhibitionId,
+      contentType
     })
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload?.ok || !payload?.file?.url) return null;
-  return payload.file;
 }
 
 function createFilesController() {
@@ -11671,7 +11670,7 @@ function createFilesController() {
     escapeAccountingHtml,
     buildCompactPhotoPreview,
     readFileAsDataUrl,
-    uploadExhibitionFileDataUrl,
+    uploadExhibitionFile,
     saveExhibition,
     switchTab,
     alert

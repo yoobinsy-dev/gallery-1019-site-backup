@@ -893,20 +893,21 @@ function editExhibitionInfoField(fieldName) {
   return infoController.editExhibitionInfoField(fieldName);
 }
 
-async function uploadExhibitionFileDataUrl(dataUrl, fileName) {
-  const response = await fetch('/api/upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      dataUrl,
-      filename: fileName,
+async function uploadExhibitionFile(file) {
+  const exhibitionId = String(exhibitionDetailState.exhibitionId || 'unknown').replace(/[^a-zA-Z0-9._-]/g, '_');
+  const fileName = String(file?.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_') || 'file';
+  const contentType = String(file?.type || 'application/octet-stream');
+  return window.VercelBlobClient.upload(`exhibition-files/${exhibitionId}/${Date.now()}-${fileName}`, file, {
+    access: 'public',
+    contentType,
+    handleUploadUrl: '/api/upload',
+    multipart: true,
+    clientPayload: JSON.stringify({
       purpose: 'exhibition-file',
-      exhibitionId: exhibitionDetailState.exhibitionId
+      exhibitionId,
+      contentType
     })
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload?.ok || !payload?.file?.url) return null;
-  return payload.file;
 }
 
 function createFilesController() {
@@ -924,7 +925,7 @@ function createFilesController() {
     escapeAccountingHtml,
     buildCompactPhotoPreview,
     readFileAsDataUrl,
-    uploadExhibitionFileDataUrl,
+    uploadExhibitionFile,
     saveExhibition,
     switchTab,
     alert
