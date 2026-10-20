@@ -250,12 +250,10 @@ test('exhibition files persist Blob URLs and report missing download sources', a
     Math,
     getCurrentExhibition() { return exhibition; },
     getCurrentUserId() { return 9; },
-    readFileAsDataUrl: async () => 'data:text/plain;base64,dGVzdA==',
-    uploadExhibitionFileDataUrl: async () => ({
+    uploadExhibitionFile: async (file) => ({
       url: 'https://blob.example/exhibition-files/durable.txt',
       pathname: 'exhibition-files/7/durable.txt',
-      contentType: 'text/plain',
-      size: 4
+      contentType: file.type
     }),
     fetchImpl: async () => ({
       ok: true,

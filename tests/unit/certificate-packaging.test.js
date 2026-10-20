@@ -45,5 +45,7 @@ test('certificate loader and generated runtime use root-relative vendor paths', 
   });
   assert.doesNotMatch(source, /loadClassicScript\(['"]node_modules\//);
   assert.doesNotMatch(runtime, /loadClassicScript\(['"]node_modules\//);
-  assert.match(html, /exhibition-detail-runtime\.js\?v=20260907-1/);
+  assert.match(html, /vendor\/vercel-blob-client\.js\?v=20261019-1/);
+  assert.match(html, /exhibition-detail-runtime\.js\?v=20261020-1/);
+  assert.ok(html.indexOf('vendor/vercel-blob-client.js') < html.indexOf('exhibition-detail-runtime.js'));
 });

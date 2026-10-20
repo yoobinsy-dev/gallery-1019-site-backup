@@ -220,11 +220,28 @@
     }
 
     function closeFileUploadModal() {
+      if (state.fileUploadInProgress) return;
       const modal = document.getElementById('file-upload-modal');
       const input = document.getElementById('file-upload-input');
       if (input) input.value = '';
       clearPendingUploadEntries();
       if (modal) modal.style.display = 'none';
+    }
+
+    function setFileUploadBusy(isBusy) {
+      state.fileUploadInProgress = Boolean(isBusy);
+      const submit = document.getElementById('file-upload-submit');
+      const cancel = document.getElementById('file-upload-cancel');
+      const input = document.getElementById('file-upload-input');
+      const label = submit?.querySelector('.file-upload-submit-label');
+      if (submit) {
+        submit.disabled = state.fileUploadInProgress;
+        submit.setAttribute('aria-busy', String(state.fileUploadInProgress));
+        submit.classList.toggle('is-uploading', state.fileUploadInProgress);
+      }
+      if (cancel) cancel.disabled = state.fileUploadInProgress;
+      if (input) input.disabled = state.fileUploadInProgress;
+      if (label) label.textContent = state.fileUploadInProgress ? '업로드 중...' : '업로드';
     }
 
     function handleFileUploadInputChange(event) {
@@ -364,17 +381,16 @@
       const isPdf = isPdfLikeFile(mimeType, file.name || '', '');
       if (mimeType.startsWith('image/')) {
         const compact = await options.buildCompactPhotoPreview(file);
-        return { previewDataUrl: compact.dataUrl, fileDataUrl: compact.dataUrl, previewKind: 'image', mimeType: compact.mimeType || file.type || '', byteSize: compact.byteSize || file.size || 0 };
+        return { previewDataUrl: compact.dataUrl, previewKind: 'image', mimeType: file.type || compact.mimeType || '', byteSize: file.size || compact.byteSize || 0 };
       }
       if (isPdf) {
-        const fileDataUrl = await options.readFileAsDataUrl(file);
-        return { previewDataUrl: fileDataUrl, fileDataUrl, previewKind: 'pdf', mimeType: file.type || '', byteSize: Number.isFinite(file.size) ? file.size : 0 };
+        return { previewDataUrl: '', previewKind: 'pdf', mimeType: file.type || '', byteSize: Number.isFinite(file.size) ? file.size : 0 };
       }
-      const fileDataUrl = await options.readFileAsDataUrl(file);
-      return { previewDataUrl: buildGenericFilePreviewDataUrl(file.name || ''), fileDataUrl, previewKind: 'generic', mimeType: file.type || '', byteSize: Number.isFinite(file.size) ? file.size : 0 };
+      return { previewDataUrl: buildGenericFilePreviewDataUrl(file.name || ''), previewKind: 'generic', mimeType: file.type || '', byteSize: Number.isFinite(file.size) ? file.size : 0 };
     }
 
     async function confirmFileUploadModal() {
+      if (state.fileUploadInProgress) return;
       const entries = state.pendingUploadEntries || [];
       if (entries.length === 0) {
         options.alert('업로드할 파일을 먼저 선택해주세요.');
@@ -384,42 +400,50 @@
       const exhibition = ensureExhibitionFilesData();
       const targetList = targetView === 'promo' ? exhibition.filesPromo : exhibition.filesDocs;
       const uploadedItems = [];
-      for (let i = 0; i < entries.length; i += 1) {
-        const entry = entries[i];
-        const file = entry.file;
-        const preview = await buildFileCardPreview(file);
-        let upload;
-        try {
-          upload = await options.uploadExhibitionFileDataUrl(preview.fileDataUrl, file.name || 'file');
-        } catch (error) {
-          upload = null;
+      setFileUploadBusy(true);
+      let completed = false;
+      try {
+        for (let i = 0; i < entries.length; i += 1) {
+          const entry = entries[i];
+          const file = entry.file;
+          const preview = await buildFileCardPreview(file);
+          let upload;
+          try {
+            upload = await options.uploadExhibitionFile(file);
+          } catch (error) {
+            upload = null;
+          }
+          if (!upload?.url) {
+            options.alert('파일 업로드에 실패했습니다. 다시 시도해주세요.');
+            return;
+          }
+          const generatedTitle = (entry.title || '').trim() || file.name || '제목 없음';
+          uploadedItems.push({
+            id: `${Date.now()}-${Math.floor(Math.random() * 100000)}-${i}`,
+            title: generatedTitle,
+            fileName: file.name || '',
+            previewDataUrl: preview.previewKind === 'generic' ? preview.previewDataUrl : upload.url,
+            fileDataUrl: '',
+            fileUrl: upload.url,
+            filePath: upload.pathname || '',
+            previewKind: preview.previewKind,
+            mimeType: upload.contentType || preview.mimeType,
+            byteSize: Number.isFinite(upload.size) ? upload.size : preview.byteSize,
+            createdByUserId: options.getCurrentUserId(),
+            createdAt: new Date().toISOString()
+          });
         }
-        if (!upload?.url) {
-          options.alert('파일 업로드에 실패했습니다. 다시 시도해주세요.');
-          return;
+        targetList.push(...uploadedItems);
+        if (state.exhibition) {
+          state.exhibition.filesDocs = exhibition.filesDocs;
+          state.exhibition.filesPromo = exhibition.filesPromo;
         }
-        const generatedTitle = (entry.title || '').trim() || file.name || '제목 없음';
-        uploadedItems.push({
-          id: `${Date.now()}-${Math.floor(Math.random() * 100000)}-${i}`,
-          title: generatedTitle,
-          fileName: file.name || '',
-          previewDataUrl: preview.previewKind === 'generic' ? preview.previewDataUrl : upload.url,
-          fileDataUrl: '',
-          fileUrl: upload.url,
-          filePath: upload.pathname || '',
-          previewKind: preview.previewKind,
-          mimeType: upload.contentType || preview.mimeType,
-          byteSize: Number.isFinite(upload.size) ? upload.size : preview.byteSize,
-          createdByUserId: options.getCurrentUserId(),
-          createdAt: new Date().toISOString()
-        });
+        options.saveExhibition();
+        completed = true;
+      } finally {
+        setFileUploadBusy(false);
       }
-      targetList.push(...uploadedItems);
-      if (state.exhibition) {
-        state.exhibition.filesDocs = exhibition.filesDocs;
-        state.exhibition.filesPromo = exhibition.filesPromo;
-      }
-      options.saveExhibition();
+      if (!completed) return;
       clearPendingUploadEntries();
       closeFileUploadModal();
       options.switchTab('exhibition-files');
@@ -430,7 +454,7 @@
       renderExhibitionFiles, isPdfLikeFile, triggerFileDownload, getFileDownloadName,
       deleteExhibitionFile, deleteAllExhibitionFiles, downloadExhibitionFile,
       downloadAllExhibitionFiles, openFileUploadModal, closeFileUploadModal,
-      handleFileUploadInputChange, updateFileUploadSelectedInfo, clearPendingUploadEntries,
+      setFileUploadBusy, handleFileUploadInputChange, updateFileUploadSelectedInfo, clearPendingUploadEntries,
       getFileNameWithoutExtension, createPendingUploadEntry, setPendingUploadEntries,
       updatePendingUploadTitle, renderFileUploadPreviewList, handleFilesDragOver,
       handleFilesDragLeave, handleFilesDrop, buildGenericFilePreviewDataUrl,

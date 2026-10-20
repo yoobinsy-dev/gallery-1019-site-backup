@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>10.19 갤러리&라운지 - 전시 세부 관리</title>
-  <link rel="stylesheet" href="style.css?v=20260824-4">
+  <link rel="stylesheet" href="style.css?v=20261020-1">
   <link rel="stylesheet" href="mobile-draft.css?v=20260819-8">
 </head>
 <body>
@@ -132,12 +132,16 @@
       <p id="file-upload-selected-info" class="empty-state">선택된 파일이 없습니다.</p>
       <div id="file-upload-preview-list" class="file-upload-preview-list"></div>
       <div class="modal-buttons">
-        <button class="modal-btn modal-approve" onclick="confirmFileUploadModal()">업로드</button>
-        <button class="modal-btn modal-cancel" onclick="closeFileUploadModal()">취소</button>
+        <button id="file-upload-submit" class="modal-btn modal-approve file-upload-submit" onclick="confirmFileUploadModal()">
+          <span class="file-upload-spinner" aria-hidden="true"></span>
+          <span class="file-upload-submit-label">업로드</span>
+        </button>
+        <button id="file-upload-cancel" class="modal-btn modal-cancel" onclick="closeFileUploadModal()">취소</button>
       </div>
     </div>
   </div>
 
-  <script defer src="exhibition-detail-runtime.js?v=20261018-1"></script>
+  <script defer src="vendor/vercel-blob-client.js?v=20261019-1"></script>
+  <script defer src="exhibition-detail-runtime.js?v=20261020-1"></script>
 </body>
 </html>
