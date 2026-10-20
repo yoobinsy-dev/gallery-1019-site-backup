@@ -847,7 +847,9 @@ test('exhibition files preserve upload, preview, download, ownership, and delete
     window.VercelBlobClient = {
       async upload(pathname, file, options) {
         window.__characterizationUpload = { pathname, fileName: file.name, fileSize: file.size, options };
-        return { url, pathname, contentType: file.type };
+        return new Promise((resolve) => {
+          window.__resolveCharacterizationUpload = () => resolve({ url, pathname, contentType: file.type });
+        });
       }
     };
   }, durableFileUrl);
@@ -865,6 +867,14 @@ test('exhibition files preserve upload, preview, download, ownership, and delete
   await page.locator('.file-upload-title-input').fill('CHARACTERIZATION_TEST_DOCUMENT');
   await expect(page.locator('.file-upload-preview-item')).toHaveCount(1);
   await page.locator('#file-upload-modal .modal-approve').click();
+
+  const uploadButton = page.locator('#file-upload-submit');
+  await expect(uploadButton).toBeDisabled();
+  await expect(uploadButton).toHaveAttribute('aria-busy', 'true');
+  await expect(uploadButton.locator('.file-upload-submit-label')).toHaveText('업로드 중...');
+  await expect(uploadButton.locator('.file-upload-spinner')).toBeVisible();
+  await expect(page.locator('#file-upload-cancel')).toBeDisabled();
+  await page.evaluate(() => window.__resolveCharacterizationUpload());
 
   await expect(page.locator('#file-upload-modal')).toHaveCSS('display', 'none');
   await expect(page.locator('#file-upload-input')).toHaveValue('');

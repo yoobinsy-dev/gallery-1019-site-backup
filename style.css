@@ -2552,6 +2552,37 @@ body.login-page .auth-toggle span:hover {
   background: #4b5563;
 }
 
+.file-upload-submit {
+  min-width: 112px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.file-upload-spinner {
+  display: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #fff;
+  border-radius: 50%;
+}
+
+.file-upload-submit.is-uploading .file-upload-spinner {
+  display: block;
+  animation: file-upload-spin 0.75s linear infinite;
+}
+
+.modal-btn:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+@keyframes file-upload-spin {
+  to { transform: rotate(360deg); }
+}
+
 .work-picker-dialog {
   width: min(760px, calc(100% - 32px));
   max-height: min(760px, calc(100dvh - 32px));
